@@ -1,0 +1,788 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+// ==================== 테마 (색상) ====================
+const THEME_FIELDS = [
+  { key: "theme_nav_from", label: "네비 색상 (시작)", desc: "상단 메뉴바 그라데이션 시작 색상" },
+  { key: "theme_nav_to", label: "네비 색상 (끝)", desc: "상단 메뉴바 그라데이션 끝 색상" },
+  { key: "theme_primary", label: "주요 색상", desc: "버튼, 링크 등 주요 색상" },
+  { key: "theme_footer_from", label: "푸터 색상 (시작)", desc: "하단 푸터 그라데이션 시작 색상" },
+  { key: "theme_footer_to", label: "푸터 색상 (끝)", desc: "하단 푸터 그라데이션 끝 색상" },
+  { key: "theme_header_bg", label: "헤더 배경색", desc: "상단 로고/성구 영역 배경색" },
+] as const;
+
+const PRESETS = [
+  {
+    label: "블루 (기본)",
+    colors: {
+      theme_nav_from: "#1d4ed8", theme_nav_to: "#4338ca", theme_primary: "#2563eb",
+      theme_footer_from: "#2563eb", theme_footer_to: "#4338ca", theme_header_bg: "#eff6ff",
+    },
+  },
+  {
+    label: "그린",
+    colors: {
+      theme_nav_from: "#15803d", theme_nav_to: "#0f766e", theme_primary: "#16a34a",
+      theme_footer_from: "#16a34a", theme_footer_to: "#0f766e", theme_header_bg: "#f0fdf4",
+    },
+  },
+  {
+    label: "레드",
+    colors: {
+      theme_nav_from: "#b91c1c", theme_nav_to: "#9f1239", theme_primary: "#dc2626",
+      theme_footer_from: "#dc2626", theme_footer_to: "#9f1239", theme_header_bg: "#fff1f2",
+    },
+  },
+  {
+    label: "다크",
+    colors: {
+      theme_nav_from: "#1f2937", theme_nav_to: "#111827", theme_primary: "#3b82f6",
+      theme_footer_from: "#1f2937", theme_footer_to: "#111827", theme_header_bg: "#f9fafb",
+    },
+  },
+];
+
+// ==================== 스킨 (위젯/글쓰기) ====================
+const SKIN_DEFAULTS: Record<string, string> = {
+  skin_widget_border_color: "#d1d5db",
+  skin_widget_border_width: "2",
+  skin_widget_divider_color: "#d1d5db",
+  skin_widget_divider_width: "2",
+  skin_widget_header_bg: "#eff6ff",
+  skin_widget_height: "12rem",
+  skin_widget_header_padding: "4px 0",
+  skin_widget_name_font: "",
+  skin_widget_name_size: "14px",
+  skin_widget_name_color: "#1f2937",
+  skin_widget_name_weight: "bold",
+  skin_widget_name_decoration: "none",
+  skin_widget_name_style: "normal",
+  skin_widget_more_font: "",
+  skin_widget_more_size: "12px",
+  skin_widget_more_color: "#111827",
+  skin_widget_more_weight: "normal",
+  skin_widget_more_decoration: "none",
+  skin_widget_more_style: "normal",
+  skin_widget_date_font: "",
+  skin_widget_date_size: "12px",
+  skin_widget_date_color: "#1f2937",
+  skin_widget_date_weight: "normal",
+  skin_widget_date_decoration: "none",
+  skin_widget_date_style: "normal",
+  skin_widget_post_font: "",
+  skin_widget_post_size: "14px",
+  skin_widget_post_color: "#111827",
+  skin_widget_post_weight: "normal",
+  skin_widget_post_decoration: "none",
+  skin_widget_post_style: "normal",
+  skin_widget_author_font: "",
+  skin_widget_author_size: "12px",
+  skin_widget_author_color: "#1f2937",
+  skin_widget_author_weight: "normal",
+  skin_widget_author_decoration: "none",
+  skin_widget_author_style: "normal",
+  skin_write_border_color: "#9ca3af",
+  skin_write_font: "",
+  skin_write_font_size: "14px",
+  skin_write_font_color: "#374151",
+};
+
+const FONT_OPTIONS = [
+  { value: "", label: "(기본 글꼴)" },
+  { value: "'Noto Sans KR', sans-serif", label: "Noto Sans KR" },
+  { value: "'Nanum Gothic', sans-serif", label: "나눔고딕" },
+  { value: "'Nanum Myeongjo', serif", label: "나눔명조" },
+  { value: "'Malgun Gothic', sans-serif", label: "맑은 고딕" },
+  { value: "'Gulim', sans-serif", label: "굴림" },
+  { value: "'Dotum', sans-serif", label: "돋움" },
+  { value: "'Batang', serif", label: "바탕" },
+  { value: "serif", label: "Serif" },
+  { value: "sans-serif", label: "Sans-serif" },
+  { value: "monospace", label: "Monospace" },
+];
+
+const SKIN_SECTIONS = [
+  {
+    title: "위젯 테두리/배경",
+    fields: [
+      { key: "skin_widget_border_color", label: "테두리 색상", type: "color" as const },
+      { key: "skin_widget_border_width", label: "테두리 두께 (px)", type: "number" as const },
+      { key: "skin_widget_divider_color", label: "구분선 색상", type: "color" as const },
+      { key: "skin_widget_divider_width", label: "구분선 두께 (px)", type: "number" as const },
+      { key: "skin_widget_header_bg", label: "헤더 배경색", type: "color" as const },
+      { key: "skin_widget_height", label: "위젯 높이", type: "size" as const },
+      { key: "skin_widget_header_padding", label: "헤더 패딩", type: "size" as const },
+    ],
+  },
+  {
+    title: "게시판명 폰트",
+    fields: [
+      { key: "skin_widget_name_font", label: "글꼴", type: "font" as const },
+      { key: "skin_widget_name_size", label: "글자 크기", type: "size" as const },
+      { key: "skin_widget_name_color", label: "글자 색상", type: "color" as const },
+      { key: "skin_widget_name_weight", label: "글자 굵기", type: "weight" as const },
+      { key: "skin_widget_name_decoration", label: "밑줄", type: "decoration" as const },
+      { key: "skin_widget_name_style", label: "이탤릭", type: "fontstyle" as const },
+    ],
+  },
+  {
+    title: "더보기 폰트",
+    fields: [
+      { key: "skin_widget_more_font", label: "글꼴", type: "font" as const },
+      { key: "skin_widget_more_size", label: "글자 크기", type: "size" as const },
+      { key: "skin_widget_more_color", label: "글자 색상", type: "color" as const },
+      { key: "skin_widget_more_weight", label: "글자 굵기", type: "weight" as const },
+      { key: "skin_widget_more_decoration", label: "밑줄", type: "decoration" as const },
+      { key: "skin_widget_more_style", label: "이탤릭", type: "fontstyle" as const },
+    ],
+  },
+  {
+    title: "게시글 일자 폰트",
+    fields: [
+      { key: "skin_widget_date_font", label: "글꼴", type: "font" as const },
+      { key: "skin_widget_date_size", label: "글자 크기", type: "size" as const },
+      { key: "skin_widget_date_color", label: "글자 색상", type: "color" as const },
+      { key: "skin_widget_date_weight", label: "글자 굵기", type: "weight" as const },
+      { key: "skin_widget_date_decoration", label: "밑줄", type: "decoration" as const },
+      { key: "skin_widget_date_style", label: "이탤릭", type: "fontstyle" as const },
+    ],
+  },
+  {
+    title: "게시글 제목 폰트",
+    fields: [
+      { key: "skin_widget_post_font", label: "글꼴", type: "font" as const },
+      { key: "skin_widget_post_size", label: "글자 크기", type: "size" as const },
+      { key: "skin_widget_post_color", label: "글자 색상", type: "color" as const },
+      { key: "skin_widget_post_weight", label: "글자 굵기", type: "weight" as const },
+      { key: "skin_widget_post_decoration", label: "밑줄", type: "decoration" as const },
+      { key: "skin_widget_post_style", label: "이탤릭", type: "fontstyle" as const },
+    ],
+  },
+  {
+    title: "게시글 작성자 폰트",
+    fields: [
+      { key: "skin_widget_author_font", label: "글꼴", type: "font" as const },
+      { key: "skin_widget_author_size", label: "글자 크기", type: "size" as const },
+      { key: "skin_widget_author_color", label: "글자 색상", type: "color" as const },
+      { key: "skin_widget_author_weight", label: "글자 굵기", type: "weight" as const },
+      { key: "skin_widget_author_decoration", label: "밑줄", type: "decoration" as const },
+      { key: "skin_widget_author_style", label: "이탤릭", type: "fontstyle" as const },
+    ],
+  },
+  {
+    title: "글쓰기 페이지",
+    fields: [
+      { key: "skin_write_border_color", label: "테두리 색상", type: "color" as const },
+      { key: "skin_write_font", label: "글꼴", type: "font" as const },
+      { key: "skin_write_font_size", label: "글자 크기", type: "size" as const },
+      { key: "skin_write_font_color", label: "글자 색상", type: "color" as const },
+    ],
+  },
+];
+
+// 모든 키의 기본값 통합 맵
+const ALL_DEFAULTS: Record<string, string> = {
+  ...PRESETS[0].colors,
+  theme_nav_font: "",
+  theme_nav_font_size: "14px",
+  theme_nav_font_color: "#dbeafe",
+  ...SKIN_DEFAULTS,
+};
+
+type SettingValues = Record<string, string>;
+
+export default function AdminSettingsPage() {
+  const [values, setValues] = useState<SettingValues>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<"theme" | "skin">("theme");
+
+  useEffect(() => {
+    fetch("/api/admin/settings")
+      .then((r) => r.json())
+      .then((data) => setValues(data))
+      .catch(() => setMessage({ type: "error", text: "설정을 불러오지 못했습니다." }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function applyPreview(vals: SettingValues) {
+    const root = document.documentElement;
+    Object.entries(vals).forEach(([key, val]) => {
+      const cssVar = `--${key.replace(/_/g, "-")}`;
+      // border width에는 px 단위 추가
+      if (key.endsWith("_width") && val && !val.endsWith("px")) {
+        root.style.setProperty(cssVar, val + "px");
+      } else {
+        root.style.setProperty(cssVar, val);
+      }
+    });
+  }
+
+  function handleChange(key: string, val: string) {
+    const next = { ...values, [key]: val };
+    setValues(next);
+    applyPreview(next);
+  }
+
+  function handlePreset(preset: (typeof PRESETS)[number]) {
+    const next = { ...values, ...preset.colors };
+    setValues(next);
+    applyPreview(next);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage({ type: "success", text: "저장되었습니다. 페이지를 새로고침하면 모든 사용자에게 적용됩니다." });
+      } else {
+        setMessage({ type: "error", text: data.message || "저장에 실패했습니다." });
+      }
+    } catch {
+      setMessage({ type: "error", text: "서버 연결에 실패했습니다." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // 개별 항목 기본값 복원 버튼
+  function ResetBtn({ fieldKey }: { fieldKey: string }) {
+    const def = ALL_DEFAULTS[fieldKey];
+    if (def === undefined) return null;
+    const current = values[fieldKey] ?? "";
+    const isDefault = current === def;
+    return (
+      <button
+        type="button"
+        title={`기본값: ${def || "(없음)"}`}
+        onClick={() => handleChange(fieldKey, def)}
+        disabled={isDefault}
+        className={`px-1.5 py-0.5 text-[11px] rounded border transition-colors ${
+          isDefault
+            ? "border-gray-200 text-gray-300 cursor-default"
+            : "border-gray-300 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+        }`}
+      >
+        초기화
+      </button>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24 text-gray-400">
+        <div className="inline-block w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2" />
+        불러오는 중...
+      </div>
+    );
+  }
+
+  // 스킨 값 가져오기 (기본값 폴백)
+  const sv = (key: string) => values[key] ?? SKIN_DEFAULTS[key] ?? "";
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-bold text-gray-800">사이트 설정</h1>
+        <p className="text-sm text-gray-500 mt-1">색상, 위젯 스킨, 글쓰기 페이지 디자인을 관리합니다.</p>
+      </div>
+
+      {/* 탭 */}
+      <div className="flex border-b border-gray-200">
+        <button
+          type="button"
+          onClick={() => setActiveTab("theme")}
+          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "theme"
+              ? "border-blue-600 text-blue-700"
+              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          }`}
+        >
+          사이트 색상
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("skin")}
+          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "skin"
+              ? "border-blue-600 text-blue-700"
+              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          }`}
+        >
+          위젯/글쓰기 스킨
+        </button>
+      </div>
+
+      {/* ==================== 사이트 색상 탭 ==================== */}
+      {activeTab === "theme" && (
+        <>
+          {/* 프리셋 */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+              <h2 className="text-sm font-semibold text-gray-700">색상 프리셋</h2>
+            </div>
+            <div className="p-5 flex flex-wrap gap-3">
+              {PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => handlePreset(preset)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <span
+                    className="inline-block w-4 h-4 rounded-full"
+                    style={{ background: `linear-gradient(to right, ${preset.colors.theme_nav_from}, ${preset.colors.theme_nav_to})` }}
+                  />
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 색상 편집 */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+              <h2 className="text-sm font-semibold text-gray-700">색상 직접 설정</h2>
+            </div>
+            <div className="p-5 space-y-4">
+              {THEME_FIELDS.map(({ key, label, desc }) => (
+                <div key={key} className="flex items-center gap-4">
+                  <label className="w-40 shrink-0">
+                    <div className="text-sm font-medium text-gray-700">{label}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">{desc}</div>
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={values[key] || "#000000"}
+                      onChange={(e) => handleChange(key, e.target.value)}
+                      className="w-10 h-10 rounded cursor-pointer border border-gray-300"
+                    />
+                    <input
+                      type="text"
+                      value={values[key] || ""}
+                      onChange={(e) => handleChange(key, e.target.value)}
+                      className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                      placeholder="#000000"
+                    />
+                    <ResetBtn fieldKey={key} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 메뉴바 글꼴 */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+              <h2 className="text-sm font-semibold text-gray-700">메뉴바 글꼴</h2>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="flex items-center gap-4">
+                <label className="w-40 shrink-0 text-sm font-medium text-gray-700">글꼴</label>
+                <select
+                  value={values.theme_nav_font || ""}
+                  onChange={(e) => handleChange("theme_nav_font", e.target.value)}
+                  className="w-52 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                >
+                  {FONT_OPTIONS.map((f) => (
+                    <option key={f.value} value={f.value} style={{ fontFamily: f.value || "inherit" }}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+                <ResetBtn fieldKey="theme_nav_font" />
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="w-40 shrink-0 text-sm font-medium text-gray-700">글자 크기</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={values.theme_nav_font_size || "14px"}
+                    onChange={(e) => handleChange("theme_nav_font_size", e.target.value)}
+                    className="w-24 px-3 py-1.5 text-sm border border-gray-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    placeholder="14px"
+                  />
+                  <span className="text-xs text-gray-400">예: 12px, 14px, 16px</span>
+                  <ResetBtn fieldKey="theme_nav_font_size" />
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="w-40 shrink-0 text-sm font-medium text-gray-700">글자 색상</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={values.theme_nav_font_color || "#dbeafe"}
+                    onChange={(e) => handleChange("theme_nav_font_color", e.target.value)}
+                    className="w-10 h-10 rounded cursor-pointer border border-gray-300"
+                  />
+                  <input
+                    type="text"
+                    value={values.theme_nav_font_color || "#dbeafe"}
+                    onChange={(e) => handleChange("theme_nav_font_color", e.target.value)}
+                    className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    placeholder="#dbeafe"
+                  />
+                  <ResetBtn fieldKey="theme_nav_font_color" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 미리보기 */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+              <h2 className="text-sm font-semibold text-gray-700">미리보기</h2>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <p className="text-xs text-gray-400 mb-1">메뉴바</p>
+                <div
+                  className="h-10 rounded-lg flex items-center px-4 gap-4"
+                  style={{ background: `linear-gradient(to right, ${values.theme_nav_from || "#1d4ed8"}, ${values.theme_nav_to || "#4338ca"})` }}
+                >
+                  {["공지사항", "자유게시판", "갤러리", "성경공부"].map((item) => (
+                    <span
+                      key={item}
+                      className="hover:text-white"
+                      style={{
+                        fontFamily: values.theme_nav_font || "inherit",
+                        fontSize: values.theme_nav_font_size || "14px",
+                        color: values.theme_nav_font_color || "#dbeafe",
+                      }}
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-1">버튼</p>
+                <div className="flex gap-2">
+                  {["글쓰기", "로그인"].map((lbl) => (
+                    <button key={lbl} type="button" className="px-4 py-2 text-sm text-white rounded-lg" style={{ backgroundColor: values.theme_primary || "#2563eb" }}>
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-1">푸터</p>
+                <div
+                  className="h-12 rounded-lg flex items-center px-4"
+                  style={{ background: `linear-gradient(to right, ${values.theme_footer_from || "#2563eb"}, ${values.theme_footer_to || "#4338ca"})` }}
+                >
+                  <span className="text-sm text-blue-100">동천교회 · 부산광역시 동구 범일1동</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ==================== 위젯/글쓰기 스킨 탭 ==================== */}
+      {activeTab === "skin" && (
+        <>
+          {/* 설정 섹션들 */}
+          {SKIN_SECTIONS.map((section) => (
+            <div key={section.title} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+                <h2 className="text-sm font-semibold text-gray-700">{section.title}</h2>
+              </div>
+              <div className="p-5 space-y-4">
+                {section.fields.map((field) => (
+                  <div key={field.key} className="flex items-center gap-4">
+                    <label className="w-36 shrink-0 text-sm font-medium text-gray-700">
+                      {field.label}
+                    </label>
+
+                    {field.type === "color" && (
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={sv(field.key) || "#000000"}
+                          onChange={(e) => handleChange(field.key, e.target.value)}
+                          className="w-10 h-10 rounded cursor-pointer border border-gray-300"
+                        />
+                        <input
+                          type="text"
+                          value={sv(field.key)}
+                          onChange={(e) => handleChange(field.key, e.target.value)}
+                          className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          placeholder="#000000"
+                        />
+                        <ResetBtn fieldKey={field.key} />
+                      </div>
+                    )}
+
+                    {field.type === "number" && (
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="number"
+                          min={0}
+                          max={10}
+                          value={sv(field.key)}
+                          onChange={(e) => handleChange(field.key, e.target.value)}
+                          className="w-20 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        />
+                        <ResetBtn fieldKey={field.key} />
+                      </div>
+                    )}
+
+                    {field.type === "font" && (
+                      <div className="flex items-center gap-3">
+                        <select
+                          value={sv(field.key)}
+                          onChange={(e) => handleChange(field.key, e.target.value)}
+                          className="w-52 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        >
+                          {FONT_OPTIONS.map((f) => (
+                            <option key={f.value} value={f.value} style={{ fontFamily: f.value || "inherit" }}>
+                              {f.label}
+                            </option>
+                          ))}
+                        </select>
+                        <ResetBtn fieldKey={field.key} />
+                      </div>
+                    )}
+
+                    {field.type === "size" && (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={sv(field.key)}
+                          onChange={(e) => handleChange(field.key, e.target.value)}
+                          className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          placeholder={SKIN_DEFAULTS[field.key] || "14px"}
+                        />
+                        <span className="text-xs text-gray-400">
+                          {field.key.includes("height") ? "예: 10rem, 12rem, 14rem" : field.key.includes("padding") ? "예: 4px 0, 6px 0" : "예: 12px, 14px, 16px"}
+                        </span>
+                        <ResetBtn fieldKey={field.key} />
+                      </div>
+                    )}
+
+                    {field.type === "weight" && (
+                      <div className="flex items-center gap-3">
+                        <select
+                          value={sv(field.key)}
+                          onChange={(e) => handleChange(field.key, e.target.value)}
+                          className="w-32 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        >
+                          <option value="normal">보통</option>
+                          <option value="bold">굵게</option>
+                        </select>
+                        <ResetBtn fieldKey={field.key} />
+                      </div>
+                    )}
+
+                    {field.type === "decoration" && (
+                      <div className="flex items-center gap-3">
+                        <select
+                          value={sv(field.key)}
+                          onChange={(e) => handleChange(field.key, e.target.value)}
+                          className="w-32 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        >
+                          <option value="none">없음</option>
+                          <option value="underline">밑줄</option>
+                        </select>
+                        <ResetBtn fieldKey={field.key} />
+                      </div>
+                    )}
+
+                    {field.type === "fontstyle" && (
+                      <div className="flex items-center gap-3">
+                        <select
+                          value={sv(field.key)}
+                          onChange={(e) => handleChange(field.key, e.target.value)}
+                          className="w-32 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        >
+                          <option value="normal">보통</option>
+                          <option value="italic">이탤릭</option>
+                        </select>
+                        <ResetBtn fieldKey={field.key} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {/* 위젯 미리보기 */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+              <h2 className="text-sm font-semibold text-gray-700">위젯 미리보기</h2>
+            </div>
+            <div className="p-5">
+              <div
+                className="rounded-lg overflow-hidden max-w-sm"
+                style={{
+                  border: `${sv("skin_widget_border_width")}px solid ${sv("skin_widget_border_color")}`,
+                  height: sv("skin_widget_height") || "12rem",
+                }}
+              >
+                {/* 위젯 헤더 */}
+                <div
+                  className="flex items-center justify-between px-4"
+                  style={{
+                    backgroundColor: sv("skin_widget_header_bg"),
+                    borderBottom: `${sv("skin_widget_divider_width")}px solid ${sv("skin_widget_divider_color")}`,
+                    padding: sv("skin_widget_header_padding") || "4px 0",
+                    paddingLeft: "1rem",
+                    paddingRight: "1rem",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: sv("skin_widget_name_font") || "inherit",
+                      fontSize: sv("skin_widget_name_size"),
+                      color: sv("skin_widget_name_color"),
+                      fontWeight: sv("skin_widget_name_weight") || "bold",
+                      textDecoration: sv("skin_widget_name_decoration") || "none",
+                      fontStyle: sv("skin_widget_name_style") || "normal",
+                    }}
+                  >
+                    행정실
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: sv("skin_widget_more_font") || "inherit",
+                      fontSize: sv("skin_widget_more_size"),
+                      color: sv("skin_widget_more_color"),
+                      fontWeight: sv("skin_widget_more_weight") || "normal",
+                      textDecoration: sv("skin_widget_more_decoration") || "none",
+                      fontStyle: sv("skin_widget_more_style") || "normal",
+                    }}
+                  >
+                    더보기 &rsaquo;
+                  </span>
+                </div>
+                {/* 위젯 게시글 목록 */}
+                {[
+                  { date: "03/01", title: "교회 총회 안내", author: "관리자" },
+                  { date: "02/28", title: "주일학교 일정 변경", author: "교육부" },
+                  { date: "02/27", title: "성경공부 자료 공유", author: "연구실" },
+                  { date: "02/26", title: "찬양대 모집", author: "찬양대" },
+                  { date: "02/25", title: "교회 청소 봉사", author: "봉사부" },
+                ].map((item, i) => (
+                  <div
+                    key={i}
+                    className="px-4 py-1 border-b border-gray-100 last:border-b-0 flex items-center gap-2"
+                  >
+                    <span
+                      className="flex-shrink-0 font-mono"
+                      style={{
+                        fontFamily: sv("skin_widget_date_font") || "inherit",
+                        fontSize: sv("skin_widget_date_size"),
+                        color: sv("skin_widget_date_color"),
+                        fontWeight: sv("skin_widget_date_weight") || "normal",
+                        textDecoration: sv("skin_widget_date_decoration") || "none",
+                        fontStyle: sv("skin_widget_date_style") || "normal",
+                      }}
+                    >
+                      {item.date}
+                    </span>
+                    <span
+                      className="truncate flex-1"
+                      style={{
+                        fontFamily: sv("skin_widget_post_font") || "inherit",
+                        fontSize: sv("skin_widget_post_size"),
+                        color: sv("skin_widget_post_color"),
+                        fontWeight: sv("skin_widget_post_weight") || "normal",
+                        textDecoration: sv("skin_widget_post_decoration") || "none",
+                        fontStyle: sv("skin_widget_post_style") || "normal",
+                      }}
+                    >
+                      {item.title}
+                    </span>
+                    <span
+                      className="flex-shrink-0"
+                      style={{
+                        fontFamily: sv("skin_widget_author_font") || "inherit",
+                        fontSize: sv("skin_widget_author_size"),
+                        color: sv("skin_widget_author_color"),
+                        fontWeight: sv("skin_widget_author_weight") || "normal",
+                        textDecoration: sv("skin_widget_author_decoration") || "none",
+                        fontStyle: sv("skin_widget_author_style") || "normal",
+                      }}
+                    >
+                      [{item.author}]
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 글쓰기 페이지 미리보기 */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+              <h2 className="text-sm font-semibold text-gray-700">글쓰기 페이지 미리보기</h2>
+            </div>
+            <div className="p-5">
+              <div
+                className="rounded-lg p-4 max-w-sm"
+                style={{ border: `1px solid ${sv("skin_write_border_color")}` }}
+              >
+                <div
+                  style={{
+                    fontFamily: sv("skin_write_font") || "inherit",
+                    fontSize: sv("skin_write_font_size"),
+                    color: sv("skin_write_font_color"),
+                  }}
+                >
+                  <div className="mb-2 font-medium">제목</div>
+                  <div
+                    className="rounded px-3 py-2 mb-3"
+                    style={{ border: `1px solid ${sv("skin_write_border_color")}` }}
+                  >
+                    게시글 제목 입력
+                  </div>
+                  <div className="mb-2 font-medium">내용</div>
+                  <div
+                    className="rounded px-3 py-2 h-20"
+                    style={{ border: `1px solid ${sv("skin_write_border_color")}` }}
+                  >
+                    본문 내용을 입력합니다...
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 공통: 메시지 + 저장/초기화 버튼 */}
+      {message && (
+        <div className={`px-4 py-3 rounded-lg text-sm ${
+          message.type === "success"
+            ? "bg-green-50 border border-green-200 text-green-800"
+            : "bg-red-50 border border-red-200 text-red-700"
+        }`}>
+          {message.text}
+        </div>
+      )}
+
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="px-6 py-2.5 text-sm font-medium bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors disabled:opacity-50"
+        >
+          {saving ? "저장 중..." : "저장하기"}
+        </button>
+      </div>
+    </div>
+  );
+}

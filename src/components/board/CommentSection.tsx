@@ -1,0 +1,424 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
+
+const TipTapEditor = dynamic(() => import("@/components/board/TipTapEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-400 min-h-[100px]">
+      에디터 로딩 중...
+    </div>
+  ),
+});
+
+interface Comment {
+  id: number;
+  authorName: string;
+  content: string;
+  isSecret: boolean;
+  createdAt: string;
+  authorId: number | null;
+}
+
+interface CommentSectionProps {
+  boardSlug: string;
+  postId: number;
+  commentPolicy: string;
+  comments: Comment[];
+  isAdmin?: boolean;
+  currentUserId?: number | null;
+  postAuthorId?: number | null;
+}
+
+export default function CommentSection({ boardSlug, postId, commentPolicy, comments, isAdmin, currentUserId, postAuthorId }: CommentSectionProps) {
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [content, setContent] = useState("");
+  const [isSecret, setIsSecret] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // 댓글 수정 상태
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [editing, setEditing] = useState(false);
+
+  // 관리자 일괄 삭제 상태
+  const [manageMode, setManageMode] = useState(false);
+  const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    // TipTap은 빈 내용일 때 <p></p>를 반환하므로 태그 제거 후 확인
+    const stripped = content.replace(/<[^>]*>/g, "").trim();
+    if (!stripped) {
+      alert("내용을 입력하세요.");
+      return;
+    }
+    setSubmitting(true);
+
+    try {
+      const res = await fetch("/api/board/comment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          boardSlug,
+          postId,
+          name: name || "익명",
+          password,
+          content,
+          isSecret,
+        }),
+      });
+
+      if (res.ok) {
+        setContent("");
+        setIsSecret(false);
+        router.refresh();
+      } else {
+        const err = await res.json();
+        alert(err.message || "댓글 등록에 실패했습니다.");
+      }
+    } catch {
+      alert("댓글 등록에 실패했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete(commentId: number) {
+    const pw = prompt("비밀번호를 입력하세요:");
+    if (!pw) return;
+
+    try {
+      const res = await fetch("/api/board/comment", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentId, password: pw }),
+      });
+      if (res.ok) {
+        router.refresh();
+      } else {
+        const err = await res.json();
+        alert(err.message || "삭제에 실패했습니다.");
+      }
+    } catch {
+      alert("삭제에 실패했습니다.");
+    }
+  }
+
+  function startEdit(comment: Comment) {
+    setEditingId(comment.id);
+    setEditContent(comment.content);
+    setEditPassword("");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditContent("");
+    setEditPassword("");
+  }
+
+  async function handleEdit(commentId: number) {
+    if (!editPassword) {
+      alert("비밀번호를 입력하세요.");
+      return;
+    }
+    const stripped = editContent.replace(/<[^>]*>/g, "").trim();
+    if (!stripped) {
+      alert("내용을 입력하세요.");
+      return;
+    }
+    setEditing(true);
+    try {
+      const res = await fetch("/api/board/comment", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          commentId,
+          password: editPassword,
+          content: editContent,
+        }),
+      });
+      if (res.ok) {
+        setEditingId(null);
+        setEditContent("");
+        setEditPassword("");
+        router.refresh();
+      } else {
+        const err = await res.json();
+        alert(err.message || "수정에 실패했습니다.");
+      }
+    } catch {
+      alert("수정에 실패했습니다.");
+    } finally {
+      setEditing(false);
+    }
+  }
+
+  function toggleCheck(id: number) {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (checkedIds.size === comments.length) {
+      setCheckedIds(new Set());
+    } else {
+      setCheckedIds(new Set(comments.map((c) => c.id)));
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (checkedIds.size === 0) return;
+    if (!confirm(`선택한 ${checkedIds.size}개의 댓글을 삭제하시겠습니까?`)) return;
+
+    setBulkDeleting(true);
+    try {
+      const res = await fetch("/api/board/comment/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentIds: [...checkedIds] }),
+      });
+      if (res.ok) {
+        setCheckedIds(new Set());
+        router.refresh();
+      } else {
+        const err = await res.json();
+        alert(err.message || "삭제에 실패했습니다.");
+      }
+    } catch {
+      alert("삭제에 실패했습니다.");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
+  function exitManageMode() {
+    setManageMode(false);
+    setCheckedIds(new Set());
+  }
+
+  function formatTime(dateStr: string) {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    if (isToday) {
+      return d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+    }
+    return d.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      {/* 댓글 헤더 */}
+      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {manageMode && comments.length > 0 && (
+              <input
+                type="checkbox"
+                checked={checkedIds.size === comments.length && comments.length > 0}
+                onChange={toggleAll}
+                className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600"
+                title="전체 선택"
+              />
+            )}
+            <h3 className="text-sm font-medium text-gray-700">
+              댓글 <span className="text-blue-700">{comments.length}</span>
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            {manageMode && checkedIds.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="px-3 py-1 text-xs text-white bg-red-500 hover:bg-red-600 rounded transition-colors disabled:opacity-50"
+              >
+                {bulkDeleting ? "삭제 중..." : `선택 삭제 (${checkedIds.size})`}
+              </button>
+            )}
+            {commentPolicy === "DISABLED" && (
+              <span className="text-xs text-gray-400">댓글이 막힌 게시글입니다</span>
+            )}
+            {isAdmin && comments.length > 0 && (
+              manageMode ? (
+                <button
+                  onClick={exitManageMode}
+                  className="px-2.5 py-1 text-xs border border-gray-300 text-gray-600 rounded hover:bg-gray-100 transition-colors"
+                >
+                  관리 종료
+                </button>
+              ) : (
+                <button
+                  onClick={() => setManageMode(true)}
+                  className="px-2.5 py-1 text-xs border border-blue-300 text-blue-600 rounded hover:bg-blue-50 transition-colors"
+                >
+                  댓글 관리
+                </button>
+              )
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 댓글 목록 */}
+      {comments.length > 0 && (
+        <ul className="divide-y divide-gray-100">
+          {comments.map((comment) => {
+            // 비밀댓글 열람 권한: 관리자, 글 작성자, 댓글 작성자
+            const canViewSecret = !comment.isSecret ||
+              isAdmin ||
+              (currentUserId != null && currentUserId === postAuthorId) ||
+              (currentUserId != null && currentUserId === comment.authorId);
+
+            return (
+              <li key={comment.id} className="px-4 py-3">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2 text-sm">
+                    {manageMode && (
+                      <input
+                        type="checkbox"
+                        checked={checkedIds.has(comment.id)}
+                        onChange={() => toggleCheck(comment.id)}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600"
+                      />
+                    )}
+                    <strong className="text-gray-700">{comment.authorName}</strong>
+                    {comment.isSecret && (
+                      <span className="text-[11px] text-gray-400" title="비밀댓글">🔒</span>
+                    )}
+                    <span className="text-gray-400 text-xs">{formatTime(comment.createdAt)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {canViewSecret && commentPolicy === "ALLOW_EDIT" && editingId !== comment.id && (
+                      <button
+                        onClick={() => startEdit(comment)}
+                        className="text-xs text-gray-400 hover:text-blue-500 transition-colors"
+                        title="수정"
+                      >
+                        수정
+                      </button>
+                    )}
+                    {commentPolicy !== "DISABLED" && (
+                      <button
+                        onClick={() => handleDelete(comment.id)}
+                        className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                        title="삭제"
+                      >
+                        삭제
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {canViewSecret ? (
+                  editingId === comment.id ? (
+                    /* 인라인 수정 폼 */
+                    <div className="space-y-2">
+                      <TipTapEditor
+                        content={editContent}
+                        onChange={setEditContent}
+                        placeholder="댓글을 입력하세요"
+                        minHeight="60px"
+                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="password"
+                          placeholder="비밀번호"
+                          value={editPassword}
+                          onChange={(e) => setEditPassword(e.target.value)}
+                          className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                        />
+                        <button
+                          onClick={() => handleEdit(comment.id)}
+                          disabled={editing}
+                          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
+                        >
+                          {editing ? "수정 중..." : "수정"}
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                        >
+                          취소
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      className="prose prose-sm max-w-none text-sm text-gray-700 leading-relaxed"
+                      dangerouslySetInnerHTML={{ __html: comment.content }}
+                    />
+                  )
+                ) : (
+                  <div className="text-sm text-gray-400 italic">
+                    비밀댓글입니다.
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {/* 댓글 작성 폼 (댓글막음이 아니고 수정 중이 아닐 때만 표시) */}
+      {commentPolicy !== "DISABLED" && editingId === null && (
+        <form onSubmit={handleSubmit} className="border-t border-gray-200 p-4">
+          <div className="flex gap-2 mb-2 items-center">
+            <input
+              type="text"
+              placeholder="이름"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+            />
+            <input
+              type="password"
+              placeholder="비밀번호"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+            />
+            {currentUserId != null && (
+              <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isSecret}
+                  onChange={(e) => setIsSecret(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600"
+                />
+                🔒 비밀댓글
+              </label>
+            )}
+          </div>
+          <div className="space-y-2">
+            <TipTapEditor
+              content={content}
+              onChange={setContent}
+              placeholder="댓글을 입력하세요"
+              minHeight="60px"
+            />
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-4 py-2 text-sm bg-gray-700 text-white rounded hover:bg-gray-800 transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {submitting ? "등록 중..." : "등록"}
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}

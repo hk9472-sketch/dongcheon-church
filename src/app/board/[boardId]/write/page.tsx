@@ -1,0 +1,607 @@
+"use client";
+
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, useRef, Suspense, use } from "react";
+import TipTapEditor from "@/components/board/TipTapEditor";
+import HelpButton from "@/components/HelpButton";
+import CaptchaField from "@/components/CaptchaField";
+
+// ============================================================
+// 글쓰기/수정/답글 페이지 (제로보드 write.php 대체)
+// URL: /board/[boardId]/write?mode=write|reply|modify&no=123
+// ============================================================
+
+function WriteForm({ boardId }: { boardId: string }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const mode = searchParams.get("mode") || "write";
+  const parentNo = searchParams.get("no");
+
+  const [boardTitle, setBoardTitle] = useState("");
+  const [guideText, setGuideText] = useState("");
+  const [loading, setLoading] = useState(mode === "modify");
+  const [submitting, setSubmitting] = useState(false);
+
+  // 폼 상태
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
+  const [homepage, setHomepage] = useState("");
+  const [subject, setSubject] = useState("");
+  const [content, setContent] = useState("");
+  const [isSecret, setIsSecret] = useState(false);
+  const [isNotice, setIsNotice] = useState(false);
+  const [useHtml, setUseHtml] = useState(true);
+  const [commentPolicy, setCommentPolicy] = useState("ALLOW_EDIT");
+  const [sitelink1, setSitelink1] = useState("");
+  const [sitelink2, setSitelink2] = useState("");
+  const [file1, setFile1] = useState<File | null>(null);
+  const [file2, setFile2] = useState<File | null>(null);
+  const [categoryId, setCategoryId] = useState("");
+  const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
+  const [useCategory, setUseCategory] = useState(false);
+
+  // 확장 섹션 토글
+  const [showExtra, setShowExtra] = useState(false);
+
+  // 로그인 상태 + CAPTCHA
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const [captchaAnswer, setCaptchaAnswer] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
+
+  const subjectRef = useRef<HTMLInputElement>(null);
+
+  // 로그인 상태 확인
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => setIsLoggedIn(!!d.user))
+      .catch(() => setIsLoggedIn(false));
+  }, []);
+
+  // 게시판 설정 및 수정 모드 데이터 로드
+  useEffect(() => {
+    async function load() {
+      try {
+        // 게시판 정보
+        const boardRes = await fetch(`/api/board/info?slug=${boardId}`);
+        let boardUseHtml = true;
+        if (boardRes.ok) {
+          const boardData = await boardRes.json();
+          setBoardTitle(boardData.title);
+          setGuideText(boardData.guideText || "");
+          setUseCategory(boardData.useCategory);
+          boardUseHtml = boardData.useHtml ?? true;
+          // 새 글/답글 모드에서 게시판 기본 댓글 정책 적용
+          if (mode !== "modify" && boardData.defaultCommentPolicy) {
+            setCommentPolicy(boardData.defaultCommentPolicy);
+          }
+          if (boardData.categories) {
+            setCategories(boardData.categories);
+            // 새 글/답글 모드에서 첫 번째 카테고리를 기본 선택
+            if (mode !== "modify" && boardData.useCategory && boardData.categories.length > 0) {
+              setCategoryId(String(boardData.categories[0].id));
+            }
+          }
+        }
+
+        // 수정 모드: 기존 글 데이터
+        if (mode === "modify" && parentNo) {
+          const postRes = await fetch(`/api/board/post?id=${parentNo}`);
+          if (postRes.ok) {
+            const post = await postRes.json();
+
+            // 권한 확인: 서버가 반환한 canEdit 기준
+            if (!post.canEdit) {
+              alert("수정 권한이 없습니다.");
+              router.replace(`/board/${boardId}/${parentNo}`);
+              return;
+            }
+
+            setSubject(post.subject);
+            // 이관된 글(useHtml=false)은 \n이 줄바꿈 → <br>로 변환하여 에디터에 반영
+            setContent(post.useHtml ? post.content : post.content.replace(/\n/g, "<br>"));
+            setName(post.authorName);
+            setEmail(post.email || "");
+            setHomepage(post.homepage || "");
+            setIsSecret(post.isSecret);
+            // 수정 모드에서는 게시판의 useHtml 설정 사용 (이관된 글에 false가 있어도 툴바 표시)
+            setUseHtml(boardUseHtml);
+            setCommentPolicy(post.commentPolicy || "ALLOW");
+            setSitelink1(post.sitelink1 || "");
+            setSitelink2(post.sitelink2 || "");
+            if (post.categoryId) setCategoryId(String(post.categoryId));
+            // 수정 모드에서 기존 링크/파일 있으면 확장 섹션 열기
+            if (post.sitelink1 || post.sitelink2 || post.email || post.homepage) {
+              setShowExtra(true);
+            }
+          }
+        }
+
+        // 답글 모드: 원글 제목 가져오기
+        if (mode === "reply" && parentNo) {
+          const postRes = await fetch(`/api/board/post?id=${parentNo}`);
+          if (postRes.ok) {
+            const post = await postRes.json();
+            setSubject(`Re: ${post.subject}`);
+          }
+        }
+      } catch (err) {
+        console.error("로드 실패:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [boardId, mode, parentNo]);
+
+  // 로드 완료 후 제목 필드에 포커스
+  useEffect(() => {
+    if (!loading && subjectRef.current && mode !== "modify") {
+      subjectRef.current.focus();
+    }
+  }, [loading, mode]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!name.trim()) { alert("이름을 입력하세요."); return; }
+    if (!password.trim()) { alert("비밀번호를 입력하세요."); return; }
+    if (!subject.trim()) { alert("제목을 입력하세요."); return; }
+    if (!content.trim()) { alert("내용을 입력하세요."); return; }
+
+    // 비로그인 시 CAPTCHA 필수
+    if (isLoggedIn !== true && mode !== "modify" && !captchaAnswer) {
+      alert("보안 문자를 입력하세요.");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("boardSlug", boardId);
+      formData.append("mode", mode);
+      formData.append("name", name);
+      formData.append("password", password);
+      formData.append("email", email);
+      formData.append("homepage", homepage);
+      formData.append("subject", subject.trim());
+      formData.append("content", content);
+      formData.append("isSecret", String(isSecret));
+      formData.append("isNotice", String(isNotice));
+      formData.append("useHtml", String(useHtml));
+      formData.append("commentPolicy", commentPolicy);
+      formData.append("sitelink1", sitelink1);
+      formData.append("sitelink2", sitelink2);
+      if (categoryId) formData.append("categoryId", categoryId);
+      if (parentNo) formData.append("parentNo", parentNo);
+      if (file1) formData.append("file1", file1);
+      if (file2) formData.append("file2", file2);
+      // 비로그인 시 CAPTCHA 토큰 포함
+      if (isLoggedIn !== true && mode !== "modify") {
+        formData.append("captchaAnswer", captchaAnswer);
+        formData.append("captchaToken", captchaToken);
+      }
+
+      const res = await fetch("/api/board/write", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        router.push(`/board/${boardId}/${data.postId}`);
+        router.refresh();
+      } else {
+        const err = await res.json();
+        alert(err.message || "등록에 실패했습니다.");
+      }
+    } catch {
+      alert("등록에 실패했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const modeLabel = mode === "modify" ? "수정" : mode === "reply" ? "답글 작성" : "글쓰기";
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm border p-16 text-center">
+        <div className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-sm text-gray-400">불러오는 중...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="p-1.5 -ml-1.5 rounded-md hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
+            title="뒤로가기"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <h1 className="text-xl font-bold text-gray-800">
+            {boardTitle}
+            <span className="mx-2 text-gray-300 font-normal">|</span>
+            <span className="text-blue-700">{modeLabel}</span>
+          </h1>
+          <HelpButton slug="board-write" />
+        </div>
+      </div>
+
+      <div className="px-4 py-2.5 bg-blue-50/60 border border-blue-100 rounded text-xs text-gray-500 italic leading-relaxed whitespace-pre-line">
+        {guideText || "예배당처럼 아끼고 서로 조심하셨으면 합니다.\n주로 우리 교인들이 사용하겠지만 혹 손님들이 오시더라도 깨끗한 우리의 모습을 보였으면 좋겠고, 서로의 신앙에 유익이 되도록 했으면 좋겠습니다."}
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4" style={{ fontFamily: "var(--skin-write-font)", fontSize: "var(--skin-write-font-size)", color: "var(--skin-write-font-color)" }}>
+        {/* ─── 작성자 정보 섹션 ─── */}
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden" style={{ border: "1px solid var(--skin-write-border-color)" }}>
+          <div className="px-5 py-3 bg-gray-50" style={{ borderBottom: "1px solid var(--skin-write-border-color)" }}>
+            <h2 className="text-sm font-semibold text-gray-600 flex items-center gap-2">
+              <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              작성자 정보
+            </h2>
+          </div>
+          <div className="p-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                  이름 <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  placeholder="이름을 입력하세요"
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                  비밀번호 <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  placeholder="수정/삭제 시 필요합니다"
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ─── 글 내용 섹션 ─── */}
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden" style={{ border: "1px solid var(--skin-write-border-color)" }}>
+          <div className="px-5 py-3 bg-gray-50" style={{ borderBottom: "1px solid var(--skin-write-border-color)" }}>
+            <h2 className="text-sm font-semibold text-gray-600 flex items-center gap-2">
+              <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              글 내용
+            </h2>
+          </div>
+          <div className="p-5 space-y-4">
+            {/* 제목 */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                제목 <span className="text-red-400">*</span>
+              </label>
+              <input
+                ref={subjectRef}
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                required
+                placeholder="제목을 입력하세요"
+                className="w-full px-3.5 py-2.5 text-sm border border-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors font-medium"
+              />
+            </div>
+
+            {/* 카테고리 (제목 아래) */}
+            {useCategory && categories.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">카테고리</label>
+                <select
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  className="w-full sm:w-48 px-3.5 py-2.5 text-sm border border-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white"
+                >
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* 본문 */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                내용 <span className="text-red-400">*</span>
+              </label>
+              {useHtml ? (
+                <TipTapEditor
+                  content={content}
+                  onChange={(html) => setContent(html)}
+                  placeholder="내용을 입력하세요"
+                />
+              ) : (
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  required
+                  rows={18}
+                  placeholder="내용을 입력하세요"
+                  className="w-full px-3.5 py-3 text-sm border border-gray-400 rounded-lg resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors leading-relaxed"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ─── 첨부파일 섹션 ─── */}
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden" style={{ border: "1px solid var(--skin-write-border-color)" }}>
+          <div className="px-5 py-3 bg-gray-50" style={{ borderBottom: "1px solid var(--skin-write-border-color)" }}>
+            <h2 className="text-sm font-semibold text-gray-600 flex items-center gap-2">
+              <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+              </svg>
+              첨부파일
+            </h2>
+          </div>
+          <div className="p-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">파일 1</label>
+                <label className="group flex items-center gap-3 px-3.5 py-2.5 border border-gray-400 border-dashed rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors">
+                  <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                  </svg>
+                  <span className="text-sm text-gray-500 group-hover:text-blue-600 truncate transition-colors">
+                    {file1 ? file1.name : "파일을 선택하세요"}
+                  </span>
+                  <input
+                    type="file"
+                    onChange={(e) => setFile1(e.target.files?.[0] || null)}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">파일 2</label>
+                <label className="group flex items-center gap-3 px-3.5 py-2.5 border border-gray-400 border-dashed rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors">
+                  <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                  </svg>
+                  <span className="text-sm text-gray-500 group-hover:text-blue-600 truncate transition-colors">
+                    {file2 ? file2.name : "파일을 선택하세요"}
+                  </span>
+                  <input
+                    type="file"
+                    onChange={(e) => setFile2(e.target.files?.[0] || null)}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ─── 추가 정보 (접이식) ─── */}
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden" style={{ border: "1px solid var(--skin-write-border-color)" }}>
+          <button
+            type="button"
+            onClick={() => setShowExtra(!showExtra)}
+            className="w-full px-5 py-3 bg-gray-50 flex items-center justify-between hover:bg-gray-100 transition-colors"
+            style={{ borderBottom: "1px solid var(--skin-write-border-color)" }}
+          >
+            <h2 className="text-sm font-semibold text-gray-600 flex items-center gap-2">
+              <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              추가 정보
+              <span className="text-xs font-normal text-gray-400">이메일, 홈페이지, 링크</span>
+            </h2>
+            <svg
+              className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${showExtra ? "rotate-180" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {showExtra && (
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">이메일</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="example@email.com"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">홈페이지</label>
+                  <input
+                    type="url"
+                    value={homepage}
+                    onChange={(e) => setHomepage(e.target.value)}
+                    placeholder="https://"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">링크 1</label>
+                  <input
+                    type="url"
+                    value={sitelink1}
+                    onChange={(e) => setSitelink1(e.target.value)}
+                    placeholder="https://"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">링크 2</label>
+                  <input
+                    type="url"
+                    value={sitelink2}
+                    onChange={(e) => setSitelink2(e.target.value)}
+                    placeholder="https://"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ─── CAPTCHA (비로그인 시) ─── */}
+        {mode !== "modify" && (
+          <div className="bg-white rounded-lg shadow-sm overflow-hidden" style={{ border: "1px solid var(--skin-write-border-color)" }}>
+            <div className="px-5 py-3 bg-gray-50" style={{ borderBottom: "1px solid var(--skin-write-border-color)" }}>
+              <h2 className="text-sm font-semibold text-gray-600">보안 문자 확인</h2>
+            </div>
+            <div className="p-5">
+              <CaptchaField onAnswer={(answer, token) => { setCaptchaAnswer(answer); setCaptchaToken(token); }} />
+            </div>
+          </div>
+        )}
+
+        {/* ─── 옵션 & 등록 버튼 ─── */}
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden" style={{ border: "1px solid var(--skin-write-border-color)" }}>
+          <div className="px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            {/* 옵션 체크박스 */}
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none hover:text-gray-900 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={useHtml}
+                  onChange={(e) => setUseHtml(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-400 text-blue-600 accent-blue-600"
+                />
+                HTML
+              </label>
+              {isLoggedIn && (
+                <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none hover:text-gray-900 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={isSecret}
+                    onChange={(e) => setIsSecret(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-400 text-blue-600 accent-blue-600"
+                  />
+                  비밀글
+                </label>
+              )}
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none hover:text-gray-900 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={isNotice}
+                  onChange={(e) => setIsNotice(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-400 text-blue-600 accent-blue-600"
+                />
+                공지사항
+              </label>
+
+              {/* 댓글 정책 */}
+              <div className="flex items-center gap-3 ml-2 pl-3 border-l border-gray-400">
+                <span className="text-xs font-medium text-gray-500">댓글허용:</span>
+                <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none hover:text-gray-900 transition-colors">
+                  <input
+                    type="radio"
+                    name="commentPolicy"
+                    value="ALLOW_EDIT"
+                    checked={commentPolicy === "ALLOW_EDIT"}
+                    onChange={(e) => setCommentPolicy(e.target.value)}
+                    className="w-3.5 h-3.5 text-blue-600 accent-blue-600"
+                  />
+                  <span className="text-xs">수정추가</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none hover:text-gray-900 transition-colors">
+                  <input
+                    type="radio"
+                    name="commentPolicy"
+                    value="ALLOW"
+                    checked={commentPolicy === "ALLOW"}
+                    onChange={(e) => setCommentPolicy(e.target.value)}
+                    className="w-3.5 h-3.5 text-blue-600 accent-blue-600"
+                  />
+                  <span className="text-xs">추가</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none hover:text-gray-900 transition-colors">
+                  <input
+                    type="radio"
+                    name="commentPolicy"
+                    value="DISABLED"
+                    checked={commentPolicy === "DISABLED"}
+                    onChange={(e) => setCommentPolicy(e.target.value)}
+                    className="w-3.5 h-3.5 text-blue-600 accent-blue-600"
+                  />
+                  <span className="text-xs">미사용</span>
+                </label>
+              </div>
+            </div>
+
+            {/* 버튼 그룹 */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => router.back()}
+                className="flex-1 sm:flex-initial px-5 py-2.5 text-sm font-medium border border-gray-400 rounded-lg hover:bg-gray-50 transition-colors text-gray-600"
+              >
+                취소
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex-1 sm:flex-initial px-7 py-2.5 text-sm font-medium bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {submitting ? (
+                  <>
+                    <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    등록 중...
+                  </>
+                ) : (
+                  mode === "modify" ? "수정하기" : "등록하기"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// Suspense boundary for useSearchParams
+export default function WritePage({ params }: { params: Promise<{ boardId: string }> }) {
+  const { boardId } = use(params);
+
+  return (
+    <Suspense fallback={<div className="text-center py-12 text-gray-400">로딩 중...</div>}>
+      <WriteForm boardId={boardId} />
+    </Suspense>
+  );
+}

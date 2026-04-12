@@ -1,0 +1,307 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+
+  /* 사이트 테마 색상 (관리자 설정에서 변경 가능) */
+  --theme-nav-from: #1d4ed8;
+  --theme-nav-to: #4338ca;
+  --theme-nav-font: ;
+  --theme-nav-font-size: 14px;
+  --theme-nav-font-color: #dbeafe;
+  --theme-primary: #2563eb;
+  --theme-footer-from: #2563eb;
+  --theme-footer-to: #4338ca;
+  --theme-header-bg: #eff6ff;
+
+  /* 스킨 기본값 (스킨 미적용 시) */
+  --skin-primary: var(--theme-primary);
+  --skin-bg: #ffffff;
+  --skin-text: #1f2937;
+  --skin-header-bg: #f3f4f6;
+  --skin-border: #e5e7eb;
+  --skin-accent: #3b82f6;
+  --skin-font: "Noto Sans KR", "맑은 고딕", sans-serif;
+  --skin-radius: 8px;
+
+  /* 메인 위젯 스킨 */
+  --skin-widget-border-color: #d1d5db;
+  --skin-widget-border-width: 2px;
+  --skin-widget-divider-color: #d1d5db;
+  --skin-widget-divider-width: 2px;
+  --skin-widget-header-bg: #eff6ff;
+  --skin-widget-name-font: inherit;
+  --skin-widget-name-size: 14px;
+  --skin-widget-name-color: #1f2937;
+  --skin-widget-name-weight: bold;
+  --skin-widget-name-decoration: none;
+  --skin-widget-name-style: normal;
+  --skin-widget-more-font: inherit;
+  --skin-widget-more-size: 12px;
+  --skin-widget-more-color: #111827;
+  --skin-widget-more-weight: normal;
+  --skin-widget-more-decoration: none;
+  --skin-widget-more-style: normal;
+  --skin-widget-date-font: inherit;
+  --skin-widget-date-size: 12px;
+  --skin-widget-date-color: #1f2937;
+  --skin-widget-date-weight: normal;
+  --skin-widget-date-decoration: none;
+  --skin-widget-date-style: normal;
+  --skin-widget-post-font: inherit;
+  --skin-widget-post-size: 14px;
+  --skin-widget-post-color: #111827;
+  --skin-widget-post-weight: normal;
+  --skin-widget-post-decoration: none;
+  --skin-widget-post-style: normal;
+  --skin-widget-author-font: inherit;
+  --skin-widget-author-size: 12px;
+  --skin-widget-author-color: #1f2937;
+  --skin-widget-author-weight: normal;
+  --skin-widget-author-decoration: none;
+  --skin-widget-author-style: normal;
+
+  /* 글쓰기 스킨 */
+  --skin-write-border-color: #9ca3af;
+  --skin-write-font: inherit;
+  --skin-write-font-size: 14px;
+  --skin-write-font-color: #374151;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Noto Sans KR", "맑은 고딕", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 숫자 input 스피너 제거 */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* 부드러운 스크롤 */
+html {
+  scroll-behavior: smooth;
+}
+
+/* 선택 색상 */
+::selection {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+/* ============================================================
+   스킨 적용 클래스
+   .skin-wrapper 내부에서만 스킨 CSS 변수가 활성화됨
+   ============================================================ */
+
+/* 스킨 게시판 테이블 */
+.skin-wrapper .skin-table {
+  background-color: var(--skin-bg);
+  border-color: var(--skin-border);
+  color: var(--skin-text);
+  font-family: var(--skin-font);
+  border-radius: var(--skin-radius);
+}
+
+.skin-wrapper .skin-table thead {
+  background-color: var(--skin-header-bg);
+}
+
+.skin-wrapper .skin-table th {
+  color: var(--skin-text);
+  border-color: var(--skin-border);
+}
+
+.skin-wrapper .skin-table td {
+  border-color: var(--skin-border);
+}
+
+.skin-wrapper .skin-table tr:hover {
+  background-color: var(--skin-header-bg);
+}
+
+/* 스킨 헤더 영역 */
+.skin-wrapper .skin-header {
+  background-color: var(--skin-header-bg);
+  border-color: var(--skin-border);
+  color: var(--skin-text);
+  border-radius: var(--skin-radius);
+}
+
+/* 스킨 카드 */
+.skin-wrapper .skin-card {
+  background-color: var(--skin-bg);
+  border-color: var(--skin-border);
+  border-radius: var(--skin-radius);
+}
+
+/* 스킨 링크 */
+.skin-wrapper .skin-link {
+  color: var(--skin-primary);
+}
+.skin-wrapper .skin-link:hover {
+  color: var(--skin-accent);
+}
+
+/* 스킨 버튼 (주요) */
+.skin-wrapper .skin-btn-primary {
+  background-color: var(--skin-primary);
+  color: #ffffff;
+  border-radius: var(--skin-radius);
+}
+.skin-wrapper .skin-btn-primary:hover {
+  background-color: var(--skin-accent);
+}
+
+/* 스킨 버튼 (보조) */
+.skin-wrapper .skin-btn-secondary {
+  border: 1px solid var(--skin-border);
+  color: var(--skin-text);
+  border-radius: var(--skin-radius);
+}
+.skin-wrapper .skin-btn-secondary:hover {
+  background-color: var(--skin-header-bg);
+}
+
+/* 스킨 뱃지 (공지 등) */
+.skin-wrapper .skin-badge {
+  background-color: var(--skin-primary);
+  color: #ffffff;
+  border-radius: var(--skin-radius);
+}
+
+/* 스킨 보더 */
+.skin-wrapper .skin-border {
+  border-color: var(--skin-border);
+}
+
+/* 스킨 액센트 텍스트 */
+.skin-wrapper .skin-accent {
+  color: var(--skin-accent);
+}
+
+/* 스킨 페이지네이션 */
+.skin-wrapper .skin-page-active {
+  background-color: var(--skin-primary);
+  color: #ffffff;
+  border-color: var(--skin-primary);
+}
+
+/* 다크 스킨 (음악 게시판 등) 대응 */
+.skin-wrapper .skin-input {
+  background-color: var(--skin-bg);
+  border-color: var(--skin-border);
+  color: var(--skin-text);
+  border-radius: var(--skin-radius);
+}
+
+.skin-wrapper .skin-input:focus {
+  border-color: var(--skin-primary);
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--skin-primary) 20%, transparent);
+}
+
+/* 갤러리 카드 호버 효과 */
+.skin-wrapper .skin-gallery-card {
+  border-color: var(--skin-border);
+  border-radius: var(--skin-radius);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.skin-wrapper .skin-gallery-card:hover {
+  border-color: var(--skin-primary);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--skin-primary) 15%, transparent);
+}
+
+/* prose 내부 스킨 적용 (게시글 본문) */
+.skin-wrapper .prose a {
+  color: var(--skin-primary);
+}
+.skin-wrapper .prose a:hover {
+  color: var(--skin-accent);
+}
+
+/* 메인 위젯 그리드 높이 — 데스크톱(lg)에서만 고정 높이 적용 */
+@media (min-width: 1024px) {
+  .widget-grid {
+    grid-auto-rows: var(--skin-widget-height, 12rem);
+  }
+}
+
+/* 반응형 */
+@media (max-width: 640px) {
+  .skin-wrapper .skin-table {
+    font-size: 13px;
+  }
+}
+
+/* ============================================================
+   TipTap WYSIWYG 에디터
+   ============================================================ */
+.tiptap-editor .ProseMirror {
+  min-height: 400px;
+  outline: none;
+}
+.tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #9ca3af;
+  pointer-events: none;
+  height: 0;
+}
+.tiptap-editor .ProseMirror img {
+  max-width: 100%;
+  height: auto;
+}
+.tiptap-editor .ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5em 0;
+}
+.tiptap-editor .ProseMirror td,
+.tiptap-editor .ProseMirror th {
+  border: 1px solid #d1d5db;
+  padding: 0.4rem 0.6rem;
+  min-width: 60px;
+  vertical-align: top;
+}
+.tiptap-editor .ProseMirror th {
+  background-color: #f3f4f6;
+  font-weight: 600;
+}
+.tiptap-editor .ProseMirror hr {
+  border-top: 1px solid #d1d5db;
+  margin: 1em 0;
+}
+.tiptap-editor .ProseMirror ul {
+  list-style-type: disc;
+  padding-left: 1.5em;
+}
+.tiptap-editor .ProseMirror ol {
+  list-style-type: decimal;
+  padding-left: 1.5em;
+}
+.tiptap-editor .ProseMirror blockquote {
+  border-left: 3px solid #d1d5db;
+  padding-left: 1em;
+  color: #6b7280;
+}
+.tiptap-editor .ProseMirror h1 { font-size: 1.5em; font-weight: 700; margin: 0.5em 0; }
+.tiptap-editor .ProseMirror h2 { font-size: 1.25em; font-weight: 700; margin: 0.5em 0; }
+.tiptap-editor .ProseMirror h3 { font-size: 1.1em; font-weight: 600; margin: 0.5em 0; }
+.tiptap-editor .ProseMirror h4 { font-size: 1em; font-weight: 600; margin: 0.5em 0; }

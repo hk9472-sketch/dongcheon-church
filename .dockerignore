@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.gitignore
+*.md
+docker-compose.yml
+nginx/
+.env
+.env.local
+.env.production.local
+public/uploads/*
+!public/uploads/.gitkeep

@@ -1,0 +1,945 @@
+// ============================================================
+// 동천교회 홈페이지 - Database Schema
+// 제로보드 4.1 pl8 → Prisma 마이그레이션
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// 회원 관리 (zetyx_member_table → User)
+// ============================================================
+model User {
+  id            Int       @id @default(autoincrement())
+  userId        String    @unique @db.VarChar(20)     // user_id
+  password      String    @db.VarChar(255)             // bcrypt hash (기존: MySQL PASSWORD())
+  legacyPwHash  String?   @db.VarChar(41)              // 기존 제로보드 비밀번호 해시 보존
+  name          String    @db.VarChar(20)
+  email         String?   @db.VarChar(255)
+  homepage      String?   @db.VarChar(255)
+  level         Int       @default(10)                 // 1=최고관리자, 10=일반회원
+  isAdmin       Int       @default(3)                  // 1=전체관리, 2=그룹관리, 3=일반
+  groupNo       Int       @default(1)
+
+  // 연락처
+  phone         String?   @db.VarChar(20)              // handphone
+  homeTel       String?   @db.VarChar(20)
+  officeTel     String?   @db.VarChar(20)
+  homeAddress   String?   @db.VarChar(255)
+  officeAddress String?   @db.VarChar(255)
+
+  // 프로필
+  comment       String?   @db.Text
+  job           String?   @db.VarChar(50)
+  hobby         String?   @db.VarChar(50)
+  picture       String?   @db.VarChar(255)
+  birth         Int?                                    // Unix timestamp (기존 형식 유지)
+
+  // 포인트
+  point1        Int       @default(0)
+  point2        Int       @default(0)
+
+  // 설정
+  mailing       Boolean   @default(false)
+  openInfo      Boolean   @default(true)
+  newMemo       Boolean   @default(false)
+
+  // 이메일 인증
+  emailVerified     Boolean   @default(false)
+  emailVerifyToken  String?   @db.VarChar(64)
+  emailVerifyExpiry DateTime?
+
+  // 권찰회 접근 권한
+  councilAccess Boolean @default(false)
+
+  // 장부관리 접근 권한 (세분화)
+  accountAccess        Boolean @default(false)   // 하위 호환용 (true면 회계+연보 모두)
+  accLedgerAccess      Boolean @default(false)   // 회계관리 (전표, 보고서, 마감)
+  accOfferingAccess    Boolean @default(false)   // 연보관리 (연보입력, 내역, 집계 등)
+  accMemberEditAccess  Boolean @default(false)   // 관리번호 입력/수정 권한 (성명 조회 포함)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  posts         Post[]
+  comments      Comment[]
+  sentMessages  Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+  boardPermissions BoardUserPermission[]
+  postVotes     PostVote[]
+  groupAccess   UserGroupAccess[]
+
+  @@index([userId])
+  @@index([name])
+  @@index([level])
+  @@map("users")
+}
+
+// ============================================================
+// 그룹 관리 (zetyx_group_table → Group)
+// ============================================================
+model Group {
+  id            Int       @id @default(autoincrement())
+  name          String    @db.VarChar(20)
+  isOpen        Boolean   @default(true)               // 공개 여부
+  icon          String?   @db.VarChar(255)
+  useJoin       Boolean   @default(true)               // 가입 허용
+  joinLevel     Int       @default(9)                  // 가입 시 부여 레벨
+
+  // 헤더/푸터
+  headerUrl     String?   @db.VarChar(255)
+  header        String?   @db.Text
+  footerUrl     String?   @db.VarChar(255)
+  footer        String?   @db.Text
+
+  // 통계
+  memberNum     Int       @default(0)
+  boardNum      Int       @default(0)
+
+  // Relations
+  boards        Board[]
+
+  @@map("groups")
+}
+
+// ============================================================
+// 게시판 설정 (zetyx_admin_table → Board)
+// ============================================================
+model Board {
+  id            Int       @id @default(autoincrement())
+  groupId       Int
+  group         Group     @relation(fields: [groupId], references: [id])
+
+  slug          String    @unique @db.VarChar(40)      // 게시판 ID (예: DcNotice)
+  title         String    @db.VarChar(255)
+  boardType     BoardType @default(BBS)                // 게시판 유형
+
+  // 스킨 설정
+  skinName      String?   @db.VarChar(255)
+
+  // 레이아웃
+  headerUrl     String?   @db.VarChar(255)
+  header        String?   @db.Text
+  footerUrl     String?   @db.VarChar(255)
+  footer        String?   @db.Text
+  guideText     String?   @db.Text              // 게시판 안내 문구 (관리자 편집 가능)
+  bgImage       String?   @db.VarChar(255)
+  bgColor       String    @default("#ffffff") @db.VarChar(255)
+  tableWidth    Int       @default(95)
+
+  // 페이징
+  postsPerPage  Int       @default(15)                 // memo_num
+  pagesPerBlock Int       @default(8)                  // page_num
+  totalPosts    Int       @default(0)                  // total_article
+
+  // 기능 설정
+  useCategory   Boolean   @default(false)
+  useHtml       Boolean   @default(true)
+  useFilter     Boolean   @default(true)
+  useComment    Boolean   @default(true)
+  defaultCommentPolicy CommentPolicy @default(ALLOW_EDIT)  // 새 글 작성 시 댓글 정책 기본값
+  useSecret     Boolean   @default(true)
+  useReply      Boolean   @default(true)               // use_showreply
+  useFileUpload Boolean   @default(false)              // use_pds
+  useHomelink   Boolean   @default(false)
+  useFilelink   Boolean   @default(false)
+  useAutolink   Boolean   @default(true)
+  useShowIp     Boolean   @default(false)
+  useFormmail   Boolean   @default(true)
+  maxUploadSize Int       @default(2097152)            // 2MB
+
+  // 파일 확장자 제한
+  allowedExt1   String?   @db.VarChar(255)             // pds_ext1
+  allowedExt2   String?   @db.VarChar(255)             // pds_ext2
+
+  // 권한 (숫자가 낮을수록 높은 권한, 1=관리자, 10=일반)
+  grantHtml     Int       @default(2)
+  grantList     Int       @default(99)
+  grantView     Int       @default(99)
+  grantComment  Int       @default(10)
+  grantWrite    Int       @default(10)
+  grantReply    Int       @default(10)
+  grantDelete   Int       @default(1)
+  grantNotice   Int       @default(1)
+  grantViewSecret Int     @default(1)
+
+  // 필터
+  filter        String?   @db.Text
+  avoidTag      String?   @db.Text
+  avoidIp       String?   @db.Text
+
+  // 본문 자르기
+  cutLength     Int       @default(0)
+
+  // 메뉴/메인 노출
+  sortOrder     Int       @default(0)
+  showInMenu    Boolean   @default(true)
+  showOnMain    Boolean   @default(true)
+  requireLogin  Boolean   @default(false)    // true: 로그인 시에만 메뉴/메인에 표시
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  posts         Post[]
+  categories    Category[]
+  userPermissions BoardUserPermission[]
+
+  @@index([groupId])
+  @@index([slug])
+  @@map("boards")
+}
+
+enum BoardType {
+  BBS          // 일반 게시판
+  GALLERY      // 갤러리
+  DOWNLOAD     // 자료실
+  MUSIC        // 음악 게시판
+  VOTE         // 투표
+}
+
+enum CommentPolicy {
+  ALLOW_EDIT   // 댓글가능(수정포함)
+  ALLOW        // 댓글가능
+  DISABLED     // 댓글막음
+}
+
+// ============================================================
+// 게시글 (zetyx_board_{name} → Post)
+// 모든 게시판의 글이 하나의 테이블에 boardId로 구분
+// ============================================================
+model Post {
+  id            Int       @id @default(autoincrement())
+  boardId       Int
+  board         Board     @relation(fields: [boardId], references: [id])
+
+  // 답글 트리 구조 (제로보드 호환)
+  division      Int       @default(1)
+  headnum       Int       @default(0)                  // 원글 그룹 번호 (음수)
+  arrangenum    Int       @default(0)                  // 그룹 내 정렬
+  depth         Int       @default(0)                  // 들여쓰기 깊이
+  prevNo        Int       @default(0)                  // 이전글 번호
+  nextNo        Int       @default(0)                  // 다음글 번호
+  parentId      Int       @default(0)                  // father (부모글)
+  childId       Int       @default(0)                  // child
+
+  // 작성자 정보
+  authorId      Int?                                   // ismember (회원 번호, NULL=비회원)
+  author        User?     @relation(fields: [authorId], references: [id])
+  authorLevel   Int       @default(10)                 // islevel
+  authorName    String    @db.VarChar(20)              // name
+  authorIp      String?   @db.VarChar(15)              // ip
+  password      String?   @db.VarChar(255)             // 비회원 글 비밀번호
+  email         String?   @db.VarChar(255)
+  homepage      String?   @db.VarChar(255)
+
+  // 본문
+  subject       String    @db.VarChar(250)
+  content       String    @db.MediumText               // memo
+  useHtml       Boolean   @default(false)
+  isSecret      Boolean   @default(false)
+  isNotice      Boolean   @default(false)              // headnum <= -2000000000
+
+  // 댓글 정책
+  commentPolicy CommentPolicy @default(ALLOW)
+
+  // 카테고리
+  categoryId    Int?
+  category      Category? @relation(fields: [categoryId], references: [id])
+
+  // 링크
+  sitelink1     String?   @db.VarChar(255)
+  sitelink2     String?   @db.VarChar(255)
+
+  // 첨부파일
+  fileName1     String?   @db.VarChar(255)             // 서버 저장명
+  origName1     String?   @db.VarChar(255)             // 원본 파일명 (s_file_name1)
+  fileName2     String?   @db.VarChar(255)
+  origName2     String?   @db.VarChar(255)
+  download1     Int       @default(0)
+  download2     Int       @default(0)
+
+  // 통계
+  hit           Int       @default(0)
+  vote          Int       @default(0)
+  totalComment  Int       @default(0)
+
+  // 확장 필드
+  extra1        String?   @db.VarChar(255)             // x
+  extra2        String?   @db.VarChar(255)             // y
+
+  // 날짜 (제로보드는 Unix timestamp 사용)
+  legacyDate    Int?                                   // 기존 reg_date 보존
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  comments      Comment[]
+  postVotes     PostVote[]
+
+  @@index([boardId, headnum, arrangenum])
+  @@index([boardId, division, headnum, arrangenum])
+  @@index([depth])
+  @@index([parentId])
+  @@index([prevNo])
+  @@index([nextNo])
+  @@index([authorName])
+  @@index([createdAt])
+  @@index([hit])
+  @@index([vote])
+  @@index([download1])
+  @@index([categoryId])
+  @@map("posts")
+}
+
+// ============================================================
+// 댓글 (zetyx_board_comment_{name} → Comment)
+// ============================================================
+model Comment {
+  id            Int       @id @default(autoincrement())
+  postId        Int
+  post          Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  authorId      Int?                                   // ismember
+  author        User?     @relation(fields: [authorId], references: [id])
+  authorName    String    @db.VarChar(20)
+  password      String?   @db.VarChar(255)             // 비회원 댓글
+  content       String    @db.MediumText               // memo
+  isSecret      Boolean   @default(false)              // 비밀댓글
+  authorIp      String?   @db.VarChar(15)
+
+  legacyDate    Int?                                   // 기존 reg_date
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
+
+  @@index([postId])
+  @@map("comments")
+}
+
+// ============================================================
+// 추천 기록 (중복 추천 방지)
+// ============================================================
+model PostVote {
+  id        Int      @id @default(autoincrement())
+  postId    Int
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    Int?                                   // 로그인 사용자
+  user      User?    @relation(fields: [userId], references: [id])
+  ip        String   @db.VarChar(45)               // 비로그인은 IP 기반
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId])                       // 사용자당 1회
+  @@unique([postId, ip])                           // IP당 1회
+  @@map("post_votes")
+}
+
+// ============================================================
+// 카테고리 (zetyx_board_category_{name} → Category)
+// ============================================================
+model Category {
+  id            Int       @id @default(autoincrement())
+  boardId       Int
+  board         Board     @relation(fields: [boardId], references: [id])
+  name          String    @db.VarChar(100)
+  sortOrder     Int       @default(0)                  // num
+
+  posts         Post[]
+
+  @@index([boardId])
+  @@index([name])
+  @@map("categories")
+}
+
+// ============================================================
+// 쪽지 (zetyx_get_memo / zetyx_send_memo → Message)
+// ============================================================
+model Message {
+  id            Int       @id @default(autoincrement())
+  fromId        Int
+  from          User      @relation("SentMessages", fields: [fromId], references: [id])
+  toId          Int
+  to            User      @relation("ReceivedMessages", fields: [toId], references: [id])
+
+  subject       String    @db.VarChar(200)
+  content       String    @db.Text
+  isRead        Boolean   @default(false)
+
+  legacyDate    Int?
+  createdAt     DateTime  @default(now())
+
+  @@index([fromId])
+  @@index([toId])
+  @@index([isRead])
+  @@map("messages")
+}
+
+// ============================================================
+// 세션 (NextAuth용)
+// ============================================================
+model Session {
+  id            String    @id @default(cuid())
+  sessionToken  String    @unique
+  userId        Int
+  expires       DateTime
+
+  @@map("sessions")
+}
+
+// ============================================================
+// 비밀번호 초기화 토큰
+// ============================================================
+model PasswordReset {
+  id        Int       @id @default(autoincrement())
+  token     String    @unique @db.VarChar(64)
+  userId    Int
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([token])
+  @@index([userId])
+  @@map("password_resets")
+}
+
+// ============================================================
+// 게시판별 사용자 권한 (수정/삭제 권한)
+// ============================================================
+model BoardUserPermission {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  boardId   Int
+  canEdit   Boolean  @default(false)
+  canDelete Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, boardId])
+  @@index([userId])
+  @@index([boardId])
+  @@map("board_user_permissions")
+}
+
+// ============================================================
+// 방문자 카운터 (일별 집계)
+// ============================================================
+model VisitorCount {
+  id        Int      @id @default(autoincrement())
+  date      DateTime @unique @db.Date           // 날짜 (yyyy-mm-dd)
+  count     Int      @default(0)                // 해당일 방문수
+  createdAt DateTime @default(now())
+
+  @@index([date])
+  @@map("visitor_counts")
+}
+
+// ============================================================
+// 사이트 설정 (누적 카운트 초기값 등)
+// ============================================================
+model SiteSetting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique @db.VarChar(100)
+  value String @db.Text
+
+  @@map("site_settings")
+}
+
+// ============================================================
+// 방문 로그 (방문 경로 기록)
+// ============================================================
+model VisitLog {
+  id        Int      @id @default(autoincrement())
+  ip        String   @db.VarChar(45)
+  path      String   @db.VarChar(500)           // 방문 경로
+  referer   String?  @db.VarChar(1000)          // 유입 경로
+  userAgent String?  @db.VarChar(500)
+  userId    Int?                                 // 로그인 사용자 (nullable)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([ip])
+  @@map("visit_logs")
+}
+
+// ============================================================
+// 권찰회 출석부 - 부서 (장년반, 중간반, 유년주교)
+// ============================================================
+model CouncilDept {
+  id        Int            @id @default(autoincrement())
+  name      String         @db.VarChar(50)
+  sortOrder Int            @default(0)
+  groups    CouncilGroup[]
+
+  @@map("council_depts")
+}
+
+// ============================================================
+// 권찰회 출석부 - 구역 (1구역, 2구역, ... + 반사/교사)
+// ============================================================
+model CouncilGroup {
+  id          Int                   @id @default(autoincrement())
+  deptId      Int
+  dept        CouncilDept           @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  name        String                @db.VarChar(50)
+  teacher     String?               @db.VarChar(50)
+  sortOrder   Int                   @default(0)
+  members            CouncilMember[]
+  attendances        CouncilAttendance[]
+  reportEntries      CouncilReportEntry[]
+  districtSummaries  CouncilDistrictSummary[]
+  userAccess         UserGroupAccess[]
+
+  @@index([deptId])
+  @@map("council_groups")
+}
+
+// ============================================================
+// 권찰회 출석부 - 교인 명단
+// ============================================================
+model CouncilMember {
+  id        Int          @id @default(autoincrement())
+  groupId   Int
+  group     CouncilGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name      String       @db.VarChar(50)
+  phone     String?      @db.VarChar(20)
+  note      String?      @db.VarChar(255)
+  sortOrder Int          @default(0)
+
+  @@index([groupId])
+  @@map("council_members")
+}
+
+// ============================================================
+// 권찰회 출석부 - 출석 기록 (개인별 또는 집계)
+// memberName=null → 집계 행 (구역+날짜당 1개만 허용)
+// ============================================================
+model CouncilAttendance {
+  id         Int          @id @default(autoincrement())
+  groupId    Int
+  group      CouncilGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  date       DateTime     @db.Date
+  memberName String?      @db.VarChar(50)
+
+  // 출석 (개인: 0/1, 집계: 인원수)
+  att1 Int @default(0) // 주전
+  att2 Int @default(0) // 주후
+  att3 Int @default(0) // 삼야
+  att4 Int @default(0) // 오야
+  att5 Int @default(0) // 새벽
+
+  // 실시간 (개인: 0/1, 집계: 인원수)
+  rt1 Int @default(0) // 주전
+  rt2 Int @default(0) // 주후
+  rt3 Int @default(0) // 삼야
+  rt4 Int @default(0) // 오야
+  rt5 Int @default(0) // 새벽
+
+  note String? @db.VarChar(500)
+
+  @@index([groupId, date])
+  @@index([date])
+  @@map("council_attendances")
+}
+
+// ============================================================
+// 성경 - 책 (66권)
+// ============================================================
+model BibleBook {
+  id            Int          @id                          // 1~66
+  name          String       @db.VarChar(20)              // 창세기, 출애굽기, ...
+  shortName     String       @db.VarChar(10)              // 창, 출, ...
+  testament     String       @db.VarChar(5)               // OT / NT
+  totalChapters Int                                       // 총 장 수
+  sortOrder     Int          @default(0)
+
+  verses        BibleVerse[]
+
+  @@map("bible_books")
+}
+
+// ============================================================
+// 성경 - 절 (본문 텍스트)
+// ============================================================
+model BibleVerse {
+  id            Int       @id @default(autoincrement())
+  bookId        Int
+  book          BibleBook @relation(fields: [bookId], references: [id])
+  chapter       Int
+  verse         Int
+  content       String    @db.Text
+
+  @@unique([bookId, chapter, verse])
+  @@index([bookId, chapter])
+  @@map("bible_verses")
+}
+
+// ============================================================
+// 실시간 예배 참여 기록
+// ============================================================
+model LiveAttendance {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  ip        String?  @db.VarChar(45)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("live_attendances")
+}
+
+// ============================================================
+// 권찰보고서 - 구역별 개인 출석 기록
+// division: "장년" 또는 "중간"
+// memberName=null → 합계 행
+// ============================================================
+model CouncilReportEntry {
+  id         Int          @id @default(autoincrement())
+  groupId    Int
+  group      CouncilGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  date       DateTime     @db.Date
+  division   String       @db.VarChar(10)
+  memberName String?      @db.VarChar(50)
+
+  isMale Boolean @default(false) // 남자 여부 (true=남, false=여)
+
+  sam    Int @default(0) // 삼일(수요일밤)
+  oh     Int @default(0) // 오일(금요일밤)
+  jupre  Int @default(0) // 주전(주일오전)
+  juhu   Int @default(0) // 주후(주일오후)
+  bible  Int @default(0) // 성경
+  prayer Int @default(0) // 기도
+
+  @@index([groupId, date, division])
+  @@index([date])
+  @@map("council_report_entries")
+}
+
+// ============================================================
+// 전체출석보고 - 구역별성적 (편집 가능한 집계)
+// ============================================================
+model CouncilDistrictSummary {
+  id       Int          @id @default(autoincrement())
+  date     DateTime     @db.Date
+  groupId  Int
+  group    CouncilGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  // 장년반
+  adultSam   Int @default(0)
+  adultOh    Int @default(0)
+  adultJupre Int @default(0)
+  adultJuhu  Int @default(0)
+
+  // 중간반
+  midSam   Int @default(0)
+  midOh    Int @default(0)
+  midJupre Int @default(0)
+  midJuhu  Int @default(0)
+
+  // 성경 (남/여 분리)
+  bibleMale   Int @default(0)
+  bibleFemale Int @default(0)
+  prayer      Int @default(0)
+
+  @@unique([date, groupId])
+  @@index([date])
+  @@map("council_district_summaries")
+}
+
+// ============================================================
+// 전체출석보고 - 반사별성적 (편집 가능)
+// ============================================================
+model CouncilTeacherSummary {
+  id             Int      @id @default(autoincrement())
+  date           DateTime @db.Date
+  sortOrder      Int      @default(0)
+  className      String   @default("") @db.VarChar(50) // 반 이름
+  teacherName    String   @db.VarChar(50)
+
+  jugyo          Int @default(0) // 주교
+  midJugyo1      Int @default(0) // 중간반-주교-중1
+  midJugyo2      Int @default(0) // 중간반-주교-중2
+  midMiddle      Int @default(0) // 중간반-중간
+  midAdult       Int @default(0) // 중간반-장년
+  jugyoAfternoon Int @default(0) // 주교오후
+
+  @@unique([date, sortOrder])
+  @@index([date])
+  @@map("council_teacher_summaries")
+}
+
+// ============================================================
+// 전체출석보고 - 전체출석요약 (주간 요약, 편집 가능)
+// ============================================================
+model CouncilWeeklySummary {
+  id          Int      @id @default(autoincrement())
+  date        DateTime @db.Date @unique
+
+  sam         Int @default(0) // 삼일
+  oh          Int @default(0) // 오일
+  amAdult     Int @default(0) // 주일오전 장년반
+  amMid       Int @default(0) // 주일오전 중간반
+  pmAdult     Int @default(0) // 주일오후 장년반
+  pmMid       Int @default(0) // 주일오후 중간반
+  jugyo       Int @default(0) // 주교
+  midService  Int @default(0) // 중간반(예배)
+  dawn        Int @default(0) // 새벽
+  maleBible      Int @default(0) // 남반 성경
+  femaleBible    Int @default(0) // 여반 성경
+  afternoonSermon String? @db.VarChar(200) // 오후설교
+
+  @@map("council_weekly_summaries")
+}
+
+// ============================================================
+// 권찰회 첨부파일
+// ============================================================
+model CouncilFile {
+  id         Int      @id @default(autoincrement())
+  category   String   @db.VarChar(50) // "report-entry", "overall"
+  refDate    DateTime @db.Date
+  refGroupId Int?                      // report-entry일 때 구역 ID
+  fileName   String   @db.VarChar(500) // 저장 경로 (data/council/...)
+  origName   String   @db.VarChar(255) // 원본 파일명
+  fileSize   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([category, refDate])
+  @@index([refGroupId, refDate])
+  @@map("council_files")
+}
+
+// ============================================================
+// 구역장 ↔ 구역 매핑 (권찰보고서 입력 권한)
+// ============================================================
+model UserGroupAccess {
+  id      Int          @id @default(autoincrement())
+  userId  Int
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupId Int
+  group   CouncilGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@index([userId])
+  @@index([groupId])
+  @@map("user_group_access")
+}
+
+// ============================================================
+// 찬송가
+// ============================================================
+model Hymn {
+  id        Int      @id @default(autoincrement())
+  category  String   @default("hymn") @db.VarChar(20) // hymn, gospel, etc
+  number    Int                            // 번호 (카테고리 내 unique)
+  title     String   @db.VarChar(200)      // 곡명
+  audioFile String?  @db.VarChar(500)      // MP3 파일 경로 (data/hymns/xxx.mp3)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([category, number])
+  @@index([number])
+  @@index([category])
+  @@map("hymns")
+}
+
+// ============================================================
+// 재독듣기 (설교/재독 텍스트 + 음성 동기화)
+// ============================================================
+model Reading {
+  id        Int      @id @default(autoincrement())
+  title     String   @db.VarChar(200)
+  content   String   @db.MediumText              // 줄 단위 텍스트 (줄바꿈 구분)
+  audioPath String?  @db.VarChar(500)            // 음성 파일 경로 (data/readings/xxx.mp3)
+  timestamps String? @db.MediumText              // JSON: [{start, end, text}] Whisper 타임스탬프
+  sortOrder Int      @default(0)
+  createdBy String?  @db.VarChar(50)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sortOrder])
+  @@map("readings")
+}
+
+// ============================================================
+// 도움말 페이지
+// ============================================================
+model HelpPage {
+  id        Int      @id @default(autoincrement())
+  slug      String   @unique @db.VarChar(100)   // 페이지 식별자 (board-write, admin-members 등)
+  title     String   @db.VarChar(200)            // 도움말 제목
+  content   String   @db.MediumText              // HTML 본문 (이미지 포함)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("help_pages")
+}
+
+// ============================================================
+// 회계 - 회계단위 (일반회계, 건축회계 등)
+// ============================================================
+model AccUnit {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique @db.VarChar(10)
+  name      String   @db.VarChar(50)
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  accounts  AccAccount[]
+  vouchers  AccVoucher[]
+  closings  AccClosing[]
+  balances  AccBalance[]
+
+  @@map("acc_units")
+}
+
+// ============================================================
+// 회계 - 계정과목 (트리 구조, 3단계)
+// ============================================================
+model AccAccount {
+  id          Int      @id @default(autoincrement())
+  unitId      Int
+  unit        AccUnit  @relation(fields: [unitId], references: [id])
+  code        String   @db.VarChar(10)
+  name        String   @db.VarChar(100)
+  type        String   @db.VarChar(1)              // D=수입, C=지출
+  parentId    Int?
+  parent      AccAccount? @relation("AccTree", fields: [parentId], references: [id])
+  children    AccAccount[] @relation("AccTree")
+  level       Int      @default(0)                 // 0=대, 1=중, 2=소
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  description String?  @db.VarChar(200)
+
+  voucherItems AccVoucherItem[]
+
+  @@unique([unitId, code])
+  @@index([unitId, type])
+  @@index([parentId])
+  @@map("acc_accounts")
+}
+
+// ============================================================
+// 회계 - 전표 헤더
+// ============================================================
+model AccVoucher {
+  id          Int      @id @default(autoincrement())
+  unitId      Int
+  unit        AccUnit  @relation(fields: [unitId], references: [id])
+  voucherNo   String   @db.VarChar(20)             // YYYYMMDD-순번
+  type        String   @db.VarChar(1)              // D=수입, C=지출
+  date        DateTime @db.Date
+  description String?  @db.VarChar(200)
+  totalAmount Int      @default(0)
+  isClosed    Boolean  @default(false)
+  createdBy   String   @db.VarChar(50)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items       AccVoucherItem[]
+
+  @@unique([unitId, voucherNo])
+  @@index([unitId, date])
+  @@index([date])
+  @@map("acc_vouchers")
+}
+
+// ============================================================
+// 회계 - 전표 항목 (한 전표에 여러 행)
+// ============================================================
+model AccVoucherItem {
+  id          Int      @id @default(autoincrement())
+  voucherId   Int
+  voucher     AccVoucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  seq         Int
+  accountId   Int
+  account     AccAccount @relation(fields: [accountId], references: [id])
+  amount      Int
+  description String?  @db.VarChar(200)
+  counterpart String?  @db.VarChar(100)            // 납부자/거래처
+
+  @@index([voucherId])
+  @@index([accountId])
+  @@map("acc_voucher_items")
+}
+
+// ============================================================
+// 회계 - 월 마감
+// ============================================================
+model AccClosing {
+  id           Int       @id @default(autoincrement())
+  unitId       Int
+  unit         AccUnit   @relation(fields: [unitId], references: [id])
+  year         Int
+  month        Int
+  totalIncome  Int       @default(0)
+  totalExpense Int       @default(0)
+  carryOver    Int       @default(0)
+  closedAt     DateTime?
+  closedBy     String?   @db.VarChar(50)
+
+  @@unique([unitId, year, month])
+  @@map("acc_closings")
+}
+
+// ============================================================
+// 회계 - 이월잔액 (연도 시작 잔액)
+// ============================================================
+model AccBalance {
+  id        Int      @id @default(autoincrement())
+  unitId    Int
+  unit      AccUnit  @relation(fields: [unitId], references: [id])
+  year      Int
+  amount    Int      @default(0)
+
+  @@unique([unitId, year])
+  @@map("acc_balances")
+}
+
+// ============================================================
+// 연보 - 관리번호 (개인/가족)
+// ============================================================
+model OfferingMember {
+  id        Int      @id @default(autoincrement())  // 일련번호(개인번호)
+  name      String   @db.VarChar(50)                // 성명
+  groupName String?  @db.VarChar(50)                // 구역
+  familyId  Int?                                     // 공동번호(가족 대표의 id)
+  family    OfferingMember?  @relation("FamilyGroup", fields: [familyId], references: [id])
+  members   OfferingMember[] @relation("FamilyGroup")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  entries   OfferingEntry[]
+
+  @@index([familyId])
+  @@index([name])
+  @@map("offering_members")
+}
+
+// ============================================================
+// 연보 - 연보 입력 (일자별 헌금 기록)
+// ============================================================
+model OfferingEntry {
+  id           Int      @id @default(autoincrement())
+  date         DateTime @db.Date                     // 일자
+  memberId     Int                                   // 개인번호
+  member       OfferingMember @relation(fields: [memberId], references: [id])
+  offeringType String   @db.VarChar(20)              // 주일연보, 감사, 특별, 절기, 오일
+  amount       Int                                   // 금액
+  description  String?  @db.VarChar(200)             // 비고
+  createdBy    String?  @db.VarChar(50)
+  createdAt    DateTime @default(now())
+
+  @@index([memberId, date])
+  @@index([date])
+  @@index([offeringType])
+  @@map("offering_entries")
+}

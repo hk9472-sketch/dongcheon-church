@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+# 관리자 페이지 크롤링 방지
+Disallow: /admin/
+Disallow: /api/
+
+# 레거시 제로보드 경로 (리다이렉트 됨)
+Disallow: /bbs/
+
+Sitemap: https://pkistdc.net/sitemap.xml
