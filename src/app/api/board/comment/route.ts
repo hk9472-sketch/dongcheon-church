@@ -61,8 +61,8 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 댓글 수 업데이트
-    await prisma.post.update({
+    // 댓글 수 업데이트 (updateMany로 @updatedAt 자동 갱신 회피)
+    await prisma.post.updateMany({
       where: { id: postId },
       data: { totalComment: { increment: 1 } },
     });
@@ -188,8 +188,8 @@ export async function DELETE(request: NextRequest) {
 
     await prisma.comment.delete({ where: { id: commentId } });
 
-    // 댓글 수 감소
-    await prisma.post.update({
+    // 댓글 수 감소 (updateMany로 @updatedAt 자동 갱신 회피)
+    await prisma.post.updateMany({
       where: { id: comment.postId },
       data: { totalComment: { decrement: 1 } },
     });

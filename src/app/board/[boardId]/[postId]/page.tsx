@@ -62,8 +62,9 @@ export default async function PostDetailPage({ params }: PageProps) {
     !(currentUser?.id !== undefined && currentUser.id === post.authorId);
 
   // 조회수 증가 (비밀글로 차단되지 않을 때만)
+  // updateMany 사용하여 @updatedAt 자동 갱신 회피 (수정 표시 방지)
   if (!isSecretBlocked) {
-    await prisma.post.update({
+    await prisma.post.updateMany({
       where: { id: post.id },
       data: { hit: { increment: 1 } },
     });
@@ -241,6 +242,11 @@ export default async function PostDetailPage({ params }: PageProps) {
               <strong className="text-gray-700">{post.authorName}</strong>
             </span>
             <span>{formatDate(post.createdAt)}</span>
+            {post.lastEditedAt && post.lastEditorUserId && (
+              <span className="text-orange-600 text-xs">
+                수정: {formatDate(post.lastEditedAt)} ({post.lastEditorName || post.lastEditorUserId})
+              </span>
+            )}
             <span>조회 {post.hit + 1}</span>
             {post.vote > 0 && <span>추천 {post.vote}</span>}
             {post.email && (

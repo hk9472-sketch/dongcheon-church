@@ -43,6 +43,8 @@ export async function POST(request: NextRequest) {
     const sessionToken = request.cookies.get("dc_session")?.value;
     let isSessionValid = false;
     let sessionUserId: number | null = null;
+    let sessionUserLoginId: string | null = null;
+    let sessionUserName: string | null = null;
     let sessionUserLevel = 10;
     let sessionUserIsAdmin = 3;
     if (sessionToken) {
@@ -52,6 +54,8 @@ export async function POST(request: NextRequest) {
         const sUser = await prisma.user.findUnique({ where: { id: session.userId } });
         if (sUser) {
           sessionUserId = sUser.id;
+          sessionUserLoginId = sUser.userId;
+          sessionUserName = sUser.name;
           sessionUserLevel = sUser.level;
           sessionUserIsAdmin = sUser.isAdmin;
         }
@@ -161,6 +165,13 @@ export async function POST(request: NextRequest) {
           commentPolicy,
           ...(fileName1 ? { fileName1, origName1 } : {}),
           ...(fileName2 ? { fileName2, origName2 } : {}),
+          // 최종 수정자 정보 (로그인 사용자만)
+          ...(isSessionValid && sessionUserId ? {
+            lastEditorId: sessionUserId,
+            lastEditorUserId: sessionUserLoginId,
+            lastEditorName: sessionUserName,
+            lastEditedAt: new Date(),
+          } : {}),
         },
       });
 

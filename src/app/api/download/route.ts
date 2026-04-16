@@ -32,8 +32,8 @@ export async function GET(request: NextRequest) {
     try {
       const fileBuffer = await readFile(filePath);
 
-      // 다운로드 카운트 증가
-      await prisma.post.update({
+      // 다운로드 카운트 증가 (updateMany로 @updatedAt 자동 갱신 회피)
+      await prisma.post.updateMany({
         where: { id: postId },
         data: fileNo === 2 ? { download2: { increment: 1 } } : { download1: { increment: 1 } },
       });

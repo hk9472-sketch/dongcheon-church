@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       prisma.postVote.create({
         data: { postId, userId, ip },
       }),
-      prisma.post.update({
+      prisma.post.updateMany({
         where: { id: postId },
         data: { vote: { increment: 1 } },
       }),

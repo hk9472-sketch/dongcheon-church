@@ -280,6 +280,12 @@ model Post {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // 최종 수정자 (글 내용 수정 시만 기록)
+  lastEditorId     Int?                                 // 수정한 회원 id
+  lastEditorUserId String?  @db.VarChar(50)             // 수정한 회원의 userId (로그인 아이디)
+  lastEditorName   String?  @db.VarChar(50)             // 수정한 회원의 이름
+  lastEditedAt     DateTime?                            // 실제 수정 일시
+
   // Relations
   comments      Comment[]
   postVotes     PostVote[]

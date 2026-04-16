@@ -46,9 +46,9 @@ export async function POST(request: NextRequest) {
       where: { id: { in: comments.map((c) => c.id) } },
     });
 
-    // 게시글별 댓글 수 감소
+    // 게시글별 댓글 수 감소 (updateMany로 @updatedAt 자동 갱신 회피)
     for (const [postId, count] of postCountMap) {
-      await prisma.post.update({
+      await prisma.post.updateMany({
         where: { id: postId },
         data: { totalComment: { decrement: count } },
       });
