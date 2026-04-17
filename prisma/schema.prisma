@@ -233,7 +233,7 @@ model Post {
 
   // 작성자 정보
   authorId      Int?                                   // ismember (회원 번호, NULL=비회원)
-  author        User?     @relation(fields: [authorId], references: [id])
+  author        User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
   authorLevel   Int       @default(10)                 // islevel
   authorName    String    @db.VarChar(20)              // name
   authorIp      String?   @db.VarChar(15)              // ip
@@ -315,7 +315,7 @@ model Comment {
   post          Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   authorId      Int?                                   // ismember
-  author        User?     @relation(fields: [authorId], references: [id])
+  author        User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
   authorName    String    @db.VarChar(20)
   password      String?   @db.VarChar(255)             // 비회원 댓글
   content       String    @db.MediumText               // memo
@@ -554,6 +554,7 @@ model CouncilAttendance {
 
   note String? @db.VarChar(500)
 
+  @@unique([groupId, date, memberName])
   @@index([groupId, date])
   @@index([date])
   @@map("council_attendances")

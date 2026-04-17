@@ -216,6 +216,8 @@ export default async function BoardListPage({ params, searchParams }: PageProps)
         useCategory={board.useCategory}
         cutLength={board.cutLength}
         toggleDesc={toggleDesc}
+        currentSort={query.select_arrange || "headnum"}
+        currentDesc={query.desc === "asc" ? "asc" : "desc"}
         totalPosts={totalPosts}
         currentPage={paging.currentPage}
         postsPerPage={board.postsPerPage}

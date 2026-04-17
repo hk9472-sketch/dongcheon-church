@@ -280,20 +280,74 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ message: "원글이 존재하지 않습니다." }, { status: 404 });
       }
 
-      // 같은 headnum 그룹에서 arrangenum 최대값 + 1
-      const maxArrange = await prisma.post.aggregate({
-        where: { boardId: board.id, headnum: parentPost.headnum },
-        _max: { arrangenum: true },
-      });
-      const newArrangenum = (maxArrange._max.arrangenum || 0) + 1;
+      // headnum/arrangenum 경합 방지: Board 행을 FOR UPDATE 로 직렬화
+      const createdId = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT id FROM boards WHERE id = ${board.id} FOR UPDATE`;
 
-      const newPost = await prisma.post.create({
+        const maxArrange = await tx.post.aggregate({
+          where: { boardId: board.id, headnum: parentPost.headnum },
+          _max: { arrangenum: true },
+        });
+        const newArrangenum = (maxArrange._max.arrangenum || 0) + 1;
+
+        const created = await tx.post.create({
+          data: {
+            boardId: board.id,
+            headnum: parentPost.headnum,
+            arrangenum: newArrangenum,
+            depth: parentPost.depth + 1,
+            parentId: parentPost.id,
+            authorId: sessionUserId,
+            authorLevel: sessionUserId ? sessionUserLevel : 10,
+            authorName: effectiveName,
+            password: hashedPassword,
+            email,
+            homepage,
+            subject,
+            content,
+            isSecret,
+            useHtml,
+            sitelink1,
+            sitelink2,
+            categoryId,
+            commentPolicy,
+            fileName1,
+            origName1,
+            fileName2,
+            origName2,
+          },
+        });
+
+        await tx.board.update({
+          where: { id: board.id },
+          data: { totalPosts: { increment: 1 } },
+        });
+
+        return created.id;
+      });
+
+      return NextResponse.json({ postId: createdId });
+    }
+
+    // ---- 새 글 모드 ----
+    // headnum: 음수 (가장 작은 값 - 1, 최신글일수록 작음)
+    // 경합 방지: Board 행을 FOR UPDATE 로 직렬화한 뒤 MIN(headnum) 계산
+    const createdId = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT id FROM boards WHERE id = ${board.id} FOR UPDATE`;
+
+      const minHeadnum = await tx.post.aggregate({
+        where: { boardId: board.id },
+        _min: { headnum: true },
+      });
+      const newHeadnum = (minHeadnum._min.headnum || 0) - 1;
+
+      const created = await tx.post.create({
         data: {
           boardId: board.id,
-          headnum: parentPost.headnum,
-          arrangenum: newArrangenum,
-          depth: parentPost.depth + 1,
-          parentId: parentPost.id,
+          headnum: newHeadnum,
+          arrangenum: 0,
+          depth: 0,
+          division: 1,
           authorId: sessionUserId,
           authorLevel: sessionUserId ? sessionUserLevel : 10,
           authorName: effectiveName,
@@ -303,11 +357,12 @@ export async function POST(request: NextRequest) {
           subject,
           content,
           isSecret,
+          isNotice,
           useHtml,
+          commentPolicy,
           sitelink1,
           sitelink2,
           categoryId,
-          commentPolicy,
           fileName1,
           origName1,
           fileName2,
@@ -315,59 +370,15 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // 게시판 글 수 업데이트
-      await prisma.board.update({
+      await tx.board.update({
         where: { id: board.id },
         data: { totalPosts: { increment: 1 } },
       });
 
-      return NextResponse.json({ postId: newPost.id });
-    }
-
-    // ---- 새 글 모드 ----
-    // headnum: 음수 (가장 작은 값 - 1, 최신글일수록 작음)
-    const minHeadnum = await prisma.post.aggregate({
-      where: { boardId: board.id },
-      _min: { headnum: true },
-    });
-    const newHeadnum = (minHeadnum._min.headnum || 0) - 1;
-
-    const newPost = await prisma.post.create({
-      data: {
-        boardId: board.id,
-        headnum: newHeadnum,
-        arrangenum: 0,
-        depth: 0,
-        division: 1,
-        authorId: sessionUserId,
-        authorLevel: sessionUserId ? sessionUserLevel : 10,
-        authorName: effectiveName,
-        password: hashedPassword,
-        email,
-        homepage,
-        subject,
-        content,
-        isSecret,
-        isNotice,
-        useHtml,
-        commentPolicy,
-        sitelink1,
-        sitelink2,
-        categoryId,
-        fileName1,
-        origName1,
-        fileName2,
-        origName2,
-      },
+      return created.id;
     });
 
-    // 게시판 글 수 업데이트
-    await prisma.board.update({
-      where: { id: board.id },
-      data: { totalPosts: { increment: 1 } },
-    });
-
-    return NextResponse.json({ postId: newPost.id });
+    return NextResponse.json({ postId: createdId });
   } catch (error) {
     console.error("Write error:", error);
     return NextResponse.json({ message: "서버 오류가 발생했습니다." }, { status: 500 });

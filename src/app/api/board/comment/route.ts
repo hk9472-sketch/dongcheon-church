@@ -119,12 +119,11 @@ export async function PUT(request: NextRequest) {
       if (sessionUser.isAdmin <= 2) {
         hasEditPermission = true; // 관리자
       } else if (comment.authorId && comment.authorId === sessionUser.id) {
-        // 작성자 본인: commentPolicy 확인
-        if (post?.commentPolicy === "ALLOW_EDIT") {
-          hasEditPermission = true;
-        } else {
+        // 작성자 본인: DISABLED 만 차단, ALLOW/ALLOW_EDIT 모두 허용
+        if (post?.commentPolicy === "DISABLED") {
           return NextResponse.json({ message: "이 게시글에서는 댓글 수정이 허용되지 않습니다." }, { status: 403 });
         }
+        hasEditPermission = true;
       } else {
         // 게시판 수정 권한 확인
         if (post) {

@@ -216,30 +216,19 @@ export default function Header() {
               </Link>
             ))}
           </div>
-          <div className="flex items-center gap-3 px-4 pt-3 border-t border-gray-100">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pt-3 border-t border-gray-100">
             {user ? (
               <>
                 <span className="text-sm text-gray-600 font-medium">{user.name}님</span>
-                <span className="text-gray-200">|</span>
                 <Link href="/auth/profile" className="text-sm text-blue-600 font-medium" onClick={() => setMenuOpen(false)}>정보수정</Link>
-                <span className="text-gray-200">|</span>
                 {user.isAdmin <= 2 && (
-                  <>
-                    <Link href="/admin" className="text-sm text-orange-600 font-medium" onClick={() => setMenuOpen(false)}>관리</Link>
-                    <span className="text-gray-200">|</span>
-                  </>
+                  <Link href="/admin" className="text-sm text-orange-600 font-medium" onClick={() => setMenuOpen(false)}>관리</Link>
                 )}
                 {(user.councilAccess || user.isAdmin <= 2) && (
-                  <>
-                    <Link href="/council" className="text-sm text-indigo-600 font-medium" onClick={() => setMenuOpen(false)}>권찰회</Link>
-                    <span className="text-gray-200">|</span>
-                  </>
+                  <Link href="/council" className="text-sm text-indigo-600 font-medium" onClick={() => setMenuOpen(false)}>권찰회</Link>
                 )}
                 {(user.accountAccess || user.isAdmin <= 2) && (
-                  <>
-                    <Link href="/accounting" className="text-sm text-teal-600 font-medium" onClick={() => setMenuOpen(false)}>장부관리</Link>
-                    <span className="text-gray-200">|</span>
-                  </>
+                  <Link href="/accounting" className="text-sm text-teal-600 font-medium" onClick={() => setMenuOpen(false)}>장부관리</Link>
                 )}
                 <button onClick={() => { handleLogout(); setMenuOpen(false); }} className="text-sm text-gray-500">
                   로그아웃
@@ -248,7 +237,6 @@ export default function Header() {
             ) : (
               <>
                 <Link href="/auth/login" className="text-sm text-gray-600 font-medium" onClick={() => setMenuOpen(false)}>로그인</Link>
-                <span className="text-gray-200">|</span>
                 <Link href="/auth/register" className="text-sm text-blue-700 font-semibold" onClick={() => setMenuOpen(false)}>회원가입</Link>
               </>
             )}

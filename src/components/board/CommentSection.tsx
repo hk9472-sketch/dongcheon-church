@@ -91,9 +91,15 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
     }
   }
 
-  async function handleDelete(commentId: number) {
-    const pw = prompt("비밀번호를 입력하세요:");
-    if (!pw) return;
+  async function handleDelete(commentId: number, requirePassword: boolean) {
+    let pw = "";
+    if (requirePassword) {
+      const input = prompt("비밀번호를 입력하세요:");
+      if (!input) return;
+      pw = input;
+    } else {
+      if (!confirm("댓글을 삭제하시겠습니까?")) return;
+    }
 
     try {
       const res = await fetch("/api/board/comment", {
@@ -124,8 +130,8 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
     setEditPassword("");
   }
 
-  async function handleEdit(commentId: number) {
-    if (!editPassword) {
+  async function handleEdit(commentId: number, requirePassword: boolean) {
+    if (requirePassword && !editPassword) {
       alert("비밀번호를 입력하세요.");
       return;
     }
@@ -281,6 +287,30 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
               (currentUserId != null && currentUserId === postAuthorId) ||
               (currentUserId != null && currentUserId === comment.authorId);
 
+            const isOwnComment = currentUserId != null && currentUserId === comment.authorId;
+            const isGuestComment = comment.authorId === null;
+
+            // 삭제 버튼: 관리자, 본인, 비회원 댓글(비번 확인)만 노출
+            const canShowDelete =
+              commentPolicy !== "DISABLED" &&
+              (isAdmin || isOwnComment || isGuestComment);
+
+            // 수정 버튼:
+            //   - 본인 회원 댓글: DISABLED 아니면 허용 (ALLOW/ALLOW_EDIT 모두)
+            //   - 비회원 댓글: ALLOW_EDIT 에서만 (비번 확인)
+            //   - 관리자: 정책 준수 (ALLOW_EDIT 에서만 표시)
+            const canShowEdit =
+              canViewSecret &&
+              editingId !== comment.id &&
+              (
+                (isOwnComment && commentPolicy !== "DISABLED") ||
+                (isGuestComment && commentPolicy === "ALLOW_EDIT") ||
+                (isAdmin && commentPolicy === "ALLOW_EDIT")
+              );
+
+            // 수정 시 비밀번호가 필요한 경우: 비회원 댓글만
+            const editRequiresPassword = isGuestComment;
+
             return (
               <li key={comment.id} className="px-4 py-3">
                 <div className="flex items-center justify-between mb-1">
@@ -300,7 +330,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                     <span className="text-gray-400 text-xs">{formatTime(comment.createdAt)}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {canViewSecret && commentPolicy === "ALLOW_EDIT" && editingId !== comment.id && (
+                    {canShowEdit && (
                       <button
                         onClick={() => startEdit(comment)}
                         className="text-xs text-gray-400 hover:text-blue-500 transition-colors"
@@ -309,9 +339,9 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                         수정
                       </button>
                     )}
-                    {commentPolicy !== "DISABLED" && (
+                    {canShowDelete && (
                       <button
-                        onClick={() => handleDelete(comment.id)}
+                        onClick={() => handleDelete(comment.id, isGuestComment)}
                         className="text-xs text-gray-400 hover:text-red-500 transition-colors"
                         title="삭제"
                       >
@@ -332,15 +362,17 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                         minHeight="60px"
                       />
                       <div className="flex items-center gap-2">
-                        <input
-                          type="password"
-                          placeholder="비밀번호"
-                          value={editPassword}
-                          onChange={(e) => setEditPassword(e.target.value)}
-                          className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-                        />
+                        {editRequiresPassword && (
+                          <input
+                            type="password"
+                            placeholder="비밀번호"
+                            value={editPassword}
+                            onChange={(e) => setEditPassword(e.target.value)}
+                            className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                          />
+                        )}
                         <button
-                          onClick={() => handleEdit(comment.id)}
+                          onClick={() => handleEdit(comment.id, editRequiresPassword)}
                           disabled={editing}
                           className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
                         >

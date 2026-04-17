@@ -29,6 +29,8 @@ interface Props {
   useCategory: boolean;
   cutLength: number;
   toggleDesc: string;
+  currentSort?: string;
+  currentDesc?: string;
   totalPosts: number;
   currentPage: number;
   postsPerPage: number;
@@ -61,11 +63,15 @@ export default function BoardListTable({
   useCategory,
   cutLength,
   toggleDesc,
+  currentSort = "headnum",
+  currentDesc = "desc",
   totalPosts,
   currentPage,
   postsPerPage,
   keyword,
 }: Props) {
+  const sortArrow = (column: string) =>
+    column === currentSort ? (currentDesc === "asc" ? " ▲" : " ▼") : "";
   const router = useRouter();
   const [manageMode, setManageMode] = useState(false);
   const [checked, setChecked] = useState<Set<number>>(new Set());
@@ -164,32 +170,32 @@ export default function BoardListTable({
               )}
               <th className="w-16 py-2.5 text-center font-medium">
                 <Link href={`/board/${boardSlug}?select_arrange=headnum&desc=${toggleDesc}`}>
-                  번호
+                  번호{sortArrow("headnum")}
                 </Link>
               </th>
               <th className="py-2.5 text-left font-medium">
                 <Link href={`/board/${boardSlug}?select_arrange=subject&desc=${toggleDesc}`}>
-                  제목
+                  제목{sortArrow("subject")}
                 </Link>
               </th>
               <th className="w-24 py-2.5 text-center font-medium hidden sm:table-cell">
                 <Link href={`/board/${boardSlug}?select_arrange=name&desc=${toggleDesc}`}>
-                  작성자
+                  작성자{sortArrow("name")}
                 </Link>
               </th>
               <th className="w-24 py-2.5 text-center font-medium hidden md:table-cell">
                 <Link href={`/board/${boardSlug}?select_arrange=reg_date&desc=${toggleDesc}`}>
-                  날짜
+                  날짜{sortArrow("reg_date")}
                 </Link>
               </th>
               <th className="w-16 py-2.5 text-center font-medium hidden md:table-cell">
                 <Link href={`/board/${boardSlug}?select_arrange=hit&desc=${toggleDesc}`}>
-                  조회
+                  조회{sortArrow("hit")}
                 </Link>
               </th>
               <th className="w-14 py-2.5 text-center font-medium hidden lg:table-cell">
                 <Link href={`/board/${boardSlug}?select_arrange=vote&desc=${toggleDesc}`}>
-                  추천
+                  추천{sortArrow("vote")}
                 </Link>
               </th>
             </tr>
