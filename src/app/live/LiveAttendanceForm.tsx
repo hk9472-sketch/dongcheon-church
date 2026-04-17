@@ -1,11 +1,35 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import CaptchaField from "@/components/CaptchaField";
 
 export default function LiveAttendanceForm() {
   const [names, setNames] = useState<string[]>([""]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // 로그인 여부 확인 (로그인 사용자는 CAPTCHA 생략)
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const [captchaAnswer, setCaptchaAnswer] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
+  // CAPTCHA 를 매 제출 후 갱신하기 위한 키
+  const [captchaKey, setCaptchaKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me", { cache: "no-store" });
+        const data = await res.json();
+        if (!cancelled) setIsLoggedIn(!!data?.user);
+      } catch {
+        if (!cancelled) setIsLoggedIn(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function addRow() {
     if (names.length >= 20) return;
@@ -30,22 +54,41 @@ export default function LiveAttendanceForm() {
       return;
     }
 
+    // 비로그인 시 CAPTCHA 필수
+    if (isLoggedIn === false && (!captchaAnswer || !captchaToken)) {
+      setMessage({ type: "error", text: "보안 문자를 입력해 주세요." });
+      return;
+    }
+
     setSubmitting(true);
     setMessage(null);
     try {
+      const payload: Record<string, unknown> = { names: valid };
+      if (isLoggedIn === false) {
+        payload.captchaAnswer = captchaAnswer;
+        payload.captchaToken = captchaToken;
+      }
       const res = await fetch("/api/live/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ names: valid }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (res.ok) {
         setMessage({ type: "success", text: data.message });
         setNames([""]);
+        setCaptchaAnswer("");
+        setCaptchaToken("");
+        setCaptchaKey((k) => k + 1);
         // 참여현황 목록 갱신 트리거
         window.dispatchEvent(new Event("live-attendance-updated"));
       } else {
         setMessage({ type: "error", text: data.message || "등록에 실패했습니다." });
+        if (isLoggedIn === false) {
+          setCaptchaAnswer("");
+          setCaptchaToken("");
+          setCaptchaKey((k) => k + 1);
+        }
       }
     } catch {
       setMessage({ type: "error", text: "서버 연결에 실패했습니다." });
@@ -110,6 +153,19 @@ export default function LiveAttendanceForm() {
         ))}
       </div>
 
+      {/* 비로그인 사용자에게만 CAPTCHA 노출 */}
+      {isLoggedIn === false && (
+        <div className="mb-3">
+          <CaptchaField
+            key={captchaKey}
+            onAnswer={(ans, tok) => {
+              setCaptchaAnswer(ans);
+              setCaptchaToken(tok);
+            }}
+          />
+        </div>
+      )}
+
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -122,7 +178,7 @@ export default function LiveAttendanceForm() {
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={submitting}
+          disabled={submitting || isLoggedIn === null}
           className="px-4 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
         >
           {submitting ? "등록 중..." : "참여 등록"}

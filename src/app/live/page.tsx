@@ -3,19 +3,88 @@ import LiveAttendanceForm from "./LiveAttendanceForm";
 import LiveViewerCount from "./LiveViewerCount";
 import LiveAttendanceList from "./LiveAttendanceList";
 
-export default function LivePage() {
-  const youtubeUrl = process.env.NEXT_PUBLIC_YOUTUBE_LIVE_URL || "";
+/**
+ * 다양한 YouTube URL 형식을 embed URL 로 변환한다.
+ * - 채널 ID 직접 (UC로 시작, 24자)
+ * - youtube.com/channel/UC... 채널 라이브
+ * - youtube.com/watch?v=... 또는 youtu.be/... 특정 영상
+ * - youtube.com/@handle, /c/, /user/ 는 채널 ID 필요 → hint 로 안내
+ */
+function parseYouTubeLiveUrl(raw: string): { embed: string | null; hint: string | null } {
+  if (!raw) return { embed: null, hint: null };
 
-  // 채널 URL에서 채널 ID 추출
-  let channelId = "";
-  const channelMatch = youtubeUrl.match(/\/channel\/([^/?]+)/);
-  if (channelMatch) {
-    channelId = channelMatch[1];
+  // 1) 채널 ID 직접 (UC + 22자)
+  if (/^UC[a-zA-Z0-9_-]{22}$/.test(raw)) {
+    return {
+      embed: `https://www.youtube.com/embed/live_stream?channel=${raw}&autoplay=1`,
+      hint: null,
+    };
   }
 
-  const embedUrl = channelId
-    ? `https://www.youtube.com/embed/live_stream?channel=${channelId}&autoplay=1`
-    : "";
+  // 2) URL 파싱
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return { embed: null, hint: "유효하지 않은 URL 형식입니다. 관리자에게 문의해 주세요." };
+  }
+
+  // youtu.be/VIDEO_ID → 특정 영상 embed
+  if (u.hostname === "youtu.be" || u.hostname.endsWith(".youtu.be")) {
+    const videoId = u.pathname.slice(1).split("/")[0];
+    if (videoId) {
+      return { embed: `https://www.youtube.com/embed/${videoId}?autoplay=1`, hint: null };
+    }
+  }
+
+  // youtube.com/channel/UC... (경로형 채널 라이브)
+  const channelMatch = u.pathname.match(/^\/channel\/(UC[a-zA-Z0-9_-]{22})/);
+  if (channelMatch) {
+    return {
+      embed: `https://www.youtube.com/embed/live_stream?channel=${channelMatch[1]}&autoplay=1`,
+      hint: null,
+    };
+  }
+
+  // ?channel=UC... 쿼리 파라미터
+  const qChannel = u.searchParams.get("channel");
+  if (qChannel && /^UC[a-zA-Z0-9_-]{22}$/.test(qChannel)) {
+    return {
+      embed: `https://www.youtube.com/embed/live_stream?channel=${qChannel}&autoplay=1`,
+      hint: null,
+    };
+  }
+
+  // watch?v=VIDEO_ID → 특정 영상 embed
+  const videoId = u.searchParams.get("v");
+  if (videoId) {
+    return { embed: `https://www.youtube.com/embed/${videoId}?autoplay=1`, hint: null };
+  }
+
+  // /embed/VIDEO_ID 형태를 그대로 넣은 경우
+  const embedMatch = u.pathname.match(/^\/embed\/([^/?]+)/);
+  if (embedMatch) {
+    const id = embedMatch[1];
+    if (id === "live_stream") {
+      return { embed: null, hint: "embed URL 에 channel 파라미터가 없습니다. 채널 ID(UC...)를 함께 설정해 주세요." };
+    }
+    return { embed: `https://www.youtube.com/embed/${id}?autoplay=1`, hint: null };
+  }
+
+  // @handle, /c/, /user/ → 채널 ID 필요
+  if (u.pathname.startsWith("/@") || u.pathname.startsWith("/c/") || u.pathname.startsWith("/user/")) {
+    return {
+      embed: null,
+      hint: "YouTube 채널 ID(UC...) 또는 /channel/UC... 형식으로 입력해주세요. @handle, /c/, /user/ 형식은 iframe embed 에서 지원되지 않습니다.",
+    };
+  }
+
+  return { embed: null, hint: "지원되지 않는 YouTube URL 형식입니다. 관리자에게 문의해 주세요." };
+}
+
+export default function LivePage() {
+  const youtubeUrl = process.env.NEXT_PUBLIC_YOUTUBE_LIVE_URL || "";
+  const { embed: embedUrl, hint: parseHint } = parseYouTubeLiveUrl(youtubeUrl);
 
   return (
     <div className="max-w-4xl mx-auto py-4 space-y-4">
@@ -48,8 +117,17 @@ export default function LivePage() {
             />
           </div>
         ) : (
-          <div className="flex items-center justify-center h-64 text-gray-400">
-            <p>유튜브 채널 URL이 설정되지 않았습니다.</p>
+          <div className="flex flex-col items-center justify-center h-64 text-gray-400 px-4 text-center">
+            {youtubeUrl ? (
+              <>
+                <p className="text-sm">실시간 방송을 불러올 수 없습니다.</p>
+                {parseHint && (
+                  <p className="mt-2 text-xs text-gray-500 max-w-md">{parseHint}</p>
+                )}
+              </>
+            ) : (
+              <p>유튜브 채널 URL이 설정되지 않았습니다.</p>
+            )}
           </div>
         )}
       </div>

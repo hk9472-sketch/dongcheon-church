@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
+import { verifyCaptcha } from "@/lib/captcha";
 
 // 한국시간 현재 시각
 function nowKST(): Date {
@@ -22,9 +23,28 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const names: string[] = body.names;
+    const captchaAnswer: string = typeof body.captchaAnswer === "string" ? body.captchaAnswer : "";
+    const captchaToken: string = typeof body.captchaToken === "string" ? body.captchaToken : "";
 
     if (!Array.isArray(names) || names.length === 0) {
       return NextResponse.json({ message: "이름을 입력해 주세요." }, { status: 400 });
+    }
+
+    // 세션 확인 (로그인 사용자는 CAPTCHA 생략)
+    const sessionToken = request.cookies.get("dc_session")?.value;
+    let isSessionValid = false;
+    if (sessionToken) {
+      const session = await prisma.session.findUnique({ where: { sessionToken } });
+      if (session && session.expires > new Date()) {
+        isSessionValid = true;
+      }
+    }
+
+    // 비로그인 시 CAPTCHA 검증
+    if (!isSessionValid) {
+      if (!captchaAnswer || !captchaToken || !verifyCaptcha(captchaAnswer, captchaToken)) {
+        return NextResponse.json({ message: "보안 문자가 올바르지 않습니다." }, { status: 400 });
+      }
     }
 
     const cleaned = names

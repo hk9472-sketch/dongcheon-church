@@ -82,34 +82,61 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-async function getRecentPosts(boardId: number): Promise<RecentPost[]> {
-  try {
-    const fiveDaysAgoW = new Date(Date.now() - FIVE_DAYS_MS);
-    // 공지사항 (최대 2개)
-    const notices = await prisma.post.findMany({
-      where: { boardId, isNotice: true },
-      orderBy: { createdAt: "desc" },
-      take: 2,
-      select: { id: true, subject: true, createdAt: true, updatedAt: true, isNotice: true, isSecret: true, totalComment: true, authorName: true, depth: true,
-        comments: { where: { createdAt: { gte: fiveDaysAgoW } }, select: { id: true }, take: 1 },
-      },
-    });
-    // 일반글: headnum/arrangenum 정렬로 스레드(원글-답글) 순서 유지
-    const posts = await prisma.post.findMany({
-      where: { boardId, isNotice: false },
-      orderBy: [{ headnum: "asc" }, { arrangenum: "asc" }],
-      take: 5 - notices.length,
-      select: { id: true, subject: true, createdAt: true, updatedAt: true, isNotice: true, isSecret: true, totalComment: true, authorName: true, depth: true,
-        comments: { where: { createdAt: { gte: fiveDaysAgoW } }, select: { id: true }, take: 1 },
-      },
-    });
-    return [...notices, ...posts].map((p) => ({
-      ...p,
-      hasRecentComment: p.comments.length > 0,
-    }));
-  } catch {
-    return [];
-  }
+// H16: 보드별 공지 2 + 일반글 3~5 를 병렬 조회.
+// 기존: 보드마다 순차 await × 2쿼리 = N × 2 (예: 11보드 → 22쿼리, 순차 latency)
+// 현재: Promise.all 로 (전체 보드 × 2) 쿼리를 전부 병렬 발행 → 네트워크 지연은 1회분만 노출
+// (일반글 정렬이 headnum/arrangenum 이라 단일 findMany 로 묶기 어려워 병렬화만 적용)
+async function getRecentPostsBatch(
+  boardIds: number[]
+): Promise<Map<number, RecentPost[]>> {
+  const fiveDaysAgoW = new Date(Date.now() - FIVE_DAYS_MS);
+  const postSelect = {
+    id: true,
+    subject: true,
+    createdAt: true,
+    updatedAt: true,
+    isNotice: true,
+    isSecret: true,
+    totalComment: true,
+    authorName: true,
+    depth: true,
+    comments: { where: { createdAt: { gte: fiveDaysAgoW } }, select: { id: true }, take: 1 },
+  } as const;
+
+  // 모든 보드의 공지 + 일반글 쿼리를 한 번에 병렬 실행
+  const results = await Promise.all(
+    boardIds.map(async (boardId) => {
+      try {
+        const [notices, posts] = await Promise.all([
+          prisma.post.findMany({
+            where: { boardId, isNotice: true },
+            orderBy: { createdAt: "desc" },
+            take: 2,
+            select: postSelect,
+          }),
+          prisma.post.findMany({
+            where: { boardId, isNotice: false },
+            orderBy: [{ headnum: "asc" }, { arrangenum: "asc" }],
+            take: 5,
+            select: postSelect,
+          }),
+        ]);
+        // 공지가 2개 미만이면 일반글을 더 채워 총 5개 유지 (기존 take: 5 - notices.length 동작과 동일)
+        const combined = [
+          ...notices,
+          ...posts.slice(0, 5 - notices.length),
+        ].map((p) => ({
+          ...p,
+          hasRecentComment: p.comments.length > 0,
+        }));
+        return [boardId, combined] as const;
+      } catch {
+        return [boardId, [] as RecentPost[]] as const;
+      }
+    })
+  );
+
+  return new Map(results);
 }
 
 async function getLatestNotice(): Promise<NoticeDetail | null> {
@@ -269,23 +296,28 @@ export default async function HomePage() {
     return b && (!b.requireLogin || isLoggedIn);
   });
 
-  // 모든 게시판 최근 글 + 최신 공지사항 상세 + 새글/댓글 위젯 동시 조회
-  const [boardPostsArr, latestNotice, recentNewPosts, recentComments] = await Promise.all([
-    Promise.all(
-      visibleSlugs.map(async (slug) => {
-        const b = boardMap.get(slug)!;
-        return {
-          slug,
-          title: TITLE_OVERRIDE[slug] || b.title,
-          icon: BOARD_ICONS[slug] || "📋",
-          posts: await getRecentPosts(b.id),
-        };
-      })
-    ),
+  // H16: 보드별 최근글 조회를 배치(병렬)로 묶어 N+1 완화.
+  //   - 이전: 11 보드 × 2 쿼리 = 22쿼리가 중첩 await 체인으로 순차 발행
+  //   - 현재: 전체 보드의 공지/일반글 쿼리를 Promise.all 로 동시 발행
+  //     (쿼리 개수는 22로 동일하지만 네트워크 latency 는 병렬로 겹쳐 실질 1회분만 노출)
+  //   - 정렬(headnum/arrangenum) 때문에 단일 findMany 통합은 불가.
+  const visibleBoardIds = visibleSlugs.map((slug) => boardMap.get(slug)!.id);
+  const [postsByBoard, latestNotice, recentNewPosts, recentComments] = await Promise.all([
+    getRecentPostsBatch(visibleBoardIds),
     getLatestNotice(),
     getRecentNewPosts(),
     getRecentComments(),
   ]);
+
+  const boardPostsArr = visibleSlugs.map((slug) => {
+    const b = boardMap.get(slug)!;
+    return {
+      slug,
+      title: TITLE_OVERRIDE[slug] || b.title,
+      icon: BOARD_ICONS[slug] || "📋",
+      posts: postsByBoard.get(b.id) ?? [],
+    };
+  });
 
   // slug → board data
   const boardDataMap = new Map(boardPostsArr.map((b) => [b.slug, b]));

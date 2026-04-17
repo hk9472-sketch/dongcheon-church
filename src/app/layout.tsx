@@ -6,15 +6,46 @@ import VisitorTracker from "@/components/VisitorTracker";
 import prisma from "@/lib/db";
 import React from "react";
 
+const SITE_URL = process.env.SITE_URL || "http://localhost:3000";
+
 export const metadata: Metadata = {
-  title: "동천교회",
-  description: "동천교회 홈페이지",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "동천교회",
+    template: "%s | 동천교회",
+  },
+  description: "예수 그리스도의 복음을 전하는 동천교회입니다.",
   icons: {
     icon: [
       { url: "/icon-32.png", sizes: "32x32", type: "image/png" },
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
     ],
     apple: "/apple-touch-icon.png",
+  },
+  openGraph: {
+    type: "website",
+    locale: "ko_KR",
+    siteName: "동천교회",
+    title: "동천교회",
+    description: "예수 그리스도의 복음을 전하는 동천교회입니다.",
+    images: [
+      {
+        url: "/icon-256.png",
+        width: 256,
+        height: 256,
+        alt: "동천교회",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary",
+    title: "동천교회",
+    description: "예수 그리스도의 복음을 전하는 동천교회입니다.",
+    images: ["/icon-256.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 };
 

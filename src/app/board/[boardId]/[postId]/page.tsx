@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
@@ -493,7 +494,7 @@ export default async function PostDetailPage({ params }: PageProps) {
   );
 }
 
-export async function generateMetadata({ params }: PageProps) {
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { boardId, postId } = await params;
   const postNo = parseInt(postId, 10);
   if (Number.isNaN(postNo)) {
@@ -502,12 +503,68 @@ export async function generateMetadata({ params }: PageProps) {
   // boardId 필터 적용: 다른 게시판 글 제목 노출 방지
   const post = await prisma.post.findFirst({
     where: { id: postNo, board: { slug: boardId } },
-    select: { subject: true, board: { select: { title: true } } },
+    select: {
+      subject: true,
+      content: true,
+      isSecret: true,
+      createdAt: true,
+      authorName: true,
+      board: {
+        select: {
+          title: true,
+          requireLogin: true,
+          grantView: true,
+          grantList: true,
+        },
+      },
+    },
   });
   if (!post) {
     return { title: "동천교회" };
   }
-  return {
-    title: `${post.subject} - ${post.board?.title || "게시판"} - 동천교회`,
+
+  // 비밀글: 제목/본문 노출 금지 + 색인 차단
+  if (post.isSecret) {
+    return {
+      title: "비공개 글",
+      robots: { index: false, follow: false },
+    };
+  }
+
+  // 로그인 필수 또는 회원 전용 열람 게시판의 글: 색인 차단
+  const isPrivateBoard =
+    post.board?.requireLogin === true ||
+    (post.board?.grantView ?? 99) < 99 ||
+    (post.board?.grantList ?? 99) < 99;
+
+  // 본문에서 HTML 태그 제거 → 160자 이내 요약
+  const plainContent = post.content
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const description =
+    plainContent.length > 160 ? plainContent.slice(0, 160) + "..." : plainContent;
+
+  const baseMetadata: Metadata = {
+    title: `${post.subject} - ${post.board?.title || "게시판"}`,
+    description,
+    openGraph: {
+      type: "article",
+      title: post.subject,
+      description,
+      authors: [post.authorName],
+      publishedTime: post.createdAt.toISOString(),
+    },
+    twitter: {
+      card: "summary",
+      title: post.subject,
+      description,
+    },
   };
+
+  if (isPrivateBoard) {
+    baseMetadata.robots = { index: false, follow: false };
+  }
+
+  return baseMetadata;
 }
