@@ -1,9 +1,13 @@
 import { createHmac, timingSafeEqual } from "crypto";
 
-// CAPTCHA_SECRET은 필수 환경변수. 미설정 시 모듈 로드 단계에서 즉시 실패시킴.
-const CAPTCHA_SECRET = process.env.CAPTCHA_SECRET;
-if (!CAPTCHA_SECRET) {
-  throw new Error("CAPTCHA_SECRET environment variable is required");
+// CAPTCHA_SECRET 은 필수 환경변수지만, 빌드 단계에서 import 만 해도 throw 되면
+// Next.js 의 page data collection 이 실패하므로 실제 호출 시점에 lazy 검증한다.
+function getSecret(): string {
+  const secret = process.env.CAPTCHA_SECRET;
+  if (!secret) {
+    throw new Error("CAPTCHA_SECRET environment variable is required");
+  }
+  return secret;
 }
 
 const CAPTCHA_EXPIRE_MS = 5 * 60 * 1000; // 5분
@@ -15,7 +19,7 @@ function randInt(min: number, max: number): number {
 }
 
 function computeHmac(answer: string, timestamp: string): string {
-  return createHmac("sha256", CAPTCHA_SECRET as string)
+  return createHmac("sha256", getSecret())
     .update(`${answer}:${timestamp}`)
     .digest("hex");
 }

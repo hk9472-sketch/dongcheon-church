@@ -165,6 +165,16 @@ export async function PUT(request: NextRequest) {
       },
     });
 
+    // 7) 비밀번호가 변경된 경우 현재 세션을 제외한 모든 기존 세션 무효화
+    if (updateData.password) {
+      await prisma.session.deleteMany({
+        where: {
+          userId: session.userId,
+          NOT: { sessionToken },
+        },
+      });
+    }
+
     return NextResponse.json({
       message: "프로필이 성공적으로 수정되었습니다.",
       user: updatedUser,

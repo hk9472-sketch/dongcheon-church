@@ -4,6 +4,7 @@ import path from "path";
 import prisma from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth";
 import { verifyCaptcha } from "@/lib/captcha";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 
 // ───── 파일 업로드 검증 상수 ─────
 const ALLOWED_EXTENSIONS = new Set([
@@ -51,6 +52,16 @@ function validateUploadFile(file: File): string | null {
 // POST /api/board/write (FormData)
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit: IP당 10회/10분 (CAPTCHA 통과 후에도 스팸 도배 방지)
+    const rlIp = getClientIp(request);
+    const rl = checkRateLimit(`write:${rlIp}`, 10, 10 * 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { message: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요." },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfter || 60) } }
+      );
+    }
+
     const formData = await request.formData();
 
     const boardSlug = formData.get("boardSlug") as string;

@@ -22,7 +22,8 @@
 9. [SSL 인증서 적용 (도메인 연결 후)](#9-ssl-인증서-적용-도메인-연결-후)
 10. [첨부파일(data/) 이관](#10-첨부파일data-이관)
 11. [배포 후 체크리스트](#11-배포-후-체크리스트)
-12. [운영 명령어 모음](#12-운영-명령어-모음)
+12. [백업 자동화](#12-백업-자동화)
+13. [운영 명령어 모음](#13-운영-명령어-모음)
 
 ---
 
@@ -328,16 +329,57 @@ server {
     listen 80;
     server_name 35.212.174.200 pkistdc.net www.pkistdc.net;
 
-    client_max_body_size 10M;
+    # 첨부파일 업로드 한도 (15MB)
+    client_max_body_size 15M;
 
-    # 기존 ZeroBoard 이미지 직접 서빙 (레거시 URL 호환)
+    # ================================================================
+    # 제로보드(ZeroBoard) 레거시 URL 301 리다이렉트
+    # Nginx 레벨에서 처리하여 검색엔진 크롤링에 즉시 대응
+    # (next.config.ts 의 redirects() 와 중복되지만 Nginx 가 먼저 처리 → Next.js 까지 가지 않음)
+    # ================================================================
+
+    # zboard.php → /board/{id}  (목록 페이지)
+    location = /bbs/zboard.php {
+        if ($arg_id) {
+            return 301 /board/$arg_id?$args;
+        }
+        return 301 /;
+    }
+
+    # view.php → /board/{id}/{no}  (게시글 상세)
+    location = /bbs/view.php {
+        if ($arg_id) {
+            return 301 /board/$arg_id/$arg_no;
+        }
+        return 301 /;
+    }
+
+    # write.php → /board/{id}/write  (글쓰기/수정/답글)
+    location = /bbs/write.php {
+        if ($arg_id) {
+            return 301 /board/$arg_id/write?mode=$arg_mode&no=$arg_no;
+        }
+        return 301 /;
+    }
+
+    # login.php → /auth/login  (로그인 페이지)
+    location = /bbs/login.php {
+        return 301 /auth/login;
+    }
+
+    # admin.php → /admin  (관리자 페이지)
+    location = /bbs/admin.php {
+        return 301 /admin;
+    }
+
+    # 기존 ZeroBoard 이미지 / 첨부파일 직접 서빙 (레거시 URL 호환)
     location /bbs/data/ {
         alias /home/hk9472/dongcheon-church/data/;
         expires 30d;
         add_header Cache-Control "public";
     }
 
-    # Next.js 앱
+    # Next.js 앱 (나머지 모든 경로)
     location / {
         proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
@@ -480,7 +522,100 @@ ls data/
 
 ---
 
-## 12. 운영 명령어 모음
+## 12. 백업 자동화
+
+서비스 운영 중 DB / 업로드 파일을 정기적으로 백업해 두어야 장애·유실 시 복구가 가능합니다.
+아래 절차는 VM 내부에서 cron 으로 `mysqldump` 및 `tar` 를 돌리고, (권장) 외부 스토리지(GCS/다른 서버)로 오프사이트 복사까지 수행하는 구성입니다.
+
+### 12-1. 백업 디렉토리 생성
+
+```bash
+mkdir -p ~/backups/db ~/backups/data
+```
+
+### 12-2. 백업 스크립트 작성 (`~/backup.sh`)
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+DATE=$(date +%F)
+DB_USER="dongcheon"
+DB_NAME="dongcheon"
+# .env 에서 비밀번호 읽기
+source ~/pkistdc/.env
+DB_PASS=$(echo "$DATABASE_URL" | sed -E 's|mysql://[^:]+:([^@]+)@.*|\1|')
+
+# DB 백업 (gzip 압축)
+MYSQL_PWD="$DB_PASS" mysqldump --no-tablespaces -u "$DB_USER" "$DB_NAME" \
+  | gzip > ~/backups/db/${DB_NAME}_${DATE}.sql.gz
+
+# 업로드 파일(data/) 백업 (주간 월요일만)
+if [ "$(date +%u)" = "1" ]; then
+  tar czf ~/backups/data/data_${DATE}.tar.gz -C ~/pkistdc data
+fi
+
+# 14일 이상 된 DB 백업 삭제
+find ~/backups/db -name '*.sql.gz' -mtime +14 -delete
+# 90일 이상 된 데이터 백업 삭제
+find ~/backups/data -name '*.tar.gz' -mtime +90 -delete
+```
+
+실행 권한 부여 및 테스트:
+
+```bash
+chmod +x ~/backup.sh
+# 테스트 실행
+~/backup.sh && ls -lh ~/backups/db
+```
+
+> 📌 `~/pkistdc` 경로는 실제 소스 코드 디렉토리(예: `~/dongcheon-church`)에 맞게 수정하세요.
+
+### 12-3. Crontab 등록 (매일 03:00 KST = UTC 18:00 전날)
+
+```bash
+crontab -e
+# 아래 한 줄 추가:
+0 3 * * * /home/hk9472/backup.sh >> /home/hk9472/backups/cron.log 2>&1
+```
+
+> VM 의 시스템 시간대를 KST 로 맞춰두었다면 위 그대로 03:00 에 실행됩니다.
+> 기본 UTC 인 경우 cron 도 UTC 기준이므로 `0 18 * * *` 로 (전날 18:00 UTC = 한국 03:00) 조정하세요.
+
+### 12-4. (권장) 주간 Offsite 복사
+
+백업 파일이 **동일 VM 디스크에만** 존재하면 VM 장애 시 복구가 불가능합니다. 반드시 외부로 복사하세요.
+
+- **GCS 버킷** 으로 복사 (추천):
+  ```bash
+  # Google Cloud SDK 설치 및 서비스 계정 인증 필요
+  gsutil -m rsync -r ~/backups gs://pkistdc-backups/
+  ```
+- 또는 **다른 VM/서버** 로 rsync:
+  ```bash
+  rsync -az --delete ~/backups/ user@backup-host:/srv/pkistdc-backups/
+  ```
+- Crontab 에 주 1회 추가 (매주 일요일 04:00):
+  ```
+  0 4 * * 0 gsutil -m rsync -r /home/hk9472/backups gs://pkistdc-backups/ >> /home/hk9472/backups/offsite.log 2>&1
+  ```
+
+### 12-5. 복원 테스트 절차 (분기별 1회 권장)
+
+백업은 **실제 복원이 되어야** 의미가 있습니다. 분기별로 테스트 환경에 복원해 보세요.
+
+- DB 복원 (별도 복원용 DB 로):
+  ```bash
+  gunzip -c ~/backups/db/dongcheon_<날짜>.sql.gz | mysql -u <복원용DB> -p <복원용DB명>
+  ```
+- `data/` 복원:
+  ```bash
+  tar xzf ~/backups/data/data_<날짜>.tar.gz -C /tmp/restore-test
+  ```
+- 복원 결과 확인: 최신 게시글/첨부/사용자 데이터가 정상으로 보이는지 확인
+
+---
+
+## 13. 운영 명령어 모음
 
 ### 앱 관리 (PM2)
 
@@ -647,4 +782,4 @@ sudo mysql -u root -p -e "DROP DATABASE dongcheon; DROP USER 'dongcheon'@'localh
 
 ---
 
-*최종 수정: 2026-03-05*
+*최종 수정: 2026-04-17 (H14 백업 자동화, H15 레거시 `/bbs/` 리다이렉트 통합)*

@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import prisma from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth";
 import { sanitizeHtml } from "@/lib/sanitize";
 import CommentSection from "@/components/board/CommentSection";
 import PostActions from "@/components/board/PostActions";
+import SecretPostUnlock from "@/components/board/SecretPostUnlock";
 
 
 // ============================================================
@@ -55,20 +57,45 @@ export default async function PostDetailPage({ params }: PageProps) {
     );
   }
 
+  // 쿠키 스토어 (비밀글 unlock 확인 + 조회수 중복 방지에 사용)
+  const cookieStore = await cookies();
+  const hasUnlockCookie = !!cookieStore.get(`dc_post_unlock_${post.id}`)?.value;
+
   // 비밀글 접근 권한 체크
   // - 관리자(isAdmin <= board.grantViewSecret 기준) 또는 작성자 본인만 열람 가능
+  // - 비회원이 작성한 비밀글(authorId=null)은 비밀번호 입력으로 unlock 쿠키가 있으면 허용
   const isSecretBlocked =
     post.isSecret &&
     !((currentUser?.isAdmin ?? 3) <= board.grantViewSecret) &&
-    !(currentUser?.id !== undefined && currentUser.id === post.authorId);
+    !(currentUser?.id !== undefined && currentUser.id === post.authorId) &&
+    !(post.authorId === null && hasUnlockCookie);
 
-  // 조회수 증가 (비밀글로 차단되지 않을 때만)
+  // 조회수 증가 (비밀글로 차단되지 않을 때만, 쿠키로 중복 방지 - 24시간)
   // updateMany 사용하여 @updatedAt 자동 갱신 회피 (수정 표시 방지)
+  let hitIncremented = false;
   if (!isSecretBlocked) {
-    await prisma.post.updateMany({
-      where: { id: post.id },
-      data: { hit: { increment: 1 } },
-    });
+    const viewCookieName = `dc_view_${post.id}`;
+    const alreadyViewed = !!cookieStore.get(viewCookieName)?.value;
+    if (!alreadyViewed) {
+      await prisma.post.updateMany({
+        where: { id: post.id },
+        data: { hit: { increment: 1 } },
+      });
+      hitIncremented = true;
+      // Next.js 15+ Server Component 에서도 cookies().set() 가능하지만,
+      // 특정 렌더 단계에서는 실패할 수 있어 try/catch 로 방어
+      try {
+        cookieStore.set(viewCookieName, "1", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          maxAge: 24 * 60 * 60, // 24시간
+          path: "/",
+        });
+      } catch {
+        // Server Component 쓰기 제약으로 실패 시: 중복 방지 없이 증가만 유지
+      }
+    }
   }
 
   // 수정/삭제 권한 확인
@@ -121,7 +148,11 @@ export default async function PostDetailPage({ params }: PageProps) {
             <p className="text-sm text-gray-500">
               이 글은 작성자와 관리자만 열람할 수 있습니다.
             </p>
-            {!currentUser && (
+            {/* 비회원(authorId=null)이 쓴 비밀글: 비밀번호 입력으로 unlock 가능 */}
+            {post.authorId === null && post.password && (
+              <SecretPostUnlock postId={post.id} />
+            )}
+            {!currentUser && post.authorId !== null && (
               <Link
                 href={`/auth/login?redirect=/board/${boardId}/${postId}`}
                 className="mt-4 inline-block px-5 py-2 text-sm bg-blue-700 text-white rounded hover:bg-blue-800"
@@ -249,7 +280,7 @@ export default async function PostDetailPage({ params }: PageProps) {
                 수정: {formatDate(post.lastEditedAt)} ({post.lastEditorName || post.lastEditorUserId})
               </span>
             )}
-            <span>조회 {post.hit + 1}</span>
+            <span>조회 {post.hit + (hitIncremented ? 1 : 0)}</span>
             {post.vote > 0 && <span>추천 {post.vote}</span>}
             {post.email && (
               <a href={`mailto:${post.email}`} className="text-blue-600 hover:underline">
@@ -464,9 +495,19 @@ export default async function PostDetailPage({ params }: PageProps) {
 
 export async function generateMetadata({ params }: PageProps) {
   const { boardId, postId } = await params;
-  const board = await prisma.board.findUnique({ where: { slug: boardId } });
-  const post = await prisma.post.findUnique({ where: { id: parseInt(postId, 10) } });
+  const postNo = parseInt(postId, 10);
+  if (Number.isNaN(postNo)) {
+    return { title: "동천교회" };
+  }
+  // boardId 필터 적용: 다른 게시판 글 제목 노출 방지
+  const post = await prisma.post.findFirst({
+    where: { id: postNo, board: { slug: boardId } },
+    select: { subject: true, board: { select: { title: true } } },
+  });
+  if (!post) {
+    return { title: "동천교회" };
+  }
   return {
-    title: post ? `${post.subject} - ${board?.title || "게시판"} - 동천교회` : "동천교회",
+    title: `${post.subject} - ${post.board?.title || "게시판"} - 동천교회`,
   };
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 
 // 한국시간 현재 시각
 function nowKST(): Date {
@@ -9,6 +10,16 @@ function nowKST(): Date {
 // POST /api/live/attendance - 실시간 예배 참여 등록
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit: IP당 3회/분 (스팸 도배 방지)
+    const rlIp = getClientIp(request);
+    const rl = checkRateLimit(`live-att:${rlIp}`, 3, 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { message: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfter || 60) } }
+      );
+    }
+
     const body = await request.json();
     const names: string[] = body.names;
 

@@ -159,12 +159,29 @@ export default async function Footer() {
           </div>
         </div>
 
-        {/* 하단: 방문자 + 저작권 */}
+        {/* 하단: 방문자 + 정책 링크 + 저작권 */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-2 pt-2 border-t border-white/20">
           <VisitorCounter />
-          <p className="text-blue-200/60 text-xs">
-            &copy; {new Date().getFullYear()} 동천교회. All rights reserved.
-          </p>
+          <div className="flex flex-col md:flex-row items-center gap-2 md:gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <Link
+                href="/privacy"
+                className="text-white/90 hover:text-white font-semibold hover:underline"
+              >
+                개인정보처리방침
+              </Link>
+              <span className="text-white/40 select-none">|</span>
+              <Link
+                href="/terms"
+                className="text-blue-100/90 hover:text-white hover:underline"
+              >
+                이용약관
+              </Link>
+            </div>
+            <p className="text-blue-200/60">
+              &copy; {new Date().getFullYear()} 동천교회. All rights reserved.
+            </p>
+          </div>
         </div>
       </div>
     </footer>

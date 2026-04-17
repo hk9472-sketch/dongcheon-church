@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 
 // ============================================================
 // 봇/크롤러 User-Agent 필터
@@ -112,6 +113,16 @@ export async function GET() {
 // ============================================================
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit: IP당 12회/분 (5초당 1회 이하)
+    const rlIp = getClientIp(request);
+    const rl = checkRateLimit(`visitor:${rlIp}`, 12, 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "요청이 너무 많습니다." },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfter || 60) } }
+      );
+    }
+
     const body = await request.json().catch(() => ({}));
     const { path, referer, userAgent, userId } = body as {
       path?: string;

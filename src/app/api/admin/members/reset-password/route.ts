@@ -60,6 +60,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // 보안: 비밀번호가 변경된 대상 사용자들의 모든 기존 세션 무효화
+    // (현재 관리자 세션은 userId가 다르므로 자연스럽게 영향 없음)
+    await prisma.session.deleteMany({
+      where: { userId: { in: userIds } },
+    });
+
     return NextResponse.json({
       success: true,
       count: result.count,
