@@ -554,7 +554,7 @@ model CouncilAttendance {
 
   note String? @db.VarChar(500)
 
-  @@unique([groupId, date, memberName])
+  // @@unique([groupId, date, memberName])  // TODO: 기존 중복 데이터 정리 후 활성화 (2026-04-18 배포 시 보류)
   @@index([groupId, date])
   @@index([date])
   @@map("council_attendances")
