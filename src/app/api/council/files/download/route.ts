@@ -21,9 +21,25 @@ export async function GET(request: NextRequest) {
   const file = await prisma.councilFile.findUnique({ where: { id: Number(idParam) } });
   if (!file) return NextResponse.json({ message: "파일을 찾을 수 없습니다." }, { status: 404 });
 
+  // 경로 순회(path traversal) 방지
+  if (
+    file.fileName.includes("..") ||
+    path.isAbsolute(file.fileName) ||
+    /^[a-zA-Z]:[\\/]/.test(file.fileName) ||
+    file.fileName.startsWith("\\\\")
+  ) {
+    return NextResponse.json({ message: "잘못된 경로" }, { status: 400 });
+  }
+
+  const filePath = path.join(process.cwd(), file.fileName);
+  const resolved = path.resolve(filePath);
+  const allowedRoot = path.resolve(process.cwd(), "data");
+  if (!resolved.startsWith(allowedRoot + path.sep) && resolved !== allowedRoot) {
+    return NextResponse.json({ message: "잘못된 경로" }, { status: 400 });
+  }
+
   try {
-    const filePath = path.join(process.cwd(), file.fileName);
-    const buffer = await readFile(filePath);
+    const buffer = await readFile(resolved);
     const displayName = file.origName || path.basename(file.fileName);
 
     return new NextResponse(buffer, {

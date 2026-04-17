@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
   const where: Record<string, unknown> = {
     category,
-    refDate: new Date(dateStr + "T00:00:00+09:00"),
+    refDate: new Date(dateStr + "T00:00:00Z"),
   };
   if (groupId) where.refGroupId = Number(groupId);
 
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "category, date 필수" }, { status: 400 });
   }
 
-  const refDate = new Date(dateStr + "T00:00:00+09:00");
+  const refDate = new Date(dateStr + "T00:00:00Z");
   const refGroupId = groupIdStr ? Number(groupIdStr) : null;
 
   // 파일 추출 (files 키로 여러 파일)

@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
-
-/**
- * 회계 접근 권한 확인
- */
-async function checkAccess(userId: number): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true, accountAccess: true },
-  });
-  if (!user) return false;
-  return user.isAdmin <= 2 || user.accountAccess;
-}
+import { checkAccAccess } from "@/lib/accountAuth";
 
 /**
  * 날짜 문자열(YYYY-MM-DD)을 UTC 자정 Date로 변환
@@ -27,12 +15,9 @@ function toDateOnly(dateStr: string): Date {
  * 마감 목록 조회
  */
 export async function GET(request: NextRequest) {
-  const sessionUser = await getCurrentUser();
-  if (!sessionUser) {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
-  }
-  if (!(await checkAccess(sessionUser.id))) {
-    return NextResponse.json({ error: "접근 권한이 없습니다." }, { status: 403 });
+  const access = await checkAccAccess("ledger");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
   const { searchParams } = new URL(request.url);
@@ -62,12 +47,9 @@ export async function GET(request: NextRequest) {
  * 월 마감 실행
  */
 export async function POST(request: NextRequest) {
-  const sessionUser = await getCurrentUser();
-  if (!sessionUser) {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
-  }
-  if (!(await checkAccess(sessionUser.id))) {
-    return NextResponse.json({ error: "접근 권한이 없습니다." }, { status: 403 });
+  const access = await checkAccAccess("ledger");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
   const body = await request.json();
@@ -150,6 +132,7 @@ export async function POST(request: NextRequest) {
   }
 
   const now = new Date();
+  const closedByName = access.user?.name ?? String(access.userId ?? "");
 
   // 트랜잭션: 마감 레코드 생성/갱신 + 전표 마감 플래그 설정
   const closing = await prisma.$transaction(async (tx) => {
@@ -163,14 +146,14 @@ export async function POST(request: NextRequest) {
         totalExpense,
         carryOver,
         closedAt: now,
-        closedBy: sessionUser.name,
+        closedBy: closedByName,
       },
       update: {
         totalIncome,
         totalExpense,
         carryOver,
         closedAt: now,
-        closedBy: sessionUser.name,
+        closedBy: closedByName,
       },
     });
 
@@ -195,11 +178,11 @@ export async function POST(request: NextRequest) {
  * 월 마감 취소 (관리자 전용)
  */
 export async function DELETE(request: NextRequest) {
-  const sessionUser = await getCurrentUser();
-  if (!sessionUser) {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  const access = await checkAccAccess("ledger");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
-  if (sessionUser.isAdmin > 2) {
+  if (!access.isAdmin) {
     return NextResponse.json({ error: "관리자만 가능합니다." }, { status: 403 });
   }
 

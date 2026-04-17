@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth";
+import { stripAllHtml } from "@/lib/sanitize";
 
 /** 세션 쿠키에서 사용자 정보를 가져오는 헬퍼 */
 async function getSessionUser(request: NextRequest) {
@@ -33,14 +34,27 @@ export async function POST(request: NextRequest) {
     // 세션 확인
     const sessionUser = await getSessionUser(request);
 
+    // 게시판 권한 체크 (grantComment)
+    const board = await prisma.board.findUnique({ where: { id: post.boardId } });
+    if (!board) {
+      return NextResponse.json({ message: "게시판이 존재하지 않습니다." }, { status: 404 });
+    }
+
+    const effectiveUserLevel = sessionUser ? sessionUser.level : 99;
+    const isAdminUser = !!sessionUser && sessionUser.isAdmin <= 2;
+    // grantComment === 99면 비회원도 허용. 그 외에는 userLevel <= grantComment 필요.
+    if (!isAdminUser && effectiveUserLevel > board.grantComment) {
+      return NextResponse.json({ message: "댓글 작성 권한이 없습니다." }, { status: 403 });
+    }
+
     let authorId: number | null = null;
     let authorName = name || "익명";
     let hashedPw: string | null = null;
 
     if (sessionUser) {
-      // 로그인 사용자: authorId 저장, 이름은 회원명 사용
+      // 로그인 사용자: authorId 저장, 이름은 회원명으로 강제 (사칭 방지)
       authorId = sessionUser.id;
-      authorName = name || sessionUser.name;
+      authorName = sessionUser.name;
     } else {
       // 비로그인: 이름과 비밀번호 필수
       if (!name?.trim() || !password) {
@@ -49,13 +63,19 @@ export async function POST(request: NextRequest) {
       hashedPw = await hashPassword(password);
     }
 
+    // 댓글은 리치 텍스트가 필요 없으므로 모든 HTML 태그 제거
+    const safeContent = stripAllHtml(content).trim();
+    if (!safeContent) {
+      return NextResponse.json({ message: "내용을 입력하세요." }, { status: 400 });
+    }
+
     const comment = await prisma.comment.create({
       data: {
         postId,
         authorId,
         authorName,
         password: hashedPw,
-        content: content.trim(),
+        content: safeContent,
         isSecret: !!isSecret,
         authorIp: request.headers.get("x-forwarded-for")?.split(",")[0] || null,
       },
@@ -131,9 +151,14 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    const safeContent = stripAllHtml(content).trim();
+    if (!safeContent) {
+      return NextResponse.json({ message: "내용을 입력하세요." }, { status: 400 });
+    }
+
     await prisma.comment.update({
       where: { id: commentId },
-      data: { content: content.trim() },
+      data: { content: safeContent },
     });
 
     return NextResponse.json({ success: true });

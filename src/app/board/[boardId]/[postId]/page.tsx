@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import prisma from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth";
+import { sanitizeHtml } from "@/lib/sanitize";
 import CommentSection from "@/components/board/CommentSection";
 import PostActions from "@/components/board/PostActions";
 
@@ -181,10 +182,11 @@ export default async function PostDetailPage({ params }: PageProps) {
   }
   const posts = replyList;
 
-  // 본문 렌더링 (HTML 허용 여부에 따라)
-  const contentHtml = post.useHtml
+  // 본문 렌더링 (HTML 허용 여부에 따라) + XSS 방지를 위한 sanitize
+  const rawContentHtml = post.useHtml
     ? post.content
     : post.content.replace(/\n/g, "<br />");
+  const contentHtml = sanitizeHtml(rawContentHtml);
 
   // 갤러리 유형: 첨부파일 중 이미지만 추출
   const isGallery = board.boardType === "GALLERY";

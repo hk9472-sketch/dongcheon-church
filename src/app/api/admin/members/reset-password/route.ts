@@ -41,9 +41,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!newPassword || newPassword.length < 4) {
+    if (!newPassword || newPassword.length < 8) {
       return NextResponse.json(
-        { error: "비밀번호는 4자 이상이어야 합니다." },
+        { error: "비밀번호는 8자 이상이어야 합니다." },
         { status: 400 }
       );
     }

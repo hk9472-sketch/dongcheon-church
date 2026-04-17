@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import path from "path";
 import fs from "fs";
 
@@ -84,8 +84,17 @@ function uploadFileViaCurl(
   ftp: { host: string; port: string; user: string; password: string; remotePath: string }
 ) {
   const remoteUrl = `ftp://${ftp.host}:${ftp.port}${ftp.remotePath}/${remoteFileName}`;
-  const cmd = `curl -T "${localPath}" "${remoteUrl}" --user "${ftp.user}:${ftp.password}" --ftp-create-dirs --connect-timeout 30 --max-time 600 -s -S`;
-  execSync(cmd, { maxBuffer: 10 * 1024 * 1024 });
+  // execFile로 argv 배열 직접 전달 → 쉘 해석 없음, 주입 불가
+  const args = [
+    "-T", localPath,
+    remoteUrl,
+    "--user", `${ftp.user}:${ftp.password}`,
+    "--ftp-create-dirs",
+    "--connect-timeout", "30",
+    "--max-time", "600",
+    "-s", "-S",
+  ];
+  execFileSync("curl", args, { maxBuffer: 10 * 1024 * 1024 });
 }
 
 function ensureTmpDir(): string {
@@ -210,8 +219,19 @@ export async function POST(request: NextRequest) {
       const dumpFilePath = path.join(tmpDir, dumpFileName);
 
       try {
-        const cmd = `mysqldump -h ${db.host} -P ${db.port} -u ${db.user} -p${db.password} ${db.database} --single-transaction --routines --triggers`;
-        const dump = execSync(cmd, { maxBuffer: 100 * 1024 * 1024 });
+        const dumpArgs = [
+          `-h${db.host}`,
+          `-P${db.port}`,
+          `-u${db.user}`,
+          db.database,
+          "--single-transaction",
+          "--routines",
+          "--triggers",
+        ];
+        const dump = execFileSync("mysqldump", dumpArgs, {
+          maxBuffer: 100 * 1024 * 1024,
+          env: { ...process.env, MYSQL_PWD: db.password },
+        });
         fs.writeFileSync(dumpFilePath, dump);
         filesToCleanup.push(dumpFilePath);
 

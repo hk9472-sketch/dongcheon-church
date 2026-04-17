@@ -12,7 +12,8 @@ async function requireCouncilAccess(request: NextRequest) {
 }
 
 function fmtDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  // @db.Date 필드는 UTC 자정으로 저장됨 → UTC 기준으로 날짜 키 추출
+  return d.toISOString().slice(0, 10);
 }
 
 // GET /api/council/overall-report?from=2026-01-01&to=2026-03-15&view=group|division|date
@@ -28,8 +29,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "from, to 파라미터가 필요합니다." }, { status: 400 });
   }
 
-  const startDate = new Date(from + "T00:00:00+09:00");
-  const endDate = new Date(to + "T23:59:59+09:00");
+  const startDate = new Date(from + "T00:00:00Z");
+  const endDate = new Date(to + "T23:59:59Z");
 
   // CouncilReportEntry에서 직접 집계
   const entries = await prisma.councilReportEntry.findMany({

@@ -26,11 +26,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: "첨부파일 없음" }, { status: 404 });
     }
 
+    // 경로 순회(path traversal) 방지 — 파일명에 .. 또는 절대경로 마커 차단
+    if (
+      fileName.includes("..") ||
+      path.isAbsolute(fileName) ||
+      /^[a-zA-Z]:[\\/]/.test(fileName) || // Windows 드라이브 지정자
+      fileName.startsWith("\\\\") // UNC 경로
+    ) {
+      return NextResponse.json({ message: "잘못된 경로" }, { status: 400 });
+    }
+
     // fileName은 DB에 "data/{boardId}/{...}/filename" 형식으로 저장된 프로젝트 루트 기준 상대 경로
     const filePath = path.join(process.cwd(), fileName);
+    const resolved = path.resolve(filePath);
+    const allowedRoot = path.resolve(process.cwd(), "data");
+    if (!resolved.startsWith(allowedRoot + path.sep) && resolved !== allowedRoot) {
+      return NextResponse.json({ message: "잘못된 경로" }, { status: 400 });
+    }
 
     try {
-      const fileBuffer = await readFile(filePath);
+      const fileBuffer = await readFile(resolved);
 
       // 다운로드 카운트 증가 (updateMany로 @updatedAt 자동 갱신 회피)
       await prisma.post.updateMany({

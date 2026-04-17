@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
-
-/**
- * 회계 접근 권한 확인
- */
-async function checkAccess(userId: number): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true, accountAccess: true },
-  });
-  if (!user) return false;
-  return user.isAdmin <= 2 || user.accountAccess;
-}
+import { checkAccAccess, hasMemberEdit } from "@/lib/accountAuth";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -21,10 +9,10 @@ type RouteParams = { params: Promise<{ id: string }> };
  * 연보 교인 상세 조회 (가족 그룹 + 최근 연보 내역)
  */
 export async function GET(_req: NextRequest, { params }: RouteParams) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
-  if (!(await checkAccess(user.id)))
-    return NextResponse.json({ error: "권한 없음" }, { status: 403 });
+  const access = await checkAccAccess("offering");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
+  }
 
   const { id } = await params;
   const memberId = parseInt(id, 10);
@@ -54,19 +42,32 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "교인을 찾을 수 없습니다" }, { status: 404 });
   }
 
-  return NextResponse.json(member);
+  // memberEdit 권한 없으면 성명/가족 정보 마스킹
+  const canSeeName = hasMemberEdit(access.user);
+  const result = canSeeName
+    ? member
+    : {
+        ...member,
+        name: "*",
+        groupName: null,
+        familyId: null,
+        family: null,
+        members: [],
+      };
+
+  return NextResponse.json(result);
 }
 
 /**
  * PUT /api/accounting/offering/members/[id]
- * 연보 교인 수정
+ * 연보 교인 수정 (memberEdit 권한 필요)
  * Body: { name?, groupName?, familyId?, isActive? }
  */
 export async function PUT(req: NextRequest, { params }: RouteParams) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
-  if (!(await checkAccess(user.id)))
-    return NextResponse.json({ error: "권한 없음" }, { status: 403 });
+  const access = await checkAccAccess("memberEdit");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
+  }
 
   const { id } = await params;
   const memberId = parseInt(id, 10);
@@ -119,13 +120,13 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
 /**
  * DELETE /api/accounting/offering/members/[id]
- * 연보 교인 삭제 (연보 내역이 없는 경우만)
+ * 연보 교인 삭제 (memberEdit 권한 필요, 연보 내역이 없는 경우만)
  */
 export async function DELETE(_req: NextRequest, { params }: RouteParams) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
-  if (!(await checkAccess(user.id)))
-    return NextResponse.json({ error: "권한 없음" }, { status: 403 });
+  const access = await checkAccAccess("memberEdit");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
+  }
 
   const { id } = await params;
   const memberId = parseInt(id, 10);

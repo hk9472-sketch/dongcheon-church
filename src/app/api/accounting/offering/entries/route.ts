@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
-
-/**
- * 회계 접근 권한 확인
- */
-async function checkAccess(userId: number): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true, accountAccess: true },
-  });
-  if (!user) return false;
-  return user.isAdmin <= 2 || user.accountAccess;
-}
+import { checkAccAccess, hasMemberEdit } from "@/lib/accountAuth";
 
 /**
  * 날짜 문자열(YYYY-MM-DD)을 UTC 자정 Date로 변환
@@ -34,10 +22,10 @@ function toNextDay(dateStr: string): Date {
  * Query: memberId, dateFrom, dateTo, offeringType
  */
 export async function GET(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
-  if (!(await checkAccess(user.id)))
-    return NextResponse.json({ error: "권한 없음" }, { status: 403 });
+  const access = await checkAccAccess("offering");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
+  }
 
   const { searchParams } = req.nextUrl;
   const memberId = searchParams.get("memberId");
@@ -71,7 +59,18 @@ export async function GET(req: NextRequest) {
     orderBy: { date: "desc" },
   });
 
-  return NextResponse.json(entries);
+  // memberEdit 권한 없으면 성명 마스킹
+  const canSeeName = hasMemberEdit(access.user);
+  const result = canSeeName
+    ? entries
+    : entries.map((e) => ({
+        ...e,
+        member: e.member
+          ? { id: e.member.id, name: "*", groupName: null }
+          : null,
+      }));
+
+  return NextResponse.json(result);
 }
 
 /**
@@ -80,10 +79,10 @@ export async function GET(req: NextRequest) {
  * Body: { entries: [{ date, memberId, offeringType, amount, description? }] }
  */
 export async function POST(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
-  if (!(await checkAccess(user.id)))
-    return NextResponse.json({ error: "권한 없음" }, { status: 403 });
+  const access = await checkAccAccess("offering");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
+  }
 
   const body = await req.json();
   const { entries, date: commonDate } = body;
@@ -137,7 +136,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const createdBy = user.name || String(user.id);
+  const createdBy = access.user?.name || String(access.userId ?? "");
 
   const created = await prisma.offeringEntry.createMany({
     data: entries.map(

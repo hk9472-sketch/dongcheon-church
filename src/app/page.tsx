@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import prisma from "@/lib/db";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 
 // 게시판별 아이콘 매핑 (기본값: 📋)
@@ -289,11 +290,13 @@ export default async function HomePage() {
   // slug → board data
   const boardDataMap = new Map(boardPostsArr.map((b) => [b.slug, b]));
 
-  // [TipTap 글자크기 반영] HTML 원본 렌더링 — 이관 글(useHtml=false)은 개행을 <br>로 변환
+  // [TipTap 글자크기 반영] HTML 원본 렌더링 — 이관 글(useHtml=false)은 개행을 <br>로 변환 + XSS sanitize
   const noticeContentHtml = latestNotice
-    ? latestNotice.useHtml
-      ? latestNotice.content
-      : latestNotice.content.replace(/\n/g, "<br>")
+    ? sanitizeHtml(
+        latestNotice.useHtml
+          ? latestNotice.content
+          : latestNotice.content.replace(/\n/g, "<br>")
+      )
     : "";
 
   return (

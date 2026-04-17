@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 interface HelpButtonProps {
   slug: string;
@@ -75,7 +76,7 @@ export default function HelpButton({ slug }: HelpButtonProps) {
               {content && (
                 <div
                   className="prose prose-sm max-w-none prose-img:rounded-lg prose-img:shadow-md prose-img:mx-auto prose-h2:text-blue-800 prose-h3:text-gray-700"
-                  dangerouslySetInnerHTML={{ __html: content.content }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(content.content) }}
                 />
               )}
             </div>

@@ -19,8 +19,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "deptId, from, to 필요" }, { status: 400 });
   }
 
-  const from = new Date(fromStr + "T00:00:00+09:00");
-  const to = new Date(toStr + "T23:59:59+09:00");
+  const from = new Date(fromStr + "T00:00:00Z");
+  const to = new Date(toStr + "T23:59:59Z");
 
   // 해당 부서의 구역 ID 목록
   const groups = await prisma.councilGroup.findMany({

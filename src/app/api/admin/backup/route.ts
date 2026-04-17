@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import archiver from "archiver";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import path from "path";
 import fs from "fs";
 import { PassThrough } from "stream";
+
+// 백업 시 제외할 파일(비밀 유출 방지)
+const EXCLUDED_FILES = new Set([
+  ".env",
+  ".env.local",
+  ".env.production",
+  ".env.development",
+  ".env.example",
+]);
 
 async function verifyAdmin(request: NextRequest) {
   const sessionToken = request.cookies.get("dc_session")?.value;
@@ -141,10 +150,11 @@ export async function GET(request: NextRequest) {
     const rootFiles = [
       "package.json", "package-lock.json", "tsconfig.json",
       "next.config.ts", "postcss.config.mjs", "eslint.config.mjs",
-      ".env", ".gitignore", ".dockerignore",
+      ".gitignore", ".dockerignore",
       "Dockerfile", "docker-compose.yml",
     ];
     for (const file of rootFiles) {
+      if (EXCLUDED_FILES.has(file)) continue; // 방어적 체크
       const fullPath = path.join(root, file);
       if (fs.existsSync(fullPath)) {
         archive.file(fullPath, { name: file });
@@ -219,9 +229,21 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      const tableList = safeTables.join(" ");
-      const cmd = `mysqldump -h ${db.host} -P ${db.port} -u ${db.user} -p${db.password} ${db.database} ${tableList} --single-transaction --routines --triggers`;
-      const dump = execSync(cmd, { maxBuffer: 100 * 1024 * 1024 });
+      const args = [
+        `-h${db.host}`,
+        `-P${db.port}`,
+        `-u${db.user}`,
+        db.database,
+        ...safeTables,
+        "--single-transaction",
+        "--routines",
+        "--triggers",
+      ];
+      // 비밀번호는 MYSQL_PWD 환경변수로 전달 (쉘 주입 방지)
+      const dump = execFileSync("mysqldump", args, {
+        maxBuffer: 100 * 1024 * 1024,
+        env: { ...process.env, MYSQL_PWD: db.password },
+      });
 
       return new Response(dump, {
         headers: {

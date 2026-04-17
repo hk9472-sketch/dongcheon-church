@@ -3,6 +3,10 @@
 > **작성일**: 2026-03-05
 > **대상**: GCE VM (Ubuntu) + MySQL 8 + Node.js 20 + PM2 + Nginx
 
+> ⚠️ **중요**: 이 문서의 모든 비밀번호(DB, SMTP, 앱 비밀번호 등)는 **예시값**입니다.
+> 실제 배포 시에는 반드시 강력한 비밀번호로 교체하고, `.env` 파일은 절대 저장소에 커밋하지 마세요.
+> 시크릿 생성: `openssl rand -hex 32` 또는 가급적 클라우드 Secret Manager 사용을 권장합니다.
+
 ---
 
 ## 목차
@@ -133,7 +137,7 @@ sudo mysql -u root -p
 
 ```sql
 CREATE DATABASE dongcheon CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'dongcheon'@'localhost' IDENTIFIED BY 'System1!!3610';
+CREATE USER 'dongcheon'@'localhost' IDENTIFIED BY '<your-strong-db-password>';
 GRANT ALL PRIVILEGES ON dongcheon.* TO 'dongcheon'@'localhost';
 FLUSH PRIVILEGES;
 EXIT;
@@ -231,7 +235,7 @@ nano .env
 
 ```env
 # ---- 데이터베이스 ----
-DATABASE_URL="mysql://dongcheon:System1!!3610@localhost:3306/dongcheon"
+DATABASE_URL="mysql://dongcheon:<your-strong-db-password>@localhost:3306/dongcheon"
 
 # ---- 인증 ----
 NEXTAUTH_URL="http://35.212.174.200:3000"
@@ -247,7 +251,7 @@ MAX_UPLOAD_SIZE=10485760
 SMTP_HOST="smtp.gmail.com"
 SMTP_PORT=587
 SMTP_USER="hk9472@gmail.com"
-SMTP_PASS="uhbbtuoxjeomuqow"
+SMTP_PASS="<your-gmail-app-password>"
 SMTP_FROM="동천교회 <noreply@pkistdc.net>"
 
 # ---- 외부 링크 ----

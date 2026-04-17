@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "groupId, date 필요" }, { status: 400 });
   }
 
-  const date = new Date(dateStr + "T00:00:00+09:00");
+  const date = new Date(dateStr + "T00:00:00Z");
 
   const rows = await prisma.councilAttendance.findMany({
     where: { groupId, date },
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "groupId, date, rows 필요" }, { status: 400 });
   }
 
-  const date = new Date(dateStr + "T00:00:00+09:00");
+  const date = new Date(dateStr + "T00:00:00Z");
 
   // 집계 행(memberName=null) 중복 방지: rows에서 null인 것이 2개 이상이면 에러
   const aggregateRows = rows.filter((r) => !r.memberName);

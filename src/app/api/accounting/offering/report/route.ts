@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
-
-/**
- * 회계 접근 권한 확인
- */
-async function checkAccess(userId: number): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true, accountAccess: true },
-  });
-  if (!user) return false;
-  return user.isAdmin <= 2 || user.accountAccess;
-}
+import { checkAccAccess, hasMemberEdit } from "@/lib/accountAuth";
 
 /**
  * 날짜 문자열(YYYY-MM-DD)을 UTC 자정 Date로 변환
@@ -43,10 +31,12 @@ function toKSTDateStr(d: Date): string {
  *        memberId, dateFrom, dateTo, offeringType, year
  */
 export async function GET(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
-  if (!(await checkAccess(user.id)))
-    return NextResponse.json({ error: "권한 없음" }, { status: 403 });
+  const access = await checkAccAccess("offering");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
+  }
+
+  const canSeeName = hasMemberEdit(access.user);
 
   const { searchParams } = req.nextUrl;
   const reportType = searchParams.get("reportType");
@@ -65,15 +55,15 @@ export async function GET(req: NextRequest) {
 
   switch (reportType) {
     case "individual":
-      return handleIndividual({ memberId, dateFrom, dateTo, offeringType });
+      return handleIndividual({ memberId, dateFrom, dateTo, offeringType }, canSeeName);
     case "daily":
       return handleDaily({ dateFrom, dateTo, offeringType });
     case "monthly":
       return handleMonthly({ year, offeringType });
     case "period":
-      return handlePeriod({ dateFrom, dateTo, offeringType });
+      return handlePeriod({ dateFrom, dateTo, offeringType }, canSeeName);
     case "receipt":
-      return handleReceipt({ memberId, year });
+      return handleReceipt({ memberId, year }, canSeeName);
     default:
       return NextResponse.json(
         { error: "유효하지 않은 reportType입니다" },
@@ -85,12 +75,15 @@ export async function GET(req: NextRequest) {
 /**
  * 개인별 리포트: 교인별로 연보 유형별 합계
  */
-async function handleIndividual(params: {
-  memberId: string | null;
-  dateFrom: string | null;
-  dateTo: string | null;
-  offeringType: string | null;
-}) {
+async function handleIndividual(
+  params: {
+    memberId: string | null;
+    dateFrom: string | null;
+    dateTo: string | null;
+    offeringType: string | null;
+  },
+  canSeeName: boolean
+) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {};
   if (params.memberId) where.memberId = parseInt(params.memberId, 10);
@@ -132,14 +125,22 @@ async function handleIndividual(params: {
     g.total += e.amount;
   }
 
+  const data = Object.values(grouped);
+  const result = canSeeName
+    ? data
+    : data.map((g) => ({
+        ...g,
+        member: { id: g.member.id, name: "*", groupName: null },
+      }));
+
   return NextResponse.json({
     reportType: "individual",
-    data: Object.values(grouped),
+    data: result,
   });
 }
 
 /**
- * 일별 리포트: 날짜별 합계
+ * 일별 리포트: 날짜별 합계 (교인 정보 없음 — 마스킹 불필요)
  */
 async function handleDaily(params: {
   dateFrom: string | null;
@@ -179,7 +180,7 @@ async function handleDaily(params: {
 }
 
 /**
- * 월별 리포트: 월별 유형별 합계
+ * 월별 리포트: 월별 유형별 합계 (교인 정보 없음 — 마스킹 불필요)
  */
 async function handleMonthly(params: {
   year: string | null;
@@ -229,11 +230,14 @@ async function handleMonthly(params: {
 /**
  * 기간별 리포트: 교인 + 유형별 기간 합계
  */
-async function handlePeriod(params: {
-  dateFrom: string | null;
-  dateTo: string | null;
-  offeringType: string | null;
-}) {
+async function handlePeriod(
+  params: {
+    dateFrom: string | null;
+    dateTo: string | null;
+    offeringType: string | null;
+  },
+  canSeeName: boolean
+) {
   if (!params.dateFrom || !params.dateTo) {
     return NextResponse.json(
       { error: "기간 리포트는 dateFrom, dateTo가 필수입니다" },
@@ -283,25 +287,45 @@ async function handlePeriod(params: {
     grouped[key].count += 1;
   }
 
+  const data = Object.values(grouped);
+  const result = canSeeName
+    ? data
+    : data.map((g) => ({
+        ...g,
+        member: { id: g.member.id, name: "*", groupName: null },
+      }));
+
   return NextResponse.json({
     reportType: "period",
     dateFrom: params.dateFrom,
     dateTo: params.dateTo,
-    data: Object.values(grouped),
+    data: result,
   });
 }
 
 /**
  * 기부금영수증 리포트: 특정 교인의 연간 유형별 합계 + 교인 정보
+ * 성명이 필수적인 출력이므로 memberEdit 권한이 없으면 거부한다
  */
-async function handleReceipt(params: {
-  memberId: string | null;
-  year: string | null;
-}) {
+async function handleReceipt(
+  params: {
+    memberId: string | null;
+    year: string | null;
+  },
+  canSeeName: boolean
+) {
   if (!params.memberId) {
     return NextResponse.json(
       { error: "기부금영수증은 memberId가 필수입니다" },
       { status: 400 }
+    );
+  }
+
+  if (!canSeeName) {
+    // 영수증은 이름/가족정보가 반드시 노출되므로 권한 필요
+    return NextResponse.json(
+      { error: "기부금영수증 조회 권한이 없습니다." },
+      { status: 403 }
     );
   }
 

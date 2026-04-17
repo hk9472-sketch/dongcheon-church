@@ -47,6 +47,7 @@ function WriteForm({ boardId }: { boardId: string }) {
 
   // 로그인 상태 + CAPTCHA
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const [loggedInName, setLoggedInName] = useState<string>("");
   const [captchaAnswer, setCaptchaAnswer] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
 
@@ -56,7 +57,16 @@ function WriteForm({ boardId }: { boardId: string }) {
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
-      .then((d) => setIsLoggedIn(!!d.user))
+      .then((d) => {
+        const loggedIn = !!d.user;
+        setIsLoggedIn(loggedIn);
+        if (loggedIn) {
+          setLoggedInName(d.user.name || "");
+          // 로그인 사용자는 이름/비밀번호 필드를 사용하지 않으므로 더미 값 세팅
+          setName(d.user.name || "");
+          setPassword("__session__");
+        }
+      })
       .catch(() => setIsLoggedIn(false));
   }, []);
 
@@ -146,8 +156,11 @@ function WriteForm({ boardId }: { boardId: string }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!name.trim()) { alert("이름을 입력하세요."); return; }
-    if (!password.trim()) { alert("비밀번호를 입력하세요."); return; }
+    // 비로그인 사용자만 이름/비밀번호 필수
+    if (isLoggedIn !== true) {
+      if (!name.trim()) { alert("이름을 입력하세요."); return; }
+      if (!password.trim()) { alert("비밀번호를 입력하세요."); return; }
+    }
     if (!subject.trim()) { alert("제목을 입력하세요."); return; }
     if (!content.trim()) { alert("내용을 입력하세요."); return; }
 
@@ -256,34 +269,41 @@ function WriteForm({ boardId }: { boardId: string }) {
             </h2>
           </div>
           <div className="p-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                  이름 <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  placeholder="이름을 입력하세요"
-                  className="w-full px-3.5 py-2.5 text-sm border border-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                />
+            {isLoggedIn === true ? (
+              <div className="text-sm text-gray-700">
+                작성자: <strong className="text-gray-900">{loggedInName}</strong>
+                <span className="ml-2 text-xs text-gray-400">(로그인 계정으로 등록됩니다)</span>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                  비밀번호 <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  placeholder="수정/삭제 시 필요합니다"
-                  className="w-full px-3.5 py-2.5 text-sm border border-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                />
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                    이름 <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    placeholder="이름을 입력하세요"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                    비밀번호 <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    placeholder="수정/삭제 시 필요합니다"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 

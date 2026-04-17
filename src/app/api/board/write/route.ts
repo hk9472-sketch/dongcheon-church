@@ -5,6 +5,49 @@ import prisma from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth";
 import { verifyCaptcha } from "@/lib/captcha";
 
+// ───── 파일 업로드 검증 상수 ─────
+const ALLOWED_EXTENSIONS = new Set([
+  ".jpg", ".jpeg", ".png", ".gif", ".webp",
+  ".pdf", ".hwp", ".hwpx", ".doc", ".docx",
+  ".xls", ".xlsx", ".ppt", ".pptx",
+  ".zip", ".txt", ".mp3", ".mp4",
+]);
+
+const BLOCKED_EXTENSIONS = new Set([
+  ".php", ".phtml", ".js", ".html", ".htm",
+  ".svg", ".exe", ".bat", ".sh",
+]);
+
+const MAX_UPLOAD_SIZE = (() => {
+  const envSize = process.env.MAX_UPLOAD_SIZE ? parseInt(process.env.MAX_UPLOAD_SIZE, 10) : NaN;
+  return Number.isFinite(envSize) && envSize > 0 ? envSize : 10 * 1024 * 1024; // 10MB
+})();
+
+/** 파일명을 안전하게 정화: alphanumeric + underscore + dot만 허용, 경로 구분자 제거 */
+function sanitizeStoredName(stored: string): string {
+  // 경로 구분자 및 ..를 제거하고 화이트리스트 외 문자는 언더스코어로 치환
+  const base = stored.replace(/[\\/]+/g, "_").replace(/\.\.+/g, ".");
+  return base.replace(/[^A-Za-z0-9_.]/g, "_");
+}
+
+/** 업로드 파일 검증. 유효하지 않으면 에러 메시지를 반환. */
+function validateUploadFile(file: File): string | null {
+  if (file.size > MAX_UPLOAD_SIZE) {
+    return `첨부파일 크기가 허용치(${Math.floor(MAX_UPLOAD_SIZE / 1024 / 1024)}MB)를 초과합니다.`;
+  }
+  const ext = path.extname(file.name).toLowerCase();
+  if (!ext) {
+    return "확장자가 없는 파일은 업로드할 수 없습니다.";
+  }
+  if (BLOCKED_EXTENSIONS.has(ext)) {
+    return `허용되지 않는 파일 형식입니다: ${ext}`;
+  }
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    return `허용되지 않는 파일 형식입니다: ${ext}`;
+  }
+  return null;
+}
+
 // POST /api/board/write (FormData)
 export async function POST(request: NextRequest) {
   try {
@@ -34,11 +77,6 @@ export async function POST(request: NextRequest) {
     const captchaAnswer = (formData.get("captchaAnswer") as string) || "";
     const captchaToken = (formData.get("captchaToken") as string) || "";
 
-    // 유효성 검사
-    if (!boardSlug || !name || !passwordRaw || !subject || !content) {
-      return NextResponse.json({ message: "필수 항목을 입력하세요." }, { status: 400 });
-    }
-
     // 세션 확인 (로그인 여부 판단 + 사용자 정보 획득)
     const sessionToken = request.cookies.get("dc_session")?.value;
     let isSessionValid = false;
@@ -62,6 +100,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 유효성 검사 (로그인 사용자는 이름/비밀번호를 서버측에서 강제하므로 필수 검사에서 제외)
+    if (!boardSlug || !subject || !content) {
+      return NextResponse.json({ message: "필수 항목을 입력하세요." }, { status: 400 });
+    }
+    if (!isSessionValid && (!name || !passwordRaw)) {
+      return NextResponse.json({ message: "필수 항목을 입력하세요." }, { status: 400 });
+    }
+
     // 비로그인 글쓰기/답글 시 CAPTCHA 검증
     if (!isSessionValid && mode !== "modify") {
       if (!captchaAnswer || !captchaToken || !verifyCaptcha(captchaAnswer, captchaToken)) {
@@ -75,12 +121,47 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "게시판이 존재하지 않습니다." }, { status: 404 });
     }
 
-    // 비밀번호 해시
-    const hashedPassword = await hashPassword(passwordRaw);
+    // ===== 권한 계산 =====
+    const effectiveUserLevel = isSessionValid ? sessionUserLevel : 99;
+    const isAdminUser = isSessionValid && sessionUserIsAdmin <= 2;
+
+    // 게시판 권한 체크 (수정은 별도 경로 아래에서 체크)
+    if (mode === "write") {
+      if (!isAdminUser && effectiveUserLevel > board.grantWrite) {
+        return NextResponse.json({ message: "글쓰기 권한이 없습니다." }, { status: 403 });
+      }
+    } else if (mode === "reply") {
+      if (!isAdminUser && effectiveUserLevel > board.grantReply) {
+        return NextResponse.json({ message: "답글 작성 권한이 없습니다." }, { status: 403 });
+      }
+    }
+
+    // 공지사항 등록 권한 체크 (write/modify 모드에서 isNotice=true인 경우)
+    if (isNotice && (mode === "write" || mode === "modify")) {
+      if (!isAdminUser && effectiveUserLevel > board.grantNotice) {
+        return NextResponse.json({ message: "공지사항 등록 권한이 없습니다." }, { status: 403 });
+      }
+    }
+
+    // 작성자 이름 강제: 로그인 사용자는 세션 이름으로 덮어씌움 (사칭 방지)
+    const effectiveName = isSessionValid && sessionUserName ? sessionUserName : name;
+
+    // 비밀번호 해시: 로그인 사용자는 해시 과정 생략 (DoS 완화)
+    const hashedPassword = isSessionValid ? null : await hashPassword(passwordRaw);
 
     // 파일 업로드 처리
     const file1 = formData.get("file1") as File | null;
     const file2 = formData.get("file2") as File | null;
+
+    // 파일 검증 먼저 수행 (디스크 기록 전)
+    if (file1 && file1.size > 0) {
+      const err = validateUploadFile(file1);
+      if (err) return NextResponse.json({ message: err }, { status: 400 });
+    }
+    if (file2 && file2.size > 0) {
+      const err = validateUploadFile(file2);
+      if (err) return NextResponse.json({ message: err }, { status: 400 });
+    }
 
     let fileName1: string | null = null;
     let origName1: string | null = null;
@@ -93,8 +174,8 @@ export async function POST(request: NextRequest) {
     await mkdir(uploadDir, { recursive: true });
 
     if (file1 && file1.size > 0) {
-      const ext = path.extname(file1.name);
-      const storedName = `${Date.now()}_1${ext}`;
+      const ext = path.extname(file1.name).toLowerCase();
+      const storedName = sanitizeStoredName(`${Date.now()}_1${ext}`);
       fileName1 = `data/${boardSlug}/${storedName}`;
       origName1 = file1.name;
       const buffer = Buffer.from(await file1.arrayBuffer());
@@ -102,8 +183,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (file2 && file2.size > 0) {
-      const ext = path.extname(file2.name);
-      const storedName = `${Date.now()}_2${ext}`;
+      const ext = path.extname(file2.name).toLowerCase();
+      const storedName = sanitizeStoredName(`${Date.now()}_2${ext}`);
       fileName2 = `data/${boardSlug}/${storedName}`;
       origName2 = file2.name;
       const buffer = Buffer.from(await file2.arrayBuffer());
@@ -140,6 +221,9 @@ export async function POST(request: NextRequest) {
       if (!hasEditPermission) {
         if (existingPost.authorId === null && existingPost.password) {
           // 비회원(ZeroBoard 이관) 글: 비밀번호로 확인
+          if (!passwordRaw) {
+            return NextResponse.json({ message: "비밀번호가 필요합니다." }, { status: 403 });
+          }
           const valid = await verifyPassword(passwordRaw, existingPost.password);
           if (!valid) {
             return NextResponse.json({ message: "비밀번호가 일치하지 않습니다." }, { status: 403 });
@@ -201,7 +285,7 @@ export async function POST(request: NextRequest) {
           parentId: parentPost.id,
           authorId: sessionUserId,
           authorLevel: sessionUserId ? sessionUserLevel : 10,
-          authorName: name,
+          authorName: effectiveName,
           password: hashedPassword,
           email,
           homepage,
@@ -246,7 +330,7 @@ export async function POST(request: NextRequest) {
         division: 1,
         authorId: sessionUserId,
         authorLevel: sessionUserId ? sessionUserLevel : 10,
-        authorName: name,
+        authorName: effectiveName,
         password: hashedPassword,
         email,
         homepage,

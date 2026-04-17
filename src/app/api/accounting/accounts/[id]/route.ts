@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { checkAccAccess } from "@/lib/accountAuth";
 
 /**
  * PUT /api/accounting/accounts/[id]
@@ -10,11 +10,11 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const sessionUser = await getCurrentUser();
-  if (!sessionUser) {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  const access = await checkAccAccess("ledger");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
-  if (sessionUser.isAdmin > 2) {
+  if (!access.isAdmin) {
     return NextResponse.json({ error: "관리자만 가능합니다." }, { status: 403 });
   }
 
@@ -87,11 +87,11 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const sessionUser = await getCurrentUser();
-  if (!sessionUser) {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  const access = await checkAccAccess("ledger");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
-  if (sessionUser.isAdmin > 2) {
+  if (!access.isAdmin) {
     return NextResponse.json({ error: "관리자만 가능합니다." }, { status: 403 });
   }
 

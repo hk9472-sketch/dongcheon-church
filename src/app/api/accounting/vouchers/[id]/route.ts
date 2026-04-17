@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
-
-/**
- * 회계 접근 권한 확인
- */
-async function checkAccess(userId: number): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true, accountAccess: true },
-  });
-  if (!user) return false;
-  return user.isAdmin <= 2 || user.accountAccess;
-}
+import { checkAccAccess } from "@/lib/accountAuth";
 
 /**
  * 날짜 문자열(YYYY-MM-DD)을 UTC 자정 Date로 변환
@@ -30,12 +18,9 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const sessionUser = await getCurrentUser();
-  if (!sessionUser) {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
-  }
-  if (!(await checkAccess(sessionUser.id))) {
-    return NextResponse.json({ error: "접근 권한이 없습니다." }, { status: 403 });
+  const access = await checkAccAccess("ledger");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
   const { id } = await params;
@@ -74,12 +59,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const sessionUser = await getCurrentUser();
-  if (!sessionUser) {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
-  }
-  if (!(await checkAccess(sessionUser.id))) {
-    return NextResponse.json({ error: "접근 권한이 없습니다." }, { status: 403 });
+  const access = await checkAccAccess("ledger");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
   const { id } = await params;
@@ -106,11 +88,33 @@ export async function PUT(
   const body = await request.json();
   const { type, date, description, items } = body;
 
-  // 날짜 변경 시 해당 월 마감 확인
+  // 항목 배열이 주어졌으면 비어있으면 안 됨 (데이터 손상 방지)
+  if (items !== undefined) {
+    if (!Array.isArray(items) || items.length === 0) {
+      return NextResponse.json(
+        { error: "항목 배열은 비어있을 수 없습니다." },
+        { status: 400 }
+      );
+    }
+    // amount > 0 검증
+    const invalid = items.find(
+      (item: { amount?: number; accountId?: number }) =>
+        typeof item.amount !== "number" ||
+        item.amount <= 0 ||
+        typeof item.accountId !== "number"
+    );
+    if (invalid) {
+      return NextResponse.json(
+        { error: "모든 항목은 유효한 accountId와 0보다 큰 금액을 가져야 합니다." },
+        { status: 400 }
+      );
+    }
+  }
+
+  // 날짜 변경 시 해당 월 마감 확인 (UTC 자정 기준이므로 UTC 접근자 사용)
   const targetDate = date ? toDateOnly(date) : existing.date;
-  const kstDate = new Date(targetDate.getTime() + 9 * 60 * 60 * 1000);
-  const year = kstDate.getFullYear();
-  const month = kstDate.getMonth() + 1;
+  const year = targetDate.getUTCFullYear();
+  const month = targetDate.getUTCMonth() + 1;
 
   const closing = await prisma.accClosing.findUnique({
     where: {
@@ -195,12 +199,9 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const sessionUser = await getCurrentUser();
-  if (!sessionUser) {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
-  }
-  if (!(await checkAccess(sessionUser.id))) {
-    return NextResponse.json({ error: "접근 권한이 없습니다." }, { status: 403 });
+  const access = await checkAccAccess("ledger");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
   const { id } = await params;

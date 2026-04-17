@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
-
-/**
- * 회계 접근 권한 확인
- */
-async function checkAccess(userId: number): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true, accountAccess: true },
-  });
-  if (!user) return false;
-  return user.isAdmin <= 2 || user.accountAccess;
-}
+import { checkAccAccess, hasMemberEdit } from "@/lib/accountAuth";
 
 /**
  * 날짜 문자열(YYYY-MM-DD)을 UTC 자정 Date로 변환
@@ -25,15 +13,54 @@ function toDateOnly(dateStr: string): Date {
 type RouteParams = { params: Promise<{ id: string }> };
 
 /**
+ * GET /api/accounting/offering/entries/[id]
+ * 연보 내역 단건 조회
+ */
+export async function GET(_req: NextRequest, { params }: RouteParams) {
+  const access = await checkAccAccess("offering");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
+  }
+
+  const { id } = await params;
+  const entryId = parseInt(id, 10);
+  if (isNaN(entryId))
+    return NextResponse.json({ error: "잘못된 ID" }, { status: 400 });
+
+  const entry = await prisma.offeringEntry.findUnique({
+    where: { id: entryId },
+    include: {
+      member: { select: { id: true, name: true, groupName: true } },
+    },
+  });
+
+  if (!entry) {
+    return NextResponse.json({ error: "연보 내역을 찾을 수 없습니다" }, { status: 404 });
+  }
+
+  const canSeeName = hasMemberEdit(access.user);
+  const result = canSeeName
+    ? entry
+    : {
+        ...entry,
+        member: entry.member
+          ? { id: entry.member.id, name: "*", groupName: null }
+          : null,
+      };
+
+  return NextResponse.json(result);
+}
+
+/**
  * PUT /api/accounting/offering/entries/[id]
  * 연보 내역 수정
  * Body: { date?, memberId?, offeringType?, amount?, description? }
  */
 export async function PUT(req: NextRequest, { params }: RouteParams) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
-  if (!(await checkAccess(user.id)))
-    return NextResponse.json({ error: "권한 없음" }, { status: 403 });
+  const access = await checkAccAccess("offering");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
+  }
 
   const { id } = await params;
   const entryId = parseInt(id, 10);
@@ -69,7 +96,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     data.memberId = memberId;
   }
   if (offeringType !== undefined) {
-    const validTypes = ["주일연보", "감사", "특별", "절기", "오일"];
+    // POST와 동일한 유효 타입 목록 사용
+    const validTypes = ["주일연보", "십일조연보", "감사연보", "특별연보", "오일연보", "절기연보", "감사", "특별", "절기", "오일"];
     if (!validTypes.includes(offeringType)) {
       return NextResponse.json(
         { error: `유효하지 않은 연보 유형입니다 (${validTypes.join(", ")})` },
@@ -104,10 +132,10 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
  * 연보 내역 삭제
  */
 export async function DELETE(_req: NextRequest, { params }: RouteParams) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
-  if (!(await checkAccess(user.id)))
-    return NextResponse.json({ error: "권한 없음" }, { status: 403 });
+  const access = await checkAccAccess("offering");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
+  }
 
   const { id } = await params;
   const entryId = parseInt(id, 10);

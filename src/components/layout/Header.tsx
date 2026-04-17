@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 interface NavMenuItem {
   label: string;
@@ -83,7 +84,7 @@ export default function Header() {
             {mottoHtml ? (
               <div
                 className="hidden md:block text-center leading-snug flex-1 mx-4 prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: mottoHtml }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(mottoHtml) }}
               />
             ) : (
               <p className="hidden md:block text-lg text-gray-500 italic text-right leading-snug">
@@ -195,7 +196,7 @@ export default function Header() {
           {mottoHtml ? (
             <div
               className="px-4 py-3 text-xs border-b border-gray-100 leading-relaxed text-center prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: mottoHtml }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(mottoHtml) }}
             />
           ) : (
             <p className="px-4 py-3 text-xs text-gray-500 italic border-b border-gray-100 leading-relaxed">

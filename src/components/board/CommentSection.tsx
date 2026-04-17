@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 const TipTapEditor = dynamic(() => import("@/components/board/TipTapEditor"), {
   ssr: false,
@@ -356,7 +357,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                   ) : (
                     <div
                       className="prose prose-sm max-w-none text-sm text-gray-700 leading-relaxed"
-                      dangerouslySetInnerHTML={{ __html: comment.content }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(comment.content) }}
                     />
                   )
                 ) : (

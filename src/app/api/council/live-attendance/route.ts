@@ -12,20 +12,19 @@ async function requireCouncilAccess(request: NextRequest) {
   return user;
 }
 
-// 한국시간 기준 날짜 포맷
+// 날짜 포맷: SQL의 DATE(createdAt)는 KST 기반 집계 → UTC ISO 추출
 function formatDate(d: Date | string): string {
-  const dt = d instanceof Date ? d : new Date(d);
-  return dt.toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" })
-    .replace(/\. /g, "-").replace(".", "");
+  if (typeof d === "string") return d.slice(0, 10);
+  return d.toISOString().slice(0, 10);
 }
 
-// 한국시간 오늘 시작/끝
+// 한국시간 오늘 시작/끝 (UTC 저장 기준 해석)
 function todayRangeKST(): { start: Date; end: Date } {
   const now = new Date();
   const kstStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" }); // YYYY-MM-DD
   return {
-    start: new Date(kstStr + "T00:00:00+09:00"),
-    end: new Date(kstStr + "T23:59:59+09:00"),
+    start: new Date(kstStr + "T00:00:00Z"),
+    end: new Date(kstStr + "T23:59:59Z"),
   };
 }
 
@@ -46,8 +45,8 @@ export async function GET(request: NextRequest) {
   {
     let startDate: Date, endDate: Date;
     if (dateParam) {
-      startDate = new Date(dateParam + "T00:00:00+09:00");
-      endDate = new Date(dateParam + "T23:59:59+09:00");
+      startDate = new Date(dateParam + "T00:00:00Z");
+      endDate = new Date(dateParam + "T23:59:59Z");
     } else {
       const today = todayRangeKST();
       startDate = today.start;
@@ -65,8 +64,8 @@ export async function GET(request: NextRequest) {
   let rangeEnd: Date;
 
   if (fromParam && toParam) {
-    rangeStart = new Date(fromParam + "T00:00:00+09:00");
-    rangeEnd = new Date(toParam + "T23:59:59+09:00");
+    rangeStart = new Date(fromParam + "T00:00:00Z");
+    rangeEnd = new Date(toParam + "T23:59:59Z");
   } else {
     // 기본: 최근 30일
     rangeEnd = new Date();

@@ -1,18 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
-
-/**
- * 회계 접근 권한 확인
- */
-async function checkAccess(userId: number): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true, accountAccess: true },
-  });
-  if (!user) return false;
-  return user.isAdmin <= 2 || user.accountAccess;
-}
+import { checkAccAccess } from "@/lib/accountAuth";
 
 /**
  * 날짜 문자열(YYYY-MM-DD)을 UTC 자정 Date로 변환
@@ -30,13 +19,17 @@ function toNextDay(dateStr: string): Date {
 }
 
 /**
- * 다음 전표번호 생성
+ * 다음 전표번호 생성 (트랜잭션 내에서 호출)
  */
-async function generateVoucherNo(unitId: number, date: Date): Promise<string> {
+async function generateVoucherNo(
+  tx: Prisma.TransactionClient,
+  unitId: number,
+  date: Date
+): Promise<string> {
   // UTC 자정 기준이므로 toISOString 날짜부분이 곧 입력 날짜
   const dateStr = date.toISOString().slice(0, 10).replace(/-/g, "");
 
-  const existing = await prisma.accVoucher.findMany({
+  const existing = await tx.accVoucher.findMany({
     where: {
       unitId,
       voucherNo: { startsWith: dateStr },
@@ -58,12 +51,9 @@ async function generateVoucherNo(unitId: number, date: Date): Promise<string> {
  * 전표 목록 조회 (필터 + 합계)
  */
 export async function GET(request: NextRequest) {
-  const sessionUser = await getCurrentUser();
-  if (!sessionUser) {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
-  }
-  if (!(await checkAccess(sessionUser.id))) {
-    return NextResponse.json({ error: "접근 권한이 없습니다." }, { status: 403 });
+  const access = await checkAccAccess("ledger");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
   const { searchParams } = new URL(request.url);
@@ -158,12 +148,9 @@ export async function GET(request: NextRequest) {
  * 전표 생성 (항목 포함)
  */
 export async function POST(request: NextRequest) {
-  const sessionUser = await getCurrentUser();
-  if (!sessionUser) {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
-  }
-  if (!(await checkAccess(sessionUser.id))) {
-    return NextResponse.json({ error: "접근 권한이 없습니다." }, { status: 403 });
+  const access = await checkAccAccess("ledger");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
   const body = await request.json();
@@ -179,6 +166,26 @@ export async function POST(request: NextRequest) {
   if (type !== "D" && type !== "C") {
     return NextResponse.json(
       { error: "type은 D(수입) 또는 C(지출)이어야 합니다." },
+      { status: 400 }
+    );
+  }
+
+  // 항목 유효성: amount는 0보다 커야 함
+  const validItems = items.filter(
+    (item: { accountId?: number; amount?: number }) =>
+      typeof item.amount === "number" &&
+      item.amount > 0 &&
+      typeof item.accountId === "number"
+  );
+  if (validItems.length === 0) {
+    return NextResponse.json(
+      { error: "유효한 항목이 없습니다. 금액은 0보다 커야 합니다." },
+      { status: 400 }
+    );
+  }
+  if (validItems.length !== items.length) {
+    return NextResponse.json(
+      { error: "모든 항목의 금액은 0보다 커야 합니다." },
       { status: 400 }
     );
   }
@@ -199,59 +206,81 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 전표번호 생성
-  const voucherNo = await generateVoucherNo(unitId, voucherDate);
-
   // 총액 계산
-  const totalAmount = items.reduce(
-    (sum: number, item: { amount: number }) => sum + (item.amount || 0),
+  const totalAmount = validItems.reduce(
+    (sum: number, item: { amount: number }) => sum + item.amount,
     0
   );
 
-  // 트랜잭션으로 전표 + 항목 생성
-  const voucher = await prisma.$transaction(async (tx) => {
-    const created = await tx.accVoucher.create({
-      data: {
-        unitId,
-        voucherNo,
-        type,
-        date: voucherDate,
-        description: description || null,
-        totalAmount,
-        createdBy: sessionUser.name,
-        items: {
-          create: items.map(
-            (
-              item: {
-                accountId: number;
-                amount: number;
-                description?: string;
-                counterpart?: string;
-              },
-              index: number
-            ) => ({
-              seq: index + 1,
-              accountId: item.accountId,
-              amount: item.amount,
-              description: item.description || null,
-              counterpart: item.counterpart || null,
-            })
-          ),
-        },
-      },
-      include: {
-        items: {
-          include: {
-            account: {
-              select: { id: true, code: true, name: true, type: true },
+  const createdBy = access.user?.name ?? String(access.userId ?? "");
+
+  // 전표번호 경합(race) 방지: 트랜잭션 내부에서 번호 생성, P2002(고유 제약 위반) 시 재시도
+  const MAX_RETRIES = 3;
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const voucher = await prisma.$transaction(async (tx) => {
+        const voucherNo = await generateVoucherNo(tx, unitId, voucherDate);
+        const created = await tx.accVoucher.create({
+          data: {
+            unitId,
+            voucherNo,
+            type,
+            date: voucherDate,
+            description: description || null,
+            totalAmount,
+            createdBy,
+            items: {
+              create: validItems.map(
+                (
+                  item: {
+                    accountId: number;
+                    amount: number;
+                    description?: string;
+                    counterpart?: string;
+                  },
+                  index: number
+                ) => ({
+                  seq: index + 1,
+                  accountId: item.accountId,
+                  amount: item.amount,
+                  description: item.description || null,
+                  counterpart: item.counterpart || null,
+                })
+              ),
             },
           },
-          orderBy: { seq: "asc" },
-        },
-      },
-    });
-    return created;
-  });
+          include: {
+            items: {
+              include: {
+                account: {
+                  select: { id: true, code: true, name: true, type: true },
+                },
+              },
+              orderBy: { seq: "asc" },
+            },
+          },
+        });
+        return created;
+      });
+      return NextResponse.json(voucher, { status: 201 });
+    } catch (err) {
+      lastErr = err;
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        // unique 제약 위반: 번호 경합 → 재시도
+        continue;
+      }
+      throw err;
+    }
+  }
 
-  return NextResponse.json(voucher, { status: 201 });
+  // 재시도 소진
+  console.error("voucher create failed after retries", lastErr);
+  return NextResponse.json(
+    { error: "전표번호 경합이 발생했습니다. 잠시 후 다시 시도해 주세요." },
+    { status: 503 }
+  );
 }

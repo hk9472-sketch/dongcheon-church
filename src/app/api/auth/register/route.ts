@@ -4,10 +4,21 @@ import prisma from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { verifyCaptcha } from "@/lib/captcha";
 import { sendVerificationEmail } from "@/lib/email";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 
 // POST /api/auth/register
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit: IP당 1시간에 3회
+    const ip = getClientIp(request);
+    const limit = checkRateLimit(`register:${ip}`, 3, 60 * 60 * 1000);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { message: "회원가입 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요." },
+        { status: 429, headers: limit.retryAfter ? { "Retry-After": String(limit.retryAfter) } : undefined }
+      );
+    }
+
     const {
       userId, password, passwordConfirm, name, email, phone,
       captchaAnswer, captchaToken,
@@ -28,8 +39,8 @@ export async function POST(request: NextRequest) {
     if (!/^[a-zA-Z0-9_]+$/.test(userId)) {
       return NextResponse.json({ message: "아이디는 영문, 숫자, 밑줄만 사용 가능합니다." }, { status: 400 });
     }
-    if (password.length < 4) {
-      return NextResponse.json({ message: "비밀번호는 4자 이상 입력하세요." }, { status: 400 });
+    if (password.length < 8) {
+      return NextResponse.json({ message: "비밀번호는 8자 이상 입력하세요." }, { status: 400 });
     }
     if (password !== passwordConfirm) {
       return NextResponse.json({ message: "비밀번호가 일치하지 않습니다." }, { status: 400 });

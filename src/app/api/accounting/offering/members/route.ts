@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
-
-/**
- * 회계 접근 권한 확인
- */
-async function checkAccess(userId: number): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true, accountAccess: true },
-  });
-  if (!user) return false;
-  return user.isAdmin <= 2 || user.accountAccess;
-}
+import { checkAccAccess, hasMemberEdit } from "@/lib/accountAuth";
 
 /**
  * GET /api/accounting/offering/members
@@ -20,10 +8,11 @@ async function checkAccess(userId: number): Promise<boolean> {
  * Query: search (이름 검색), groupName (구역), activeOnly (활성만)
  */
 export async function GET(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
-  if (!(await checkAccess(user.id)))
-    return NextResponse.json({ error: "권한 없음" }, { status: 403 });
+  // 조회는 offering 권한 허용 (성명은 memberEdit 보유자만 열람 가능)
+  const access = await checkAccAccess("offering");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
+  }
 
   const { searchParams } = req.nextUrl;
   const search = searchParams.get("search") || searchParams.get("name");
@@ -102,19 +91,32 @@ export async function GET(req: NextRequest) {
     return { ...m, members: familyMembers };
   });
 
-  return NextResponse.json(result);
+  // memberEdit 권한 없으면 성명/구역/가족 정보 제거
+  const canSeeName = hasMemberEdit(access.user);
+  const finalResult = canSeeName
+    ? result
+    : result.map((m) => ({
+        ...m,
+        name: "*",
+        groupName: null,
+        familyId: null,
+        family: null,
+        members: [],
+      }));
+
+  return NextResponse.json(finalResult);
 }
 
 /**
  * POST /api/accounting/offering/members
- * 연보 교인 등록
+ * 연보 교인 등록 (memberEdit 권한 필요)
  * Body: { name, groupName?, familyId? }
  */
 export async function POST(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
-  if (!(await checkAccess(user.id)))
-    return NextResponse.json({ error: "권한 없음" }, { status: 403 });
+  const access = await checkAccAccess("memberEdit");
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
+  }
 
   const body = await req.json();
   const { id, name, groupName, familyId } = body;

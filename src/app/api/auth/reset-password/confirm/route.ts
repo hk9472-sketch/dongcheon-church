@@ -14,9 +14,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (password.length < 4) {
+    if (password.length < 8) {
       return NextResponse.json(
-        { message: "비밀번호는 4자 이상 입력하세요." },
+        { message: "비밀번호는 8자 이상 입력하세요." },
         { status: 400 }
       );
     }
@@ -43,8 +43,6 @@ export async function POST(request: NextRequest) {
     // 비밀번호 해시 후 업데이트 (트랜잭션)
     const hashedPassword = await hashPassword(password);
 
-    console.log("[PW-CONFIRM] userId:", resetRecord.userId, "| 새 해시:", hashedPassword.substring(0, 20) + "...");
-
     await prisma.$transaction([
       prisma.user.update({
         where: { id: resetRecord.userId },
@@ -59,23 +57,11 @@ export async function POST(request: NextRequest) {
       }),
     ]);
 
-    // DB에 실제 저장된 값 확인
-    const updatedUser = await prisma.user.findUnique({
-      where: { id: resetRecord.userId },
-      select: { userId: true, password: true, legacyPwHash: true },
-    });
-    console.log("[PW-CONFIRM] DB 확인:", {
-      userId: updatedUser?.userId,
-      pwStored: updatedUser?.password.substring(0, 20) + "...",
-      legacyPwHash: updatedUser?.legacyPwHash,
-    });
-
     // 보안: 해당 사용자의 모든 세션 삭제
     await prisma.session.deleteMany({
       where: { userId: resetRecord.userId },
     });
 
-    console.log("[PW-CONFIRM] 비밀번호 변경 완료");
     return NextResponse.json({
       message: "비밀번호가 변경되었습니다. 새 비밀번호로 로그인하세요.",
     });

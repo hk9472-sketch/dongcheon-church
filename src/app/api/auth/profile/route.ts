@@ -118,9 +118,9 @@ export async function PUT(request: NextRequest) {
         );
       }
 
-      if (newPassword.length < 4) {
+      if (newPassword.length < 8) {
         return NextResponse.json(
-          { message: "새 비밀번호는 4자 이상이어야 합니다." },
+          { message: "새 비밀번호는 8자 이상이어야 합니다." },
           { status: 400 }
         );
       }

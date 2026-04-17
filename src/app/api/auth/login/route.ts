@@ -2,10 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import prisma from "@/lib/db";
 import { verifyPassword } from "@/lib/auth";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 
 // POST /api/auth/login
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit: IP당 10분에 5회
+    const ip = getClientIp(request);
+    const limit = checkRateLimit(`login:${ip}`, 5, 10 * 60 * 1000);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { message: "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요." },
+        { status: 429, headers: limit.retryAfter ? { "Retry-After": String(limit.retryAfter) } : undefined }
+      );
+    }
+
     const { userId, password } = await request.json();
 
     if (!userId || !password) {
@@ -17,18 +28,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "존재하지 않는 아이디입니다." }, { status: 401 });
     }
 
-    console.log("[LOGIN] 로그인 시도:", userId, "| pw해시:", user.password.substring(0, 20) + "...", "| legacy:", user.legacyPwHash);
+    // verifyPassword 내부에서 legacyPwHash도 검증함 (이관 회원은 구 비밀번호로도 로그인 가능)
     const valid = await verifyPassword(password, user.password, user.legacyPwHash, user.id);
-    console.log("[LOGIN] 비밀번호 검증 결과:", valid);
     if (!valid) {
-      // 이관된 레거시 회원(legacyPwHash 존재)은 비밀번호 설정 플로우로 안내
-      if (user.legacyPwHash) {
-        return NextResponse.json(
-          { message: "이관된 계정입니다.", isMigrationUser: true },
-          { status: 401 }
-        );
-      }
-      return NextResponse.json({ message: "비밀번호가 일치하지 않습니다." }, { status: 401 });
+      return NextResponse.json({ message: "아이디 또는 비밀번호가 올바르지 않습니다." }, { status: 401 });
     }
 
     // 세션 생성
@@ -49,10 +52,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const isHttps = (process.env.SITE_URL || "").startsWith("https");
     response.cookies.set("dc_session", sessionToken, {
       httpOnly: true,
-      secure: isHttps,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       expires,
       path: "/",

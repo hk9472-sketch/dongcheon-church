@@ -75,6 +75,7 @@ model User {
   boardPermissions BoardUserPermission[]
   postVotes     PostVote[]
   groupAccess   UserGroupAccess[]
+  sessions      Session[]
 
   @@index([userId])
   @@index([name])
@@ -395,6 +396,9 @@ model Session {
   userId        Int
   expires       DateTime
 
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
   @@map("sessions")
 }
 
