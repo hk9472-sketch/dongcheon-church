@@ -122,12 +122,12 @@ async function getRecentPostsBatch(
           }),
         ]);
         // 공지가 2개 미만이면 일반글을 더 채워 총 5개 유지 (기존 take: 5 - notices.length 동작과 동일)
-        const combined = [
+        const combined: RecentPost[] = [
           ...notices,
           ...posts.slice(0, 5 - notices.length),
-        ].map((p) => ({
-          ...p,
-          hasRecentComment: p.comments.length > 0,
+        ].map(({ comments, ...rest }) => ({
+          ...rest,
+          hasRecentComment: comments.length > 0,
         }));
         return [boardId, combined] as const;
       } catch {

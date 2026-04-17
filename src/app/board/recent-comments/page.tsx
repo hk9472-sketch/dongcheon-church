@@ -1,6 +1,9 @@
 import Link from "next/link";
 import prisma from "@/lib/db";
 
+// 최근 댓글은 실시간성 데이터이므로 요청 시점에 렌더 (빌드 시 DB 접근 불필요)
+export const dynamic = "force-dynamic";
+
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 function formatDate(date: Date): string {
