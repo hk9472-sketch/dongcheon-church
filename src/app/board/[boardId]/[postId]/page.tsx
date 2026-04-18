@@ -358,6 +358,7 @@ export default async function PostDetailPage({ params }: PageProps) {
 
           <div
             className="prose prose-sm max-w-none text-gray-800 leading-relaxed"
+            style={{ display: "flow-root" }}
             dangerouslySetInnerHTML={{ __html: contentHtml }}
           />
 

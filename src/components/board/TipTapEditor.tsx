@@ -8,6 +8,7 @@ import { TextStyle, FontSize } from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
 import ResizableImage from "./ResizableImage";
+import MediaNode, { detectMediaKind, youtubeEmbedUrl } from "./MediaExtension";
 import Link from "@tiptap/extension-link";
 import { Table } from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
@@ -210,6 +211,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       ResizableImage.configure({
         HTMLAttributes: { class: "max-w-full" },
       }),
+      MediaNode,
       Link.configure({
         openOnClick: false,
         HTMLAttributes: { class: "text-blue-600 underline" },
@@ -277,11 +279,92 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     [editor, boardSlug]
   );
 
+  // 미디어(동영상/오디오) 업로드 — /api/board/media-upload
+  const uploadAndInsertMedia = useCallback(
+    async (file: File): Promise<boolean> => {
+      if (!editor) return false;
+      if (!boardSlug) {
+        alert("이 편집기는 현재 파일 업로드를 지원하지 않습니다.");
+        return false;
+      }
+      const isVideo = file.type.startsWith("video/");
+      const isAudio = file.type.startsWith("audio/");
+      if (!isVideo && !isAudio) return false;
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("boardSlug", boardSlug);
+        const res = await fetch("/api/board/media-upload", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(`미디어 업로드 실패: ${data.message || res.status}`);
+          return false;
+        }
+        editor
+          .chain()
+          .focus()
+          .insertContent({
+            type: "media",
+            attrs: { src: data.url, kind: isVideo ? "video" : "audio", title: file.name },
+          })
+          .run();
+        return true;
+      } catch (e) {
+        alert(`미디어 업로드 실패: ${e instanceof Error ? e.message : String(e)}`);
+        return false;
+      }
+    },
+    [editor, boardSlug]
+  );
+
   // 툴바 이미지 버튼: 파일 선택창 열기 (여러 장 선택 가능)
   const imageInputRef = useRef<HTMLInputElement>(null);
   const addImage = useCallback(() => {
     imageInputRef.current?.click();
   }, []);
+
+  // 툴바 미디어 버튼 — 파일 선택창 열기
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const addMediaFile = useCallback(() => {
+    mediaInputRef.current?.click();
+  }, []);
+  const handleMediaInputChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || []);
+      for (const f of files) {
+        await uploadAndInsertMedia(f);
+      }
+      e.target.value = "";
+    },
+    [uploadAndInsertMedia]
+  );
+
+  // 툴바 미디어 URL 버튼 — 외부 mp3/mp4 또는 YouTube 링크 삽입
+  const addMediaUrl = useCallback(() => {
+    if (!editor) return;
+    const url = prompt("동영상/음성 URL을 입력하세요\n(mp4·mp3 직접 링크 또는 YouTube/Vimeo URL)", "https://");
+    if (!url || url === "https://") return;
+    const kind = detectMediaKind(url);
+    if (kind === "video" || kind === "audio") {
+      editor.chain().focus().insertContent({ type: "media", attrs: { src: url, kind } }).run();
+      return;
+    }
+    if (kind === "iframe") {
+      const embed = youtubeEmbedUrl(url) || url;
+      editor
+        .chain()
+        .focus()
+        .insertContent(
+          `<p><iframe src="${embed}" width="560" height="315" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></p>`
+        )
+        .run();
+      return;
+    }
+    // 알 수 없는 URL — 일반 링크로 삽입
+    if (confirm("일반 링크로 삽입할까요?")) {
+      editor.chain().focus().setLink({ href: url }).insertContent(url).run();
+    }
+  }, [editor]);
   const handleImageInputChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
@@ -299,16 +382,17 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     if (!dom) return;
     const handler = async (e: ClipboardEvent) => {
       if (!e.clipboardData || !boardSlug) return;
-      const files = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith("image/"));
-      if (files.length === 0) return;
+      const all = Array.from(e.clipboardData.files);
+      const images = all.filter((f) => f.type.startsWith("image/"));
+      const media = all.filter((f) => f.type.startsWith("video/") || f.type.startsWith("audio/"));
+      if (images.length === 0 && media.length === 0) return;
       e.preventDefault();
-      for (const f of files) {
-        await uploadAndInsertImage(f);
-      }
+      for (const f of images) await uploadAndInsertImage(f);
+      for (const f of media) await uploadAndInsertMedia(f);
     };
     dom.addEventListener("paste", handler);
     return () => dom.removeEventListener("paste", handler);
-  }, [editor, boardSlug, uploadAndInsertImage]);
+  }, [editor, boardSlug, uploadAndInsertImage, uploadAndInsertMedia]);
 
   // 드래그앤드롭 — 에디터 영역에 이미지 파일 놓으면 자동 업로드
   useEffect(() => {
@@ -319,12 +403,13 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     };
     const handler = async (e: DragEvent) => {
       if (!e.dataTransfer || !boardSlug) return;
-      const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
-      if (files.length === 0) return;
+      const all = Array.from(e.dataTransfer.files);
+      const images = all.filter((f) => f.type.startsWith("image/"));
+      const media = all.filter((f) => f.type.startsWith("video/") || f.type.startsWith("audio/"));
+      if (images.length === 0 && media.length === 0) return;
       e.preventDefault();
-      for (const f of files) {
-        await uploadAndInsertImage(f);
-      }
+      for (const f of images) await uploadAndInsertImage(f);
+      for (const f of media) await uploadAndInsertMedia(f);
     };
     dom.addEventListener("dragover", preventDefault);
     dom.addEventListener("drop", handler);
@@ -332,7 +417,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       dom.removeEventListener("dragover", preventDefault);
       dom.removeEventListener("drop", handler);
     };
-  }, [editor, boardSlug, uploadAndInsertImage]);
+  }, [editor, boardSlug, uploadAndInsertImage, uploadAndInsertMedia]);
 
   const addLink = useCallback(() => {
     if (!editor) return;
@@ -562,6 +647,20 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
           hidden
           onChange={handleImageInputChange}
         />
+        <TBtn onClick={addMediaFile} title="동영상/음성 파일 업로드 (드래그앤드롭도 가능)">
+          🎬
+        </TBtn>
+        <input
+          ref={mediaInputRef}
+          type="file"
+          accept="video/*,audio/*"
+          multiple
+          hidden
+          onChange={handleMediaInputChange}
+        />
+        <TBtn onClick={addMediaUrl} title="동영상/음성 URL 삽입 (mp4·mp3 또는 YouTube/Vimeo)">
+          📺
+        </TBtn>
         <TBtn
           onClick={addLink}
           active={editor.isActive("link")}

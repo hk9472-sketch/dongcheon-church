@@ -9,8 +9,10 @@ const CSP = [
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   "connect-src 'self'",
-  "media-src 'self' blob:",
-  "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://youtube.com",
+  // 미디어: 본인 호스트 + blob/data + 외부 mp3/mp4 직접 링크 허용 (게시자 임베드)
+  "media-src 'self' blob: data: https: http:",
+  // iframe 임베드 허용 호스트 (sanitize.ts ALLOWED_IFRAME_HOSTS 와 동기화)
+  "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://youtube.com https://player.vimeo.com https://vimeo.com https://tv.kakao.com https://play-tv.kakao.com https://tv.naver.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

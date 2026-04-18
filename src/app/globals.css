@@ -256,6 +256,12 @@ html {
 .tiptap-editor .ProseMirror {
   min-height: 400px;
   outline: none;
+  /* float 이미지 안에 단락 높이 포함 */
+  display: flow-root;
+}
+.tiptap-editor .ProseMirror p {
+  /* 단락 사이에 float 이미지가 끊기지 않도록 빈 단락 공간 확보 */
+  min-height: 1em;
 }
 .tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
