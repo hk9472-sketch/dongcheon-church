@@ -310,24 +310,122 @@ async function buildSqlPreviewResponse(sql: string, currentLoginId: string) {
 }
 
 // ============================================================
-// SQL 파서 (zetyx_member_table INSERT 문 추출)
+// SQL 파서 (zetyx_member_table CREATE TABLE + INSERT 문 추출)
+//
+// mysqldump 결과는 `INSERT INTO ... VALUES (...)` 형태가 대부분으로
+// 컬럼 리스트가 없다. 정확한 매핑을 위해:
+//   1) 덤프 앞부분의 `CREATE TABLE zetyx_member_table (...)` 파싱하여
+//      실제 컬럼 순서를 획득 (최우선)
+//   2) INSERT 에 컬럼 리스트가 있으면 그것을 사용
+//   3) 둘 다 없을 때만 MEMBER_COLUMNS_FALLBACK (ZeroBoard 4.1 기본) 사용
 // ============================================================
-const MEMBER_COLUMNS = [
-  "no", "user_id", "password", "name", "email", "homepage",
-  "level", "is_admin", "group_no",
-  "handphone", "home_tel", "office_tel", "home_address", "office_address",
-  "comment", "job", "hobby", "picture", "birth", "point1", "point2",
-  "mailing", "open_info", "new_memo", "reg_date",
+
+// ZeroBoard 4.1 의 실제 zetyx_member_table 기본 컬럼 순서.
+// (ZeroBoard Pro 4.1 pl8 기준 — no, is_admin, user_id, name, password, ...)
+const MEMBER_COLUMNS_FALLBACK = [
+  "no", "is_admin", "user_id", "name", "password", "email", "homepage",
+  "picture", "point1", "point2", "handphone", "home_tel", "office_tel",
+  "home_address", "office_address", "level", "comment", "job", "hobby",
+  "birth", "group_no", "mailing", "open_info", "new_memo", "ip", "reg_date",
 ];
+
+// 숫자 파싱 대상 — 필드명 기반이므로 컬럼 순서가 바뀌어도 동작한다.
 const MEMBER_NUM_COLS = new Set([
   "no", "level", "is_admin", "group_no", "birth", "point1", "point2",
   "mailing", "open_info", "new_memo", "reg_date",
 ]);
 
+/** CREATE TABLE 블록에서 컬럼명 순서 추출. 없으면 null. */
+function parseCreateTableColumns(sql: string, tableName: string): string[] | null {
+  const esc = tableName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?\`?${esc}\`?\\s*\\(`, "i");
+  const m = re.exec(sql);
+  if (!m) return null;
+
+  // 여는 괄호부터 짝 맞는 닫는 괄호까지 추출
+  const start = m.index + m[0].length;
+  let depth = 1;
+  let inStr = false;
+  let inBacktick = false;
+  let i = start;
+  while (i < sql.length && depth > 0) {
+    const c = sql[i];
+    if (inStr) {
+      if (c === "\\" && i + 1 < sql.length) { i += 2; continue; }
+      if (c === "'") inStr = false;
+    } else if (inBacktick) {
+      if (c === "`") inBacktick = false;
+    } else {
+      if (c === "'") inStr = true;
+      else if (c === "`") inBacktick = true;
+      else if (c === "(") depth++;
+      else if (c === ")") { depth--; if (depth === 0) break; }
+    }
+    i++;
+  }
+  if (depth !== 0) return null;
+  const body = sql.substring(start, i);
+
+  // depth 1 에서 콤마 단위로 분리 후 각 라인의 첫 토큰을 컬럼명으로
+  const cols: string[] = [];
+  let buf = "";
+  let d = 0;
+  let s = false;
+  let bt = false;
+  for (let j = 0; j < body.length; j++) {
+    const c = body[j];
+    if (s) {
+      buf += c;
+      if (c === "\\" && j + 1 < body.length) { buf += body[j + 1]; j++; continue; }
+      if (c === "'") s = false;
+      continue;
+    }
+    if (bt) { buf += c; if (c === "`") bt = false; continue; }
+    if (c === "'") { s = true; buf += c; continue; }
+    if (c === "`") { bt = true; buf += c; continue; }
+    if (c === "(") { d++; buf += c; continue; }
+    if (c === ")") { d--; buf += c; continue; }
+    if (c === "," && d === 0) {
+      pushColumn(buf, cols);
+      buf = "";
+      continue;
+    }
+    buf += c;
+  }
+  pushColumn(buf, cols);
+
+  return cols.length > 0 ? cols : null;
+}
+
+function pushColumn(line: string, cols: string[]): void {
+  const trimmed = line.trim();
+  if (!trimmed) return;
+  // 제약조건/인덱스 줄은 건너뜀
+  const upper = trimmed.toUpperCase();
+  if (
+    upper.startsWith("PRIMARY KEY") ||
+    upper.startsWith("UNIQUE KEY") ||
+    upper.startsWith("KEY ") ||
+    upper.startsWith("INDEX ") ||
+    upper.startsWith("FULLTEXT ") ||
+    upper.startsWith("FOREIGN KEY") ||
+    upper.startsWith("CONSTRAINT")
+  ) {
+    return;
+  }
+  // 첫 토큰(백틱 포함 가능)을 컬럼명으로
+  const m = trimmed.match(/^`([^`]+)`|^([A-Za-z_][A-Za-z0-9_]*)/);
+  if (m) cols.push(m[1] || m[2]);
+}
+
 function parseMemberSql(sql: string): Record<string, unknown>[] {
   const results: Record<string, unknown>[] = [];
   const tableName = "zetyx_member_table";
   const esc = tableName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  // 1) CREATE TABLE 에서 추출한 컬럼 순서 (덤프 전역 공통)
+  const createCols = parseCreateTableColumns(sql, tableName);
+
   const regex = new RegExp(
     `INSERT\\s+INTO\\s+\`?${esc}\`?\\s*(?:\\(([^)]+)\\)\\s*)?VALUES\\s*`,
     "gi"
@@ -335,9 +433,10 @@ function parseMemberSql(sql: string): Record<string, unknown>[] {
 
   let match;
   while ((match = regex.exec(sql)) !== null) {
+    // 우선순위: INSERT 컬럼리스트 > CREATE TABLE 컬럼 > 하드코딩 fallback
     const cols = match[1]
       ? match[1].split(",").map((c) => c.trim().replace(/`/g, ""))
-      : MEMBER_COLUMNS;
+      : (createCols || MEMBER_COLUMNS_FALLBACK);
 
     const startPos = match.index + match[0].length;
     const valuesStr = _extractUntilSemicolon(sql, startPos);
