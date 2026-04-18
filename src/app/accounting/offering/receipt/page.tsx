@@ -62,6 +62,15 @@ function summaryOfEntries(entries: ReceiptEntry[]): string {
   return types.join(", ");
 }
 
+/** 해당 연·월의 마지막 일요일 날짜 (YYYY-MM-DD) */
+function lastSundayOfMonth(year: number, month1: number): string {
+  // month1 은 1~12. 마지막 일(day) 을 구한 뒤 해당 요일을 빼서 가장 가까운 이전(또는 당일) 일요일
+  const lastDay = new Date(Date.UTC(year, month1, 0)).getUTCDate();
+  const dow = new Date(Date.UTC(year, month1 - 1, lastDay)).getUTCDay(); // 0=일
+  const lastSun = lastDay - dow;
+  return `${year}-${String(month1).padStart(2, "0")}-${String(lastSun).padStart(2, "0")}`;
+}
+
 /* ───── helpers ───── */
 function fmtAmount(n: number): string {
   return n.toLocaleString("ko-KR");
@@ -276,28 +285,25 @@ function ReceiptForm({
 }) {
   const entries = receipt.entries || [];
 
-  // 월별 요약 행 생성 (각 월의 마지막 날짜 + 금액 합 + 유형 집합)
-  const byMonth = new Map<
-    string,
-    { lastDate: string; amount: number; types: Set<string> }
-  >();
+  // 월별 합계 행 생성.
+  //   - 금액: 해당 월 모든 offering 의 합계
+  //   - 적요: "십일조, 일반헌금" 고정 문구 (영수증 서식 관례)
+  //   - 년월일: 해당 월의 마지막 일요일 (연보가 드려지는 요일 기준)
+  const byMonth = new Map<string, number>(); // YYYY-MM → 금액 합계
   for (const e of entries) {
     const key = e.date.slice(0, 7);
-    if (!byMonth.has(key)) {
-      byMonth.set(key, { lastDate: e.date, amount: 0, types: new Set() });
-    }
-    const row = byMonth.get(key)!;
-    if (e.date > row.lastDate) row.lastDate = e.date;
-    row.amount += e.amount;
-    row.types.add(e.offeringType);
+    byMonth.set(key, (byMonth.get(key) || 0) + e.amount);
   }
   const monthRows = Array.from(byMonth.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([, v]) => ({
-      date: v.lastDate,
-      summary: Array.from(v.types).join(", "),
-      amount: v.amount,
-    }));
+    .map(([ym, amount]) => {
+      const [y, m] = ym.split("-").map(Number);
+      return {
+        date: lastSundayOfMonth(y, m),
+        summary: "십일조, 일반헌금",
+        amount,
+      };
+    });
 
   const church = receipt.church;
   const donationCode = church?.donationCode || "41";
