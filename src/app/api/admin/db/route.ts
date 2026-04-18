@@ -175,19 +175,30 @@ export async function POST(request: NextRequest) {
       // ==== User 는 "현재 로그인 사용자"만 남기고 전부 삭제 ====
       // 관리자 여럿인 경우를 고려해, 지금 요청한 세션의 userId 만 보존.
       // (lockout 방지 + 레거시 권한 덤프가 기존 권한을 오염시키지 않도록 단일화)
+      //
+      // Message.fromId / toId 는 onDelete 설정이 없어 FK RESTRICT 에 의해 DELETE 가
+      // 막히므로, User 삭제 전에 선제 정리한다. Session/PostVote/BoardUserPermission/
+      // UserGroupAccess/PasswordReset 는 Cascade, Post/Comment.authorId 는 SetNull
+      // 로 정상 처리됨 (FK_CHECKS 우회하지 않음).
       if (tableName === "User") {
-        await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=0");
-        const deleted = await prisma.$executeRawUnsafe(
-          `DELETE FROM \`${realTable}\` WHERE id <> ?`,
-          admin.id
-        );
-        await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=1");
+        const [deletedMsgs, deletedUsers] = await prisma.$transaction([
+          prisma.message.deleteMany({
+            where: {
+              OR: [
+                { fromId: { not: admin.id } },
+                { toId: { not: admin.id } },
+              ],
+            },
+          }),
+          prisma.user.deleteMany({ where: { id: { not: admin.id } } }),
+        ]);
         return NextResponse.json({
           success: true,
-          message: `User 테이블 초기화 완료 (${deleted}명 삭제, 현재 로그인 사용자 '${admin.userId}' 만 보존).`,
+          message: `User 테이블 초기화 완료 (${deletedUsers.count}명 삭제, 현재 로그인 사용자 '${admin.userId}' 만 보존. 관련 메시지 ${deletedMsgs.count}건, 타 사용자 세션·권한 자동 정리).`,
           preserved: 1,
           preservedUserId: admin.userId,
-          deleted,
+          deleted: deletedUsers.count,
+          deletedMessages: deletedMsgs.count,
         });
       }
 

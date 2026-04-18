@@ -1224,14 +1224,11 @@ function UserMigrationTab() {
   };
 
   const handleTruncateUser = async () => {
-    if (!confirm("[User] 테이블을 초기화하시겠습니까?\n\n현재 로그인한 사용자 계정만 남기고 모두 삭제합니다.\n로그인 세션(Session)도 초기화됩니다.\n이 작업은 되돌릴 수 없습니다.")) return;
+    if (!confirm("[User] 테이블을 초기화하시겠습니까?\n\n현재 로그인한 사용자 계정만 남기고 모두 삭제합니다.\n삭제된 사용자의 세션은 자동으로 정리됩니다 (본인 세션은 유지).\n이 작업은 되돌릴 수 없습니다.")) return;
     setTruncateMsg("초기화 중...");
     try {
-      await fetch("/api/admin/db", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "truncate-table", tableName: "Session" }),
-      });
+      // User 삭제 시 Session.user onDelete:Cascade 로 타 사용자 세션은 자동 제거.
+      // 이전 버전은 Session 먼저 truncate 했다가 본인 세션까지 날려 403 이 났음.
       const res = await fetch("/api/admin/db", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
