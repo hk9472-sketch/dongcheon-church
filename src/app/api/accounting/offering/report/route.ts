@@ -414,9 +414,9 @@ async function handleReceipt(
   });
   const churchMap = new Map(churchRows.map((r) => [r.key, r.value]));
   const church = {
-    name: churchMap.get("church_name") || "동천교회",
-    regNo: churchMap.get("church_reg_no") || "",
-    address: churchMap.get("church_address") || "",
+    name: churchMap.get("church_name") || "예수교장로회한국총공회 동천교회",
+    regNo: churchMap.get("church_reg_no") || "605-82-64504",
+    address: churchMap.get("church_address") || "부산시 동구 범곡로 9번길 7-7",
     repName: churchMap.get("church_rep_name") || "",
     repTitle: churchMap.get("church_rep_title") || "담임목사",
     donationCode: churchMap.get("church_donation_code") || "41",

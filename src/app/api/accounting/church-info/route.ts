@@ -18,9 +18,9 @@ const CHURCH_KEYS = [
 type ChurchKey = typeof CHURCH_KEYS[number];
 
 const DEFAULTS: Record<ChurchKey, string> = {
-  church_name: "동천교회",
-  church_reg_no: "",
-  church_address: "",
+  church_name: "예수교장로회한국총공회 동천교회",
+  church_reg_no: "605-82-64504",
+  church_address: "부산시 동구 범곡로 9번길 7-7",
   church_rep_name: "",
   church_rep_title: "담임목사",
   church_contact_name: "",

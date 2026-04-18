@@ -94,6 +94,11 @@ export default function OfferingReceiptPage() {
 
   // 기부금 수령인 override (출력 시 "동천교회 담임목사 ○○○" 부분 대체)
   const [receivedByOverride, setReceivedByOverride] = useState("");
+  // 발행일 (신청인/수령인 위에 표시되는 날짜). 기본값: 오늘 (KST)
+  const [issueDateStr, setIssueDateStr] = useState(() => {
+    const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
 
   // church info (could come from settings API)
   const churchName = "동천교회";
@@ -233,21 +238,36 @@ export default function OfferingReceiptPage() {
             )}
           </div>
 
-          {/* 기부금 수령인 입력 (영수증 하단 '기부금 수령인 ...' 영역 대체) */}
+          {/* 영수증 출력 추가 옵션 */}
           {receipt && (
-            <div className="mt-4 pt-3 border-t border-gray-200">
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                기부금 수령인 (출력 표시명)
-              </label>
-              <input
-                type="text"
-                value={receivedByOverride}
-                onChange={(e) => setReceivedByOverride(e.target.value)}
-                placeholder={`${receipt.church?.name || churchName}  ${receipt.church?.repTitle || churchRepresentative}  ${receipt.church?.repName || ""}`.trim()}
-                className="w-full md:w-[500px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-              />
-              <p className="mt-1 text-[11px] text-gray-400">
-                비워 두면 기본값(단체명 + 대표자 직함·성명) 으로 인쇄됩니다. 입력 값이 있으면 그대로 치환.
+            <div className="mt-4 pt-3 border-t border-gray-200 space-y-3">
+              <div className="flex flex-wrap items-end gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    발행일
+                  </label>
+                  <input
+                    type="date"
+                    value={issueDateStr}
+                    onChange={(e) => setIssueDateStr(e.target.value)}
+                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  />
+                </div>
+                <div className="flex-1 min-w-[260px]">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    기부금 수령인 (출력 표시명)
+                  </label>
+                  <input
+                    type="text"
+                    value={receivedByOverride}
+                    onChange={(e) => setReceivedByOverride(e.target.value)}
+                    placeholder={`${receipt.church?.name || churchName}  ${receipt.church?.repTitle || churchRepresentative}  ${receipt.church?.repName || ""}`.trim()}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400">
+                발행일은 신청인/수령인 서명란 위에 함께 표시됩니다. 수령인 란을 비우면 단체명+대표자 직함·성명으로 인쇄됩니다.
               </p>
             </div>
           )}
@@ -268,6 +288,7 @@ export default function OfferingReceiptPage() {
           churchFallbackName={churchName}
           churchFallbackTitle={churchRepresentative}
           receivedByOverride={receivedByOverride}
+          issueDateStr={issueDateStr}
         />
       )}
 
@@ -306,13 +327,23 @@ function ReceiptForm({
   churchFallbackName,
   churchFallbackTitle,
   receivedByOverride,
+  issueDateStr,
 }: {
   receipt: ReceiptData;
   hasMemberEdit: boolean;
   churchFallbackName: string;
   churchFallbackTitle: string;
   receivedByOverride?: string;
+  issueDateStr?: string;
 }) {
+  /** "YYYY-MM-DD" → "2026 년 4 월 18 일" */
+  function fmtIssue(s?: string): string {
+    if (!s) return fmtIssueDate();
+    const parts = s.split("-");
+    if (parts.length !== 3) return fmtIssueDate();
+    return `${parts[0]} 년 ${Number(parts[1])} 월 ${Number(parts[2])} 일`;
+  }
+  const issueDateLabel = fmtIssue(issueDateStr);
   const entries = receipt.entries || [];
 
   // 월별 합계 행 생성.
@@ -511,11 +542,11 @@ function ReceiptForm({
         위와 같이 기부하였음을 증명하여 주시기 바랍니다.
       </p>
       <div className="flex justify-end items-center gap-2 my-2">
-        <span className="text-[12px]">{fmtIssueDate()}</span>
+        <span className="text-[12px]">{issueDateLabel}</span>
       </div>
       <div className="flex justify-end items-center gap-2 mb-4">
         <span className="text-[12px]">신청인</span>
-        <span className="text-[13px] font-bold min-w-[4em] text-center border-b border-black">
+        <span className="text-[13px] font-bold text-center border-b border-black px-2 whitespace-nowrap">
           {hasMemberEdit ? receipt.memberName : ""}
         </span>
         <span className="text-[12px]">(인)</span>
@@ -523,22 +554,22 @@ function ReceiptForm({
 
       <p className="text-[12px] mt-4 mb-1">위와 같이 기부금을 기부하였음을 증명합니다.</p>
       <div className="flex justify-end items-center gap-2 my-2">
-        <span className="text-[12px]">{fmtIssueDate()}</span>
+        <span className="text-[12px]">{issueDateLabel}</span>
       </div>
-      <div className="flex justify-end items-center gap-3 mb-2">
+      <div className="flex justify-end items-center gap-2 mb-2">
         <span className="text-[12px]">기부금 수령인</span>
         {receivedByOverride && receivedByOverride.trim() ? (
-          // 사용자 입력 override: 한 줄로 그대로 표시
-          <span className="text-[13px] font-bold min-w-[12em] text-center border-b border-black">
+          // 사용자 입력 override: 한 줄로 그대로 표시 (내용 길이만큼만)
+          <span className="text-[13px] font-bold text-center border-b border-black px-2 whitespace-nowrap">
             {receivedByOverride}
           </span>
         ) : (
           // 기본: 단체명 + 직함 + 대표자 성명 분리 표시
           <>
-            <span className="text-[13px] font-bold min-w-[6em] text-center border-b border-black">
+            <span className="text-[13px] font-bold text-center border-b border-black px-2 whitespace-nowrap">
               {church?.name || churchFallbackName}
             </span>
-            <span className="text-[12px]">
+            <span className="text-[12px] whitespace-nowrap">
               {church?.repTitle || churchFallbackTitle}{" "}
               {church?.repName || ""}
             </span>
