@@ -16,6 +16,20 @@ interface ReceiptData {
   total: number;
   selectedMemberId?: number; // 사용자가 선택한 구성원 (head와 다르면 rollup 안내)
   familyMembers?: { id: number; name: string }[];
+  church?: {
+    name: string;
+    regNo: string;          // 고유번호/사업자등록번호
+    address: string;
+    repName: string;
+    repTitle: string;
+    donationCode: string;   // 기부금 구분 (종교단체=41)
+  };
+  donor?: {
+    residentNumber: string | null;
+    address: string | null;
+    phone: string | null;
+    email: string | null;
+  };
 }
 
 /* ───── helpers ───── */
@@ -228,6 +242,18 @@ export default function OfferingReceiptPage() {
                     <td className="py-1.5 text-gray-900">{receipt.groupName}</td>
                   </tr>
                 )}
+                {receipt.donor?.residentNumber && (
+                  <tr>
+                    <td className="pr-4 py-1.5 text-gray-600 font-medium">주민번호</td>
+                    <td className="py-1.5 text-gray-900 font-mono">{receipt.donor.residentNumber}</td>
+                  </tr>
+                )}
+                {receipt.donor?.address && (
+                  <tr>
+                    <td className="pr-4 py-1.5 text-gray-600 font-medium">주소</td>
+                    <td className="py-1.5 text-gray-900">{receipt.donor.address}</td>
+                  </tr>
+                )}
                 <tr>
                   <td className="pr-4 py-1.5 text-gray-600 font-medium">기간</td>
                   <td className="py-1.5 text-gray-900">
@@ -236,6 +262,16 @@ export default function OfferingReceiptPage() {
                 </tr>
               </tbody>
             </table>
+            {/* 기부자 정보가 비어 있을 때 안내 (인쇄 시 숨김) */}
+            {(!receipt.donor?.residentNumber || !receipt.donor?.address) && (
+              <p className="mt-3 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5 print:hidden">
+                {!receipt.donor?.residentNumber && "주민등록번호"}
+                {!receipt.donor?.residentNumber && !receipt.donor?.address && " / "}
+                {!receipt.donor?.address && "주소"}
+                {" "}가 등록되어 있지 않습니다. 소득공제 제출용으로 사용하려면
+                <strong> 기부자 정보</strong> 메뉴에서 먼저 등록해 주세요.
+              </p>
+            )}
           </div>
 
           {/* offering details table */}
@@ -268,18 +304,52 @@ export default function OfferingReceiptPage() {
             </table>
           </div>
 
+          {/* 기부금 구분 (국세청 서식 29호 - 종교단체 41) */}
+          {receipt.church && (
+            <div className="mb-6">
+              <table className="w-full text-xs border-collapse border border-gray-400">
+                <tbody>
+                  <tr>
+                    <td className="border border-gray-300 bg-gray-50 px-3 py-2 text-gray-700 w-32">기부금 종류</td>
+                    <td className="border border-gray-300 px-3 py-2 text-gray-900">
+                      종교단체 기부금 (코드 {receipt.church.donationCode})
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {/* message */}
-          <div className="text-center text-sm text-gray-600 mb-10 leading-relaxed">
-            <p>위 금액을 기부금으로 영수하였음을 증명합니다.</p>
+          <div className="text-center text-sm text-gray-600 mb-8 leading-relaxed">
+            <p>위 금액을 「소득세법」 제34조 및 「조세특례제한법」에 의한 기부금으로 영수하였음을 증명합니다.</p>
           </div>
 
-          {/* footer */}
+          {/* footer - 발급자(교회) 정보 */}
           <div className="text-center space-y-2">
             <p className="text-sm text-gray-600">{todayFormatted}</p>
-            <div className="mt-6">
-              <p className="text-lg font-bold text-gray-900">{churchName}</p>
-              <p className="text-sm text-gray-600 mt-1">{churchRepresentative}</p>
+            <div className="mt-6 space-y-0.5">
+              <p className="text-lg font-bold text-gray-900">
+                {receipt.church?.name || churchName}
+              </p>
+              {receipt.church?.address && (
+                <p className="text-xs text-gray-600">{receipt.church.address}</p>
+              )}
+              {receipt.church?.regNo && (
+                <p className="text-xs text-gray-600">고유번호 {receipt.church.regNo}</p>
+              )}
+              <p className="text-sm text-gray-700 pt-1">
+                {receipt.church?.repTitle || churchRepresentative}{" "}
+                {receipt.church?.repName && <strong>{receipt.church.repName}</strong>}
+                <span className="ml-2 text-gray-400">(인)</span>
+              </p>
             </div>
+          </div>
+
+          {/* 보존기간 안내 */}
+          <div className="mt-8 pt-4 border-t border-gray-200 text-[10px] text-gray-400 leading-relaxed print:text-gray-500">
+            <p>• 본 영수증은 「소득세법 시행령」 제208조의3 및 「법인세법 시행령」 제36조에 따라 5년간 보관해야 합니다.</p>
+            <p>• 국세청 홈택스 연말정산 간소화 서비스에서도 확인하실 수 있습니다.</p>
           </div>
         </div>
       )}

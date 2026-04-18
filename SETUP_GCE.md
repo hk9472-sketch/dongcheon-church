@@ -826,6 +826,45 @@ chmod +x ~/disk_check.sh
 # 0 9 * * * /home/hk9472/disk_check.sh | mail -s "dongcheon disk check" you@example.com
 ```
 
+#### Nginx Brotli 압축 (선택)
+
+기본 gzip 보다 10~20% 더 작은 응답 크기. Debian/Ubuntu 기준 `libnginx-mod-brotli` 패키지 사용.
+
+```bash
+# Ubuntu 22.04 기준
+sudo apt install -y libnginx-mod-brotli
+# 모듈 로드는 apt 설치 시 /etc/nginx/modules-enabled/ 에 자동 추가됨.
+```
+
+`/etc/nginx/nginx.conf` 의 `http {}` 블록에 추가:
+
+```nginx
+# 기존 gzip 블록 옆에
+brotli on;
+brotli_comp_level 5;
+brotli_static on;
+brotli_types
+  text/plain
+  text/css
+  application/json
+  application/javascript
+  text/xml
+  application/xml
+  application/xml+rss
+  text/javascript
+  image/svg+xml;
+```
+
+적용:
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+
+# 확인 (Brotli 는 Accept-Encoding: br 요청에만 응답)
+curl -I -H "Accept-Encoding: br" https://dongcheonchurch.org/
+# Content-Encoding: br 헤더가 보이면 성공
+```
+
 #### 헬스 상세 조회
 
 `/api/health` 는 이제 uptime/memory/active sessions 를 반환한다.

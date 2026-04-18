@@ -42,12 +42,20 @@ export default async function VerifyEmailPage({ searchParams }: PageProps) {
                   ? errorMessages[error]
                   : "알 수 없는 오류가 발생했습니다."}
               </p>
-              <Link
-                href="/auth/register"
-                className="inline-block mt-2 px-6 py-2.5 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors"
-              >
-                다시 가입하기
-              </Link>
+              <div className="flex items-center justify-center gap-2 flex-wrap pt-2">
+                <Link
+                  href="/auth/resend-verify"
+                  className="inline-block px-5 py-2.5 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors"
+                >
+                  인증 메일 재발송 / 이메일 수정
+                </Link>
+                <Link
+                  href="/auth/register"
+                  className="inline-block px-5 py-2.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  다시 가입
+                </Link>
+              </div>
             </>
           )}
         </div>

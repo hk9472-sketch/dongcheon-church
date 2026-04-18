@@ -351,7 +351,11 @@ async function handleReceipt(
 
   const head = await prisma.offeringMember.findUnique({
     where: { id: headId },
-    select: { id: true, name: true, groupName: true },
+    select: {
+      id: true, name: true, groupName: true,
+      // 기부자 정보 (영수증 발급용)
+      residentNumber: true, address: true, phone: true, donorEmail: true,
+    },
   });
   if (!head) {
     return NextResponse.json({ error: "가족 대표 정보를 찾을 수 없습니다" }, { status: 404 });
@@ -386,6 +390,28 @@ async function handleReceipt(
     grandTotal += e.amount;
   }
 
+  // 발급자(교회) 정보 — 국세청 서식 29호 필수 항목
+  const churchKeys = [
+    "church_name",
+    "church_reg_no",
+    "church_address",
+    "church_rep_name",
+    "church_rep_title",
+    "church_donation_code",
+  ];
+  const churchRows = await prisma.siteSetting.findMany({
+    where: { key: { in: churchKeys } },
+  });
+  const churchMap = new Map(churchRows.map((r) => [r.key, r.value]));
+  const church = {
+    name: churchMap.get("church_name") || "동천교회",
+    regNo: churchMap.get("church_reg_no") || "",
+    address: churchMap.get("church_address") || "",
+    repName: churchMap.get("church_rep_name") || "",
+    repTitle: churchMap.get("church_rep_title") || "담임목사",
+    donationCode: churchMap.get("church_donation_code") || "41",
+  };
+
   // 페이지(ReceiptData)의 flat 형식에 맞춰 응답.
   // head.id/name/groupName 를 대표자로 사용 → 가족 전원 금액이 합산된 영수증이 head 명의로 출력.
   return NextResponse.json({
@@ -399,6 +425,13 @@ async function handleReceipt(
     // 부가 정보 (UI 확장용)
     selectedMemberId: selected.id,
     familyMembers: siblings,
+    church,
+    donor: {
+      residentNumber: head.residentNumber,
+      address: head.address,
+      phone: head.phone,
+      email: head.donorEmail,
+    },
     entries: entries.map((e) => ({
       date: toKSTDateStr(e.date),
       memberName: e.member.name,

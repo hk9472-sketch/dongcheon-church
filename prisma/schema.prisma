@@ -930,6 +930,13 @@ model OfferingMember {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
+  // 기부금영수증용 기부자 정보 (국세청 서식 29호)
+  // 주민등록번호는 개인정보보호법상 고유식별정보 → 최소 수집·접근 제한 필수
+  residentNumber String? @db.VarChar(14)            // 주민등록번호 (예: 800101-1234567)
+  address        String? @db.VarChar(255)           // 주소
+  phone          String? @db.VarChar(20)            // 연락처
+  donorEmail     String? @db.VarChar(255)           // 영수증 수령 이메일
+
   entries   OfferingEntry[]
 
   @@index([familyId])
