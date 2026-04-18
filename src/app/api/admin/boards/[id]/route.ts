@@ -91,11 +91,13 @@ export async function PUT(
       // 삭제: 기존에 있지만 incoming에 없는 카테고리
       const toDelete = [...existingIds].filter((eid) => !incomingIds.has(eid));
       if (toDelete.length > 0) {
-        // 삭제되는 카테고리의 게시글은 카테고리 null로 변경
-        await prisma.post.updateMany({
-          where: { categoryId: { in: toDelete } },
-          data: { categoryId: null },
-        });
+        // 삭제되는 카테고리의 게시글은 카테고리 null로 변경 — updatedAt 보존 위해
+        // 원시 SQL (Prisma.join 으로 IN 절 안전 바인딩)
+        const placeholders = toDelete.map(() => "?").join(",");
+        await prisma.$executeRawUnsafe(
+          `UPDATE posts SET categoryId = NULL WHERE categoryId IN (${placeholders})`,
+          ...toDelete
+        );
         await prisma.category.deleteMany({
           where: { id: { in: toDelete } },
         });

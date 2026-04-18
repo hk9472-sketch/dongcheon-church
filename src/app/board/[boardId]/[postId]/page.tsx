@@ -72,16 +72,14 @@ export default async function PostDetailPage({ params }: PageProps) {
     !(post.authorId === null && hasUnlockCookie);
 
   // 조회수 증가 (비밀글로 차단되지 않을 때만, 쿠키로 중복 방지 - 24시간)
-  // updateMany 사용하여 @updatedAt 자동 갱신 회피 (수정 표시 방지)
+  // Prisma 5+ 는 updateMany 에서도 @updatedAt 이 갱신되므로, 원시 UPDATE 로
+  // updatedAt 컬럼을 건드리지 않고 hit 만 증가시킨다.
   let hitIncremented = false;
   if (!isSecretBlocked) {
     const viewCookieName = `dc_view_${post.id}`;
     const alreadyViewed = !!cookieStore.get(viewCookieName)?.value;
     if (!alreadyViewed) {
-      await prisma.post.updateMany({
-        where: { id: post.id },
-        data: { hit: { increment: 1 } },
-      });
+      await prisma.$executeRaw`UPDATE posts SET hit = hit + 1 WHERE id = ${post.id}`;
       hitIncremented = true;
       // Next.js 15+ Server Component 에서도 cookies().set() 가능하지만,
       // 특정 렌더 단계에서는 실패할 수 있어 try/catch 로 방어

@@ -81,11 +81,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 댓글 수 업데이트 (updateMany로 @updatedAt 자동 갱신 회피)
-    await prisma.post.updateMany({
-      where: { id: postId },
-      data: { totalComment: { increment: 1 } },
-    });
+    // 댓글 수 업데이트 — Prisma 5+ 는 updateMany 에서도 @updatedAt 이 갱신되므로
+    // 원시 SQL 로 updatedAt 건드리지 않고 totalComment 만 증가시킨다.
+    await prisma.$executeRaw`UPDATE posts SET totalComment = totalComment + 1 WHERE id = ${postId}`;
 
     return NextResponse.json({ id: comment.id });
   } catch (error) {
@@ -212,11 +210,8 @@ export async function DELETE(request: NextRequest) {
 
     await prisma.comment.delete({ where: { id: commentId } });
 
-    // 댓글 수 감소 (updateMany로 @updatedAt 자동 갱신 회피)
-    await prisma.post.updateMany({
-      where: { id: comment.postId },
-      data: { totalComment: { decrement: 1 } },
-    });
+    // 댓글 수 감소 — 원시 SQL 로 updatedAt 보존.
+    await prisma.$executeRaw`UPDATE posts SET totalComment = GREATEST(totalComment - 1, 0) WHERE id = ${comment.postId}`;
 
     return NextResponse.json({ success: true });
   } catch (error) {

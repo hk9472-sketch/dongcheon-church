@@ -47,11 +47,12 @@ export async function GET(request: NextRequest) {
     try {
       const fileBuffer = await readFile(resolved);
 
-      // 다운로드 카운트 증가 (updateMany로 @updatedAt 자동 갱신 회피)
-      await prisma.post.updateMany({
-        where: { id: postId },
-        data: fileNo === 2 ? { download2: { increment: 1 } } : { download1: { increment: 1 } },
-      });
+      // 다운로드 카운트 증가 — 원시 SQL 로 updatedAt 보존.
+      if (fileNo === 2) {
+        await prisma.$executeRaw`UPDATE posts SET download2 = download2 + 1 WHERE id = ${postId}`;
+      } else {
+        await prisma.$executeRaw`UPDATE posts SET download1 = download1 + 1 WHERE id = ${postId}`;
+      }
 
       // 파일 응답 (origName 없으면 경로에서 파일명만 추출)
       const displayName = origName || path.basename(fileName);

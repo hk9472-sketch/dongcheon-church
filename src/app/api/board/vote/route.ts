@@ -84,15 +84,13 @@ export async function POST(request: NextRequest) {
 
     // 추천 기록 저장 + 카운트 증가
     // 비로그인자의 경우 PostVote.ip 필드에 쿠키 토큰을 저장 (NAT 환경 대응)
+    // updatedAt 보존을 위해 Post.vote 증가는 원시 SQL 로.
     const voteIdentifier = userId ? ip : (voteToken as string);
     await prisma.$transaction([
       prisma.postVote.create({
         data: { postId, userId, ip: voteIdentifier },
       }),
-      prisma.post.updateMany({
-        where: { id: postId },
-        data: { vote: { increment: 1 } },
-      }),
+      prisma.$executeRaw`UPDATE posts SET vote = vote + 1 WHERE id = ${postId}`,
     ]);
 
     const updated = await prisma.post.findUnique({ where: { id: postId } });

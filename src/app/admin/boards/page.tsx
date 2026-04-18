@@ -1,5 +1,6 @@
 import prisma from "@/lib/db";
 import Link from "next/link";
+import GrantGuestWriteButton from "@/components/admin/GrantGuestWriteButton";
 
 export default async function AdminBoardsPage() {
   const boards = await prisma.board.findMany({
@@ -9,14 +10,17 @@ export default async function AdminBoardsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-xl font-bold text-gray-800">게시판 관리</h1>
-        <Link
-          href="/admin/boards/create"
-          className="px-4 py-2 text-sm bg-blue-700 text-white rounded hover:bg-blue-800 transition-colors"
-        >
-          + 게시판 생성
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          <GrantGuestWriteButton />
+          <Link
+            href="/admin/boards/create"
+            className="px-4 py-2 text-sm bg-blue-700 text-white rounded hover:bg-blue-800 transition-colors"
+          >
+            + 게시판 생성
+          </Link>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">

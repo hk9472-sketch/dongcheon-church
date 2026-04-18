@@ -40,9 +40,7 @@ export async function POST(request: NextRequest) {
   for (const g of commentGroups) countByPost.set(g.postId, g._count._all);
 
   // drift가 있는 post만 업데이트 (totalComment != actual)
-  // 실제 댓글이 0개인데 totalComment > 0인 경우도 처리
-  // updateMany 를 써서 @updatedAt 자동 갱신을 회피 (집계치 보정은 본문 수정이
-  // 아니므로 updatedAt 을 건드리지 않아야 함).
+  // 원시 SQL 로 updatedAt 보존 (Prisma 5+ 는 updateMany 에서도 @updatedAt 자동 갱신).
   const postsWithCount = await prisma.post.findMany({
     select: { id: true, totalComment: true },
   });
@@ -50,10 +48,7 @@ export async function POST(request: NextRequest) {
   for (const p of postsWithCount) {
     const actual = countByPost.get(p.id) ?? 0;
     if (actual !== p.totalComment) {
-      await prisma.post.updateMany({
-        where: { id: p.id },
-        data: { totalComment: actual },
-      });
+      await prisma.$executeRaw`UPDATE posts SET totalComment = ${actual} WHERE id = ${p.id}`;
       postUpdated++;
     }
   }
