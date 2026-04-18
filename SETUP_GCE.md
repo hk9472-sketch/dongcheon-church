@@ -754,6 +754,32 @@ free -h
 htop
 ```
 
+### 관리자 복구 / 재설정
+
+데이터 이관 · truncate · 실수 삭제 등으로 관리자 계정이 사라졌을 때 사용.
+
+```bash
+cd ~/dongcheon-church
+
+# 기존 userId 있으면 비번 재설정 + 최고관리자 승격, 없으면 신규 생성
+npx tsx scripts/bootstrap-admin.ts admin <새비밀번호> "관리자이름"
+
+# 또는 환경변수로
+ADMIN_USERID=admin ADMIN_PASSWORD=<비번> ADMIN_NAME=관리자 npx tsx scripts/bootstrap-admin.ts
+```
+
+실행 후 현재 관리자 목록이 출력된다. 브라우저에서 로그인 → `/admin` 접근 확인.
+
+**예방책**
+- `/admin/db` → "테이블 초기화(TRUNCATE)" 의 **User** 액션은 2026-04-18 패치부터 관리자(isAdmin ≤ 2) 를 자동 보존한다 (일반회원만 삭제).
+- SQL 콘솔/외부 스크립트로 `TRUNCATE users` 를 직접 실행하는 건 여전히 관리자까지 삭제되니 금지.
+- 이관 작업 직전에는 **관리자 레코드 dump** 백업 필수:
+  ```bash
+  mysqldump -u dongcheon -p --no-tablespaces \
+    dongcheon users --where='isAdmin<=2' > admin_backup.sql
+  ```
+  사고 시 `mysql -u dongcheon -p dongcheon < admin_backup.sql`.
+
 ### 기부자 주민번호 암호화 키 (RRN_ENCRYPTION_KEY)
 
 기부금영수증(국세청 서식 29호) 발급용 주민등록번호는 DB 에 **AES-256-GCM 암호화** 후 저장된다. 운영 환경에서는 필수 설정.

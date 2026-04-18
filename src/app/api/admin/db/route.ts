@@ -151,6 +151,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 테이블 초기화 (TRUNCATE + AUTO_INCREMENT 리셋)
+    // User 테이블은 관리자(isAdmin <= 2) 를 자동 보존한 뒤 나머지만 삭제
     if (action === "truncate-table") {
       const { tableName } = body;
       // Prisma 모델명 → 실제 MySQL 테이블명 매핑
@@ -170,6 +171,25 @@ export async function POST(request: NextRequest) {
         );
       }
       const realTable = TABLE_MAP[tableName];
+
+      // ==== User 는 관리자 보존 삭제 ====
+      // 마이그레이션 과정에서 관리자까지 지워져 락아웃되는 사고를 방지.
+      if (tableName === "User") {
+        await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=0");
+        const preserved = await prisma.user.count({ where: { isAdmin: { lte: 2 } } });
+        // isAdmin 수치가 작을수록 상위 권한 (1=최고, 2=그룹). 3 이상만 삭제.
+        const deleted = await prisma.$executeRawUnsafe(
+          `DELETE FROM \`${realTable}\` WHERE isAdmin >= 3`
+        );
+        await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=1");
+        return NextResponse.json({
+          success: true,
+          message: `User 테이블 초기화 완료 (일반회원 ${deleted}명 삭제, 관리자 ${preserved}명 보존).`,
+          preserved,
+          deleted,
+        });
+      }
+
       // FK 제약 해제 후 TRUNCATE (AUTO_INCREMENT도 함께 초기화됨)
       await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=0");
       await prisma.$executeRawUnsafe(`TRUNCATE TABLE \`${realTable}\``);
