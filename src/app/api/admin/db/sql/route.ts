@@ -83,12 +83,13 @@ function isReadQuery(query: string): boolean {
 }
 
 // ============================================================
-// 프로덕션 가드 — SQL 콘솔은 운영 환경에서 기본 차단
+// 프로덕션 가드 — 임의 SQL 실행(POST)만 운영 환경에서 기본 차단.
+// GET(테이블 목록/구조/데이터 조회)은 admin 인증만으로 허용.
 // ============================================================
 function productionGate() {
   if (process.env.NODE_ENV === "production" && process.env.ENABLE_SQL_CONSOLE !== "true") {
     return NextResponse.json(
-      { message: "SQL 콘솔은 프로덕션에서 비활성화되어 있습니다." },
+      { message: "SQL 실행 콘솔은 프로덕션에서 비활성화되어 있습니다. (.env 에 ENABLE_SQL_CONSOLE=true 설정 시 활성화)" },
       { status: 403 }
     );
   }
@@ -96,11 +97,9 @@ function productionGate() {
 }
 
 // ============================================================
-// GET: 테이블 목록, 구조, 데이터 조회
+// GET: 테이블 목록, 구조, 데이터 조회 (읽기 전용, admin 인증만 필요)
 // ============================================================
 export async function GET(request: NextRequest) {
-  const gate = productionGate();
-  if (gate) return gate;
   const admin = await verifyAdmin();
   if (!admin) return NextResponse.json({ error: "권한 없음" }, { status: 403 });
 
