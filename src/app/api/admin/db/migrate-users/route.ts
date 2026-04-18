@@ -231,25 +231,44 @@ export async function POST(request: NextRequest) {
 // ============================================================
 async function buildPreviewResponse(connInfo: ConnectionInfo | null, legacyDb: string) {
   const legacyUsers = await fetchLegacyUsers(connInfo, legacyDb);
-  const existingUsers = await prisma.user.findMany({ select: { userId: true } });
+  const existingUsers = await prisma.user.findMany({
+    select: { userId: true, isAdmin: true },
+  });
   const existingSet = new Set(existingUsers.map((u) => u.userId));
+  const existingAdminSet = new Set(
+    existingUsers.filter((u) => u.isAdmin <= 2).map((u) => u.userId)
+  );
 
-  const preview = legacyUsers.map((u) => ({
-    no: Number(u.no || 0),
-    userId: String(u.user_id || ""),
-    name: String(u.name || ""),
-    email: String(u.email || ""),
-    level: Number(u.level || 10),
-    isAdmin: Number(u.is_admin || 3),
-    regDate: u.reg_date ? new Date(Number(u.reg_date) * 1000).toISOString() : null,
-    alreadyExists: existingSet.has(String(u.user_id || "")),
-    hasPassword: !!u.password,
-  }));
+  const preview = legacyUsers.map((u) => {
+    const uid = String(u.user_id || "");
+    const legacyIsAdmin = Number(u.is_admin || 3);
+    const alreadyExists = existingSet.has(uid);
+    const skipLegacyAdmin = legacyIsAdmin <= 2;
+    const skipExistingAdmin = existingAdminSet.has(uid);
+    return {
+      no: Number(u.no || 0),
+      userId: uid,
+      name: String(u.name || ""),
+      email: String(u.email || ""),
+      level: Number(u.level || 10),
+      isAdmin: legacyIsAdmin,
+      regDate: u.reg_date ? new Date(Number(u.reg_date) * 1000).toISOString() : null,
+      alreadyExists,
+      hasPassword: !!u.password,
+      excludedReason: skipLegacyAdmin
+        ? "legacy-admin"
+        : skipExistingAdmin
+        ? "existing-admin"
+        : null,
+    };
+  });
 
   return NextResponse.json({
     total: legacyUsers.length,
     alreadyMigrated: preview.filter((p) => p.alreadyExists).length,
-    toMigrate: preview.filter((p) => !p.alreadyExists).length,
+    toMigrate: preview.filter((p) => !p.alreadyExists && !p.excludedReason).length,
+    excludedLegacyAdmin: preview.filter((p) => p.excludedReason === "legacy-admin").length,
+    excludedExistingAdmin: preview.filter((p) => p.excludedReason === "existing-admin").length,
     users: preview,
   });
 }
@@ -262,25 +281,44 @@ async function buildSqlPreviewResponse(sql: string) {
     return NextResponse.json({ error: "SQL 데이터가 필요합니다." }, { status: 400 });
   }
   const legacyUsers = parseMemberSql(sql);
-  const existingUsers = await prisma.user.findMany({ select: { userId: true } });
+  const existingUsers = await prisma.user.findMany({
+    select: { userId: true, isAdmin: true },
+  });
   const existingSet = new Set(existingUsers.map((u) => u.userId));
+  const existingAdminSet = new Set(
+    existingUsers.filter((u) => u.isAdmin <= 2).map((u) => u.userId)
+  );
 
-  const preview = legacyUsers.map((u) => ({
-    no: Number(u.no || 0),
-    userId: String(u.user_id || ""),
-    name: String(u.name || ""),
-    email: String(u.email || ""),
-    level: Number(u.level || 10),
-    isAdmin: Number(u.is_admin || 3),
-    regDate: u.reg_date ? new Date(Number(u.reg_date) * 1000).toISOString() : null,
-    alreadyExists: existingSet.has(String(u.user_id || "")),
-    hasPassword: !!u.password,
-  }));
+  const preview = legacyUsers.map((u) => {
+    const uid = String(u.user_id || "");
+    const legacyIsAdmin = Number(u.is_admin || 3);
+    const alreadyExists = existingSet.has(uid);
+    const skipLegacyAdmin = legacyIsAdmin <= 2;
+    const skipExistingAdmin = existingAdminSet.has(uid);
+    return {
+      no: Number(u.no || 0),
+      userId: uid,
+      name: String(u.name || ""),
+      email: String(u.email || ""),
+      level: Number(u.level || 10),
+      isAdmin: legacyIsAdmin,
+      regDate: u.reg_date ? new Date(Number(u.reg_date) * 1000).toISOString() : null,
+      alreadyExists,
+      hasPassword: !!u.password,
+      excludedReason: skipLegacyAdmin
+        ? "legacy-admin"
+        : skipExistingAdmin
+        ? "existing-admin"
+        : null,
+    };
+  });
 
   return NextResponse.json({
     total: legacyUsers.length,
     alreadyMigrated: preview.filter((p) => p.alreadyExists).length,
-    toMigrate: preview.filter((p) => !p.alreadyExists).length,
+    toMigrate: preview.filter((p) => !p.alreadyExists && !p.excludedReason).length,
+    excludedLegacyAdmin: preview.filter((p) => p.excludedReason === "legacy-admin").length,
+    excludedExistingAdmin: preview.filter((p) => p.excludedReason === "existing-admin").length,
     users: preview,
   });
 }
@@ -420,18 +458,41 @@ async function runMigration(
   legacyUsers: Record<string, unknown>[],
   skipExisting: boolean
 ) {
-  const existingUsers = await prisma.user.findMany({ select: { userId: true } });
+  // 신규 DB 의 관리자(isAdmin <= 2) userId 집합 — 이관 중 절대 덮어쓰지 않음
+  const existingUsers = await prisma.user.findMany({
+    select: { userId: true, isAdmin: true },
+  });
   const existingSet = new Set(existingUsers.map((u) => u.userId));
+  const existingAdminSet = new Set(
+    existingUsers.filter((u) => u.isAdmin <= 2).map((u) => u.userId)
+  );
   const tempHash = await hashPassword("__legacy_migration__");
 
   let migrated = 0;
   let skipped = 0;
+  let skippedLegacyAdmin = 0;      // 레거시 덤프의 관리자(is_admin<=2) 레코드 스킵
+  let skippedExistingAdmin = 0;    // 신규 DB 의 관리자와 userId 중복
   const errors: string[] = [];
 
   for (const u of legacyUsers) {
     const userId = String(u.user_id || "").trim();
     if (!userId) {
       errors.push(`빈 user_id 건너뜀 (no: ${u.no})`);
+      continue;
+    }
+
+    // ==== 관리자 보호 ====
+    // 1) 레거시 덤프에 is_admin<=2 인 레코드는 이관하지 않는다.
+    //    신규 시스템의 관리자/권한 체계는 레거시 데이터와 독립이어야 함.
+    const legacyIsAdmin = Number(u.is_admin || 3);
+    if (legacyIsAdmin <= 2) {
+      skippedLegacyAdmin++;
+      continue;
+    }
+    // 2) 신규 DB 에 이미 관리자(isAdmin<=2) 로 등록된 userId 면 스킵.
+    //    동일 userId 덤프를 받아들이면 권한이 덮여질 수 있음.
+    if (existingAdminSet.has(userId)) {
+      skippedExistingAdmin++;
       continue;
     }
 
@@ -498,6 +559,8 @@ async function runMigration(
     total: legacyUsers.length,
     migrated,
     skipped,
+    skippedLegacyAdmin,
+    skippedExistingAdmin,
     errorCount: errors.length,
     errors: errors.slice(0, 20),
   });
