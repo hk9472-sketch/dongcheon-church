@@ -198,7 +198,7 @@ export default async function PostDetailPage({ params }: PageProps) {
   });
 
   // 5-1. 인근 게시글 목록 (목록 화면과 같은 headnum/arrangenum 순서 기준
-  //      앞/뒤 각 10건). 현재글 제외, 공지 제외.
+  //      앞/뒤 각 5건). 현재글 포함, 공지 제외.
   const nearbyFields = {
     id: true, subject: true, authorName: true, createdAt: true,
     hit: true, totalComment: true, isSecret: true, depth: true,
@@ -215,7 +215,7 @@ export default async function PostDetailPage({ params }: PageProps) {
         ],
       },
       orderBy: [{ headnum: "desc" }, { arrangenum: "desc" }],
-      take: 10,
+      take: 5,
       select: nearbyFields,
     }),
     prisma.post.findMany({
@@ -228,7 +228,7 @@ export default async function PostDetailPage({ params }: PageProps) {
         ],
       },
       orderBy: [{ headnum: "asc" }, { arrangenum: "asc" }],
-      take: 10,
+      take: 5,
       select: nearbyFields,
     }),
   ]);
@@ -519,7 +519,33 @@ export default async function PostDetailPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* 인근 게시글 목록 (앞뒤 10건씩, 현재 글은 강조) */}
+      {/* 하단 버튼 — 관련글(인근 게시글 목록) 위로 이동 */}
+      <div className="flex items-center justify-between">
+        <Link
+          href={`/board/${boardId}`}
+          className="px-5 py-2 text-sm border border-gray-400 rounded hover:bg-gray-50 transition-colors"
+        >
+          목록
+        </Link>
+        <div className="flex gap-2">
+          {board.useReply && (
+            <Link
+              href={`/board/${boardId}/write?mode=reply&no=${post.id}`}
+              className="px-4 py-2 text-sm border border-gray-400 rounded hover:bg-gray-50 transition-colors"
+            >
+              답글
+            </Link>
+          )}
+          <Link
+            href={`/board/${boardId}/write`}
+            className="px-5 py-2 text-sm bg-blue-700 text-white rounded hover:bg-blue-800 transition-colors skin-btn-primary"
+          >
+            글쓰기
+          </Link>
+        </div>
+      </div>
+
+      {/* 인근 게시글 목록 (앞뒤 5건씩, 현재 글은 강조) */}
       {nearbyPosts.length > 1 && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-400 overflow-hidden">
           <div className="px-4 py-2 bg-gray-50 border-b border-gray-300 flex items-center justify-between">
@@ -601,31 +627,6 @@ export default async function PostDetailPage({ params }: PageProps) {
         </div>
       )}
 
-      {/* 하단 버튼 */}
-      <div className="flex items-center justify-between">
-        <Link
-          href={`/board/${boardId}`}
-          className="px-5 py-2 text-sm border border-gray-400 rounded hover:bg-gray-50 transition-colors"
-        >
-          목록
-        </Link>
-        <div className="flex gap-2">
-          {board.useReply && (
-            <Link
-              href={`/board/${boardId}/write?mode=reply&no=${post.id}`}
-              className="px-4 py-2 text-sm border border-gray-400 rounded hover:bg-gray-50 transition-colors"
-            >
-              답글
-            </Link>
-          )}
-          <Link
-            href={`/board/${boardId}/write`}
-            className="px-5 py-2 text-sm bg-blue-700 text-white rounded hover:bg-blue-800 transition-colors skin-btn-primary"
-          >
-            글쓰기
-          </Link>
-        </div>
-      </div>
     </div>
   );
 }
