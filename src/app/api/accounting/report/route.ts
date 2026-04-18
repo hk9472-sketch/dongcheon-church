@@ -18,42 +18,43 @@ function toNextDay(dateStr: string): Date {
 }
 
 /**
- * 이월잔액 계산: AccBalance(연초 잔액) + 이전 월 마감 데이터 또는 전표에서 계산
+ * 이월잔액 계산: 지정된 날짜 *이전* (exclusive) 잔액
+ * AccBalance(연초 잔액) + [연초~beforeDate) 전표/마감 합산
+ *
+ * 완료 월(closedAt 존재)은 AccClosing 집계값 사용, 그 외는 전표에서 직접 계산.
+ * beforeDate가 월 중간이면 해당 월의 [월초, beforeDate) 전표도 포함.
  */
-async function calculateCarryOver(
+async function calculateCarryOverBefore(
   unitId: number,
-  year: number,
-  month: number
+  beforeDate: Date
 ): Promise<number> {
+  const year = beforeDate.getUTCFullYear();
+  const targetMonth = beforeDate.getUTCMonth() + 1;
+  const targetDay = beforeDate.getUTCDate();
+
   // 연초 이월잔액
   const balance = await prisma.accBalance.findUnique({
     where: { unitId_year: { unitId, year } },
   });
   let carryOver = balance?.amount ?? 0;
 
-  // 1월부터 해당 월 전까지의 전표를 합산
-  for (let m = 1; m < month; m++) {
-    // 마감 데이터가 있으면 사용
+  // 1월부터 targetMonth 전월까지: 완전한 월 합산
+  for (let m = 1; m < targetMonth; m++) {
     const closing = await prisma.accClosing.findUnique({
       where: { unitId_year_month: { unitId, year, month: m } },
     });
     if (closing && closing.closedAt) {
       carryOver += closing.totalIncome - closing.totalExpense;
     } else {
-      // 마감 전이면 전표에서 직접 계산
       const monthStart = toDateOnly(`${year}-${String(m).padStart(2, "0")}-01`);
       const nextMonth = m === 12
         ? toDateOnly(`${year + 1}-01-01`)
         : toDateOnly(`${year}-${String(m + 1).padStart(2, "0")}-01`);
 
       const vouchers = await prisma.accVoucher.findMany({
-        where: {
-          unitId,
-          date: { gte: monthStart, lt: nextMonth },
-        },
+        where: { unitId, date: { gte: monthStart, lt: nextMonth } },
         select: { type: true, totalAmount: true },
       });
-
       for (const v of vouchers) {
         if (v.type === "D") carryOver += v.totalAmount;
         else carryOver -= v.totalAmount;
@@ -61,7 +62,32 @@ async function calculateCarryOver(
     }
   }
 
+  // targetMonth 가 월 중간 시작이면 [월초, beforeDate) 부분 전표도 반영
+  if (targetDay > 1) {
+    const monthStart = toDateOnly(`${year}-${String(targetMonth).padStart(2, "0")}-01`);
+    const vouchers = await prisma.accVoucher.findMany({
+      where: { unitId, date: { gte: monthStart, lt: beforeDate } },
+      select: { type: true, totalAmount: true },
+    });
+    for (const v of vouchers) {
+      if (v.type === "D") carryOver += v.totalAmount;
+      else carryOver -= v.totalAmount;
+    }
+  }
+
   return carryOver;
+}
+
+/**
+ * 월별 보고서용: 해당 월 시작일(1일) 기준 이월잔액
+ */
+async function calculateCarryOver(
+  unitId: number,
+  year: number,
+  month: number
+): Promise<number> {
+  const monthStart = toDateOnly(`${year}-${String(month).padStart(2, "0")}-01`);
+  return calculateCarryOverBefore(unitId, monthStart);
 }
 
 /**
@@ -285,12 +311,8 @@ async function handleAccountReport(
     .filter((i) => i.type === "C")
     .reduce((s, i) => s + i.amount, 0);
 
-  // 기간 시작 시점의 이월잔액 계산 (UTC 자정 기준)
-  const carryOver = await calculateCarryOver(
-    unitId,
-    from.getUTCFullYear(),
-    from.getUTCMonth() + 1
-  );
+  // 기간 시작일(dateFrom) 직전까지의 이월잔액 (월 중간 시작도 정확히 반영)
+  const carryOver = await calculateCarryOverBefore(unitId, from);
 
   return NextResponse.json({
     reportType: "account",
@@ -316,17 +338,13 @@ async function handleDailyReport(
 ) {
   let from: Date;
   let to: Date;
-  let year: number;
-  let month: number;
 
   if (dateFrom && dateTo) {
     from = toDateOnly(dateFrom);
     to = toNextDay(dateTo);
-    year = from.getUTCFullYear();
-    month = from.getUTCMonth() + 1;
   } else if (yearStr && monthStr) {
-    year = parseInt(yearStr, 10);
-    month = parseInt(monthStr, 10);
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
     from = toDateOnly(`${year}-${String(month).padStart(2, "0")}-01`);
     to =
       month === 12
@@ -404,7 +422,8 @@ async function handleDailyReport(
   const totalIncome = days.reduce((s, d) => s + d.income, 0);
   const totalExpense = days.reduce((s, d) => s + d.expense, 0);
 
-  const carryOver = await calculateCarryOver(unitId, year!, month!);
+  // 기간 시작일 직전까지의 이월잔액 (dateFrom이 월 중간이어도 정확히 반영)
+  const carryOver = await calculateCarryOverBefore(unitId, from);
 
   return NextResponse.json({
     reportType: "daily",

@@ -8,12 +8,14 @@ const OFFERING_TYPES = ["주일연보", "감사", "특별", "절기", "오일"] 
 
 /* ───── types ───── */
 interface ReceiptData {
-  memberId: number;
-  memberName: string;
+  memberId: number;          // 가족 대표(head)의 id
+  memberName: string;        // 대표자 이름
   groupName: string | null;
   year: number;
   items: Record<string, number>;
   total: number;
+  selectedMemberId?: number; // 사용자가 선택한 구성원 (head와 다르면 rollup 안내)
+  familyMembers?: { id: number; name: string }[];
 }
 
 /* ───── helpers ───── */
@@ -202,6 +204,12 @@ export default function OfferingReceiptPage() {
 
           {/* donor info */}
           <div className="mb-8">
+            {/* 선택한 구성원이 가족 대표가 아니면 rollup 안내 (인쇄에서는 숨김) */}
+            {receipt.selectedMemberId && receipt.selectedMemberId !== receipt.memberId && (
+              <div className="mb-3 px-3 py-2 text-xs bg-teal-50 text-teal-700 rounded print:hidden">
+                선택한 구성원이 포함된 <strong>가족 대표({receipt.memberName})</strong> 명의로 가족 전원의 연보가 합산되어 발급됩니다.
+              </div>
+            )}
             <table className="text-sm">
               <tbody>
                 <tr>

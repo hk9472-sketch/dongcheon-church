@@ -334,23 +334,35 @@ async function handleReceipt(
     ? parseInt(params.year, 10)
     : new Date().getFullYear();
 
-  const member = await prisma.offeringMember.findUnique({
+  const selected = await prisma.offeringMember.findUnique({
     where: { id: mid },
-    include: {
-      family: { select: { id: true, name: true } },
-      members: { select: { id: true, name: true } },
-    },
+    select: { id: true, name: true, familyId: true },
   });
-  if (!member) {
+  if (!selected) {
     return NextResponse.json({ error: "교인을 찾을 수 없습니다" }, { status: 404 });
   }
 
-  // 해당 교인 + 가족 구성원의 연보도 포함 (가족 합산 영수증)
-  const familyMemberIds = [mid];
-  // 이 교인이 가족 대표인 경우 → 가족 구성원 포함
-  if (member.members && member.members.length > 0) {
-    familyMemberIds.push(...member.members.map((m) => m.id));
+  // 가족 대표(head) 결정:
+  //   - familyId 가 null 이거나 자기 자신을 가리키면 → 본인이 head
+  //   - 그 외 → familyId 가 head
+  const headId = !selected.familyId || selected.familyId === selected.id
+    ? selected.id
+    : selected.familyId;
+
+  const head = await prisma.offeringMember.findUnique({
+    where: { id: headId },
+    select: { id: true, name: true, groupName: true },
+  });
+  if (!head) {
+    return NextResponse.json({ error: "가족 대표 정보를 찾을 수 없습니다" }, { status: 404 });
   }
+
+  // 가족 전원 = head + head 를 가리키는 구성원들
+  const siblings = await prisma.offeringMember.findMany({
+    where: { familyId: head.id, id: { not: head.id } },
+    select: { id: true, name: true },
+  });
+  const familyMemberIds = [head.id, ...siblings.map((m) => m.id)];
 
   const entries = await prisma.offeringEntry.findMany({
     where: {
@@ -366,7 +378,7 @@ async function handleReceipt(
     orderBy: { date: "asc" },
   });
 
-  // 유형별 합계
+  // 유형별 합계 (가족 전원 rollup)
   const byType: Record<string, number> = {};
   let grandTotal = 0;
   for (const e of entries) {
@@ -374,17 +386,19 @@ async function handleReceipt(
     grandTotal += e.amount;
   }
 
+  // 페이지(ReceiptData)의 flat 형식에 맞춰 응답.
+  // head.id/name/groupName 를 대표자로 사용 → 가족 전원 금액이 합산된 영수증이 head 명의로 출력.
   return NextResponse.json({
     reportType: "receipt",
+    memberId: head.id,
+    memberName: head.name,
+    groupName: head.groupName,
     year: targetYear,
-    member: {
-      id: member.id,
-      name: member.name,
-      groupName: member.groupName,
-    },
-    familyMembers: member.members,
-    byType,
-    grandTotal,
+    items: byType,
+    total: grandTotal,
+    // 부가 정보 (UI 확장용)
+    selectedMemberId: selected.id,
+    familyMembers: siblings,
     entries: entries.map((e) => ({
       date: toKSTDateStr(e.date),
       memberName: e.member.name,

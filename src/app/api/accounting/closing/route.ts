@@ -11,8 +11,10 @@ function toDateOnly(dateStr: string): Date {
 }
 
 /**
- * GET /api/accounting/closing?unitId=1&year=2026
- * 마감 목록 조회
+ * GET /api/accounting/closing?unitId=1&year=2026[&view=overview]
+ *   - 기본: 마감 레코드 배열만 반환
+ *   - view=overview: 12개월 전체(미마감 포함) 수입/지출/이월잔액 집계를
+ *     **한 번의 쿼리 + 1 balance 조회**로 계산. 마감 페이지의 N+1 해소.
  */
 export async function GET(request: NextRequest) {
   const access = await checkAccAccess("ledger");
@@ -23,6 +25,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const unitIdStr = searchParams.get("unitId");
   const yearStr = searchParams.get("year");
+  const view = searchParams.get("view");
 
   if (!unitIdStr || !yearStr) {
     return NextResponse.json(
@@ -34,12 +37,59 @@ export async function GET(request: NextRequest) {
   const unitId = parseInt(unitIdStr, 10);
   const year = parseInt(yearStr, 10);
 
-  const closings = await prisma.accClosing.findMany({
-    where: { unitId, year },
-    orderBy: { month: "asc" },
-  });
+  if (view !== "overview") {
+    const closings = await prisma.accClosing.findMany({
+      where: { unitId, year },
+      orderBy: { month: "asc" },
+    });
+    return NextResponse.json(closings);
+  }
 
-  return NextResponse.json(closings);
+  // === overview: 12개월 집계 (1회 vouchers 쿼리 + balance + closings) ===
+  const yearStart = toDateOnly(`${year}-01-01`);
+  const yearEnd = toDateOnly(`${year + 1}-01-01`);
+
+  const [balance, closings, vouchers] = await Promise.all([
+    prisma.accBalance.findUnique({ where: { unitId_year: { unitId, year } } }),
+    prisma.accClosing.findMany({ where: { unitId, year } }),
+    prisma.accVoucher.findMany({
+      where: { unitId, date: { gte: yearStart, lt: yearEnd } },
+      select: { type: true, totalAmount: true, date: true },
+    }),
+  ]);
+
+  // 월별 수입/지출 (미마감 월 계산용)
+  const monthly = Array.from({ length: 12 }, () => ({ income: 0, expense: 0 }));
+  for (const v of vouchers) {
+    const m = v.date.getUTCMonth(); // 0~11
+    if (v.type === "D") monthly[m].income += v.totalAmount;
+    else monthly[m].expense += v.totalAmount;
+  }
+
+  const closingMap = new Map(closings.map((c) => [c.month, c]));
+
+  // carryOver 체인: balance → 1월 → 2월 → ...
+  let carryOver = balance?.amount ?? 0;
+  const rows = [];
+  for (let m = 1; m <= 12; m++) {
+    const c = closingMap.get(m);
+    const isClosed = !!(c && c.closedAt);
+    // 마감된 월은 마감 기록의 금액을 권위자료로 사용 (closing.carryOver 대신 체인 값 사용 — 상위 변경이 일관성 있게 반영)
+    const totalIncome = isClosed ? c!.totalIncome : monthly[m - 1].income;
+    const totalExpense = isClosed ? c!.totalExpense : monthly[m - 1].expense;
+    rows.push({
+      month: m,
+      carryOver,
+      totalIncome,
+      totalExpense,
+      isClosed,
+      closedAt: isClosed && c!.closedAt ? c!.closedAt.toISOString() : null,
+      closedBy: isClosed ? c!.closedBy : null,
+    });
+    carryOver += totalIncome - totalExpense;
+  }
+
+  return NextResponse.json({ rows, balance: balance?.amount ?? 0 });
 }
 
 /**

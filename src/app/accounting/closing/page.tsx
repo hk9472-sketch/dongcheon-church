@@ -46,44 +46,13 @@ export default function ClosingPage() {
     setLoading(true);
     setError("");
     try {
-      // 마감 기록 조회
-      const closingRes = await fetch(`/api/accounting/closing?${new URLSearchParams({ unitId, year: String(year) })}`);
-      if (!closingRes.ok) throw new Error("데이터를 불러오지 못했습니다.");
-      const closingData = await closingRes.json();
-      const raw: any[] = Array.isArray(closingData) ? closingData : closingData.months || [];
-      const closingMap = new Map(raw.map((r: any) => [r.month, r]));
-
-      // 12개월 보고서 데이터로 실제 수입/지출 가져오기
-      const allMonths: ClosingRow[] = [];
-      for (let m = 1; m <= 12; m++) {
-        const c = closingMap.get(m);
-        if (c && c.closedAt) {
-          // 마감된 월: 마감 기록의 금액 사용
-          allMonths.push({
-            month: m, totalIncome: c.totalIncome, totalExpense: c.totalExpense,
-            carryOver: c.carryOver, isClosed: true, closedAt: c.closedAt, closedBy: c.closedBy,
-          });
-        } else {
-          // 미마감 월: 월별 보고서에서 실제 금액 조회
-          try {
-            const rptRes = await fetch(`/api/accounting/report?${new URLSearchParams({
-              reportType: "monthly", unitId, year: String(year), month: String(m),
-            })}`);
-            if (rptRes.ok) {
-              const rpt = await rptRes.json();
-              allMonths.push({
-                month: m, totalIncome: rpt.totalIncome ?? 0, totalExpense: rpt.totalExpense ?? 0,
-                carryOver: rpt.carryOver ?? 0, isClosed: false, closedAt: null, closedBy: null,
-              });
-            } else {
-              allMonths.push({ month: m, totalIncome: 0, totalExpense: 0, carryOver: 0, isClosed: false, closedAt: null, closedBy: null });
-            }
-          } catch {
-            allMonths.push({ month: m, totalIncome: 0, totalExpense: 0, carryOver: 0, isClosed: false, closedAt: null, closedBy: null });
-          }
-        }
-      }
-      setRows(allMonths);
+      // overview: 1회 호출로 12개월 집계 전부 반환 (기존 1 + N(최대 12) → 1)
+      const res = await fetch(`/api/accounting/closing?${new URLSearchParams({
+        unitId, year: String(year), view: "overview",
+      })}`);
+      if (!res.ok) throw new Error("데이터를 불러오지 못했습니다.");
+      const data = await res.json();
+      setRows(Array.isArray(data.rows) ? data.rows : []);
     } catch (err: any) {
       setError(err.message);
       setRows([]);

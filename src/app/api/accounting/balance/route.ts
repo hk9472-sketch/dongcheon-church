@@ -69,10 +69,38 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const balance = await prisma.accBalance.upsert({
-    where: { unitId_year: { unitId, year } },
-    create: { unitId, year, amount },
-    update: { amount },
+  // balance 갱신 + 해당 연도의 마감된 월들 carryOver 재전파
+  // (연초 잔액이 변경되면 모든 후속 마감의 이월잔액이 stale 해지므로)
+  const balance = await prisma.$transaction(async (tx) => {
+    const updated = await tx.accBalance.upsert({
+      where: { unitId_year: { unitId, year } },
+      create: { unitId, year, amount },
+      update: { amount },
+    });
+
+    // 해당 연도의 연속 마감된 월들 carryOver 체인 재계산
+    // (month=1 부터 첫 미마감 전까지)
+    const closings = await tx.accClosing.findMany({
+      where: { unitId, year, closedAt: { not: null } },
+      orderBy: { month: "asc" },
+    });
+
+    let carryOver = amount;
+    for (const c of closings) {
+      // 순서 깨짐 방지: 연속된 월인지 체크 (1,2,3,... )
+      const expected = c.month;
+      const prevMonth = closings.find((x) => x.month === expected - 1);
+      if (expected > 1 && !prevMonth) break; // 체인 깨짐 → 중단
+      if (c.carryOver !== carryOver) {
+        await tx.accClosing.update({
+          where: { unitId_year_month: { unitId, year, month: c.month } },
+          data: { carryOver },
+        });
+      }
+      carryOver += c.totalIncome - c.totalExpense;
+    }
+
+    return updated;
   });
 
   return NextResponse.json(balance);
