@@ -1147,13 +1147,49 @@ interface LegacyUserPreview {
   excludedReason?: "current-login" | null;
 }
 
-// SQL에서 zetyx_member_table INSERT 문만 추출 (클라이언트)
+// SQL 에서 zetyx_member_table 의 CREATE TABLE + INSERT 문만 추출 (클라이언트).
+// CREATE TABLE 이 서버 파서에 전달되어야 컬럼 순서가 정확히 매핑된다.
 function extractMemberSqlOnly(sql: string): string {
   const esc = "zetyx_member_table".replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const regex = new RegExp(`INSERT\\s+INTO\\s+\`?${esc}\`?`, "gi");
   const parts: string[] = [];
+
+  // 1) CREATE TABLE 블록 (괄호 짝 맞는 곳까지 + 뒤따르는 옵션/세미콜론)
+  const createRe = new RegExp(
+    `CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?\`?${esc}\`?\\s*\\(`,
+    "gi"
+  );
+  const cm = createRe.exec(sql);
+  if (cm) {
+    const start = cm.index;
+    let i = cm.index + cm[0].length;
+    let depth = 1;
+    let inStr = false;
+    let inBt = false;
+    while (i < sql.length && depth > 0) {
+      const c = sql[i];
+      if (inStr) {
+        if (c === "\\" && i + 1 < sql.length) { i += 2; continue; }
+        if (c === "'") inStr = false;
+      } else if (inBt) {
+        if (c === "`") inBt = false;
+      } else {
+        if (c === "'") inStr = true;
+        else if (c === "`") inBt = true;
+        else if (c === "(") depth++;
+        else if (c === ")") { depth--; if (depth === 0) { i++; break; } }
+      }
+      i++;
+    }
+    // 괄호 이후 ENGINE=, CHARSET 등 옵션을 세미콜론까지 포함
+    while (i < sql.length && sql[i] !== ";") i++;
+    if (i < sql.length) i++; // 세미콜론 포함
+    parts.push(sql.substring(start, i));
+  }
+
+  // 2) INSERT 문들
+  const insertRe = new RegExp(`INSERT\\s+INTO\\s+\`?${esc}\`?`, "gi");
   let match;
-  while ((match = regex.exec(sql)) !== null) {
+  while ((match = insertRe.exec(sql)) !== null) {
     const start = match.index;
     let pos = start + match[0].length;
     let inStr = false;
@@ -1171,7 +1207,7 @@ function extractMemberSqlOnly(sql: string): string {
       pos++;
     }
     parts.push(sql.substring(start, pos));
-    regex.lastIndex = pos;
+    insertRe.lastIndex = pos;
   }
   return parts.join("\n");
 }

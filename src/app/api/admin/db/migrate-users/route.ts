@@ -320,19 +320,27 @@ async function buildSqlPreviewResponse(sql: string, currentLoginId: string) {
 //   3) 둘 다 없을 때만 MEMBER_COLUMNS_FALLBACK (ZeroBoard 4.1 기본) 사용
 // ============================================================
 
-// ZeroBoard 4.1 의 실제 zetyx_member_table 기본 컬럼 순서.
-// (ZeroBoard Pro 4.1 pl8 기준 — no, is_admin, user_id, name, password, ...)
+// ZeroBoard 4.1 pl8 동천교회 덤프 기준 실제 컬럼 순서 (2026-04-18 확인).
+// CREATE TABLE 이 덤프에 포함돼 있으면 parseCreateTableColumns 결과가 우선 사용됨.
+// 둘 다 없을 때만 이 fallback 사용.
 const MEMBER_COLUMNS_FALLBACK = [
-  "no", "is_admin", "user_id", "name", "password", "email", "homepage",
-  "picture", "point1", "point2", "handphone", "home_tel", "office_tel",
-  "home_address", "office_address", "level", "comment", "job", "hobby",
-  "birth", "group_no", "mailing", "open_info", "new_memo", "ip", "reg_date",
+  "no", "group_no", "user_id", "password", "board_name", "name", "level",
+  "email", "homepage", "icq", "aol", "msn", "jumin", "comment",
+  "point1", "point2", "job", "hobby", "home_address", "home_tel",
+  "office_address", "office_tel", "handphone", "mailing", "birth", "picture",
+  "reg_date", "openinfo", "is_admin", "new_memo",
+  "open_email", "open_homepage", "open_icq", "open_aol", "open_msn",
+  "open_comment", "open_job", "open_hobby", "open_home_address",
+  "open_home_tel", "open_office_address", "open_office_tel",
+  "open_handphone", "open_birth", "open_picture",
 ];
 
-// 숫자 파싱 대상 — 필드명 기반이므로 컬럼 순서가 바뀌어도 동작한다.
+// 숫자 파싱 대상 — 필드명 기반이라 컬럼 순서가 바뀌어도 동작.
+// ZeroBoard 가 char(1) 로 '0'/'1' 을 저장하는 플래그들도 포함 (int 로 파싱해두면
+// runMigration 의 `=== 1` 비교가 정상 동작).
 const MEMBER_NUM_COLS = new Set([
   "no", "level", "is_admin", "group_no", "birth", "point1", "point2",
-  "mailing", "open_info", "new_memo", "reg_date",
+  "mailing", "open_info", "openinfo", "new_memo", "reg_date",
 ]);
 
 /** CREATE TABLE 블록에서 컬럼명 순서 추출. 없으면 null. */
@@ -616,7 +624,10 @@ async function runMigration(
           point1: Number(u.point1 || 0),
           point2: Number(u.point2 || 0),
           mailing: u.mailing === 1 || u.mailing === true,
-          openInfo: u.open_info !== 0 && u.open_info !== false,
+          // 스키마 변형 대응: open_info / openinfo 두 변종 모두 수용
+          openInfo:
+            (u.open_info ?? u.openinfo) !== 0 &&
+            (u.open_info ?? u.openinfo) !== false,
           newMemo: u.new_memo === 1 || u.new_memo === true,
           createdAt: regDate,
         },
