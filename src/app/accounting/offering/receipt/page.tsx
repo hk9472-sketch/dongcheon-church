@@ -503,7 +503,7 @@ function ReceiptForm({
 
       {/* 4. 기부내용 */}
       <section className="mb-2">
-        <div className="text-right text-[12px] font-bold mb-1">4. 기부내용</div>
+        <div className="text-[12px] font-bold mb-1">4. 기부내용</div>
         <table className="w-full border-collapse border border-black text-[12px]">
           <thead>
             <tr>
