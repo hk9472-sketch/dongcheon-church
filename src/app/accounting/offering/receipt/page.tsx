@@ -92,6 +92,9 @@ export default function OfferingReceiptPage() {
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // 기부금 수령인 override (출력 시 "동천교회 담임목사 ○○○" 부분 대체)
+  const [receivedByOverride, setReceivedByOverride] = useState("");
+
   // church info (could come from settings API)
   const churchName = "동천교회";
   const churchRepresentative = "담임목사";
@@ -229,6 +232,25 @@ export default function OfferingReceiptPage() {
               </button>
             )}
           </div>
+
+          {/* 기부금 수령인 입력 (영수증 하단 '기부금 수령인 ...' 영역 대체) */}
+          {receipt && (
+            <div className="mt-4 pt-3 border-t border-gray-200">
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                기부금 수령인 (출력 표시명)
+              </label>
+              <input
+                type="text"
+                value={receivedByOverride}
+                onChange={(e) => setReceivedByOverride(e.target.value)}
+                placeholder={`${receipt.church?.name || churchName}  ${receipt.church?.repTitle || churchRepresentative}  ${receipt.church?.repName || ""}`.trim()}
+                className="w-full md:w-[500px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+              />
+              <p className="mt-1 text-[11px] text-gray-400">
+                비워 두면 기본값(단체명 + 대표자 직함·성명) 으로 인쇄됩니다. 입력 값이 있으면 그대로 치환.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -240,7 +262,13 @@ export default function OfferingReceiptPage() {
           회원을 선택하면 영수증이 표시됩니다.
         </div>
       ) : (
-        <ReceiptForm receipt={receipt} hasMemberEdit={hasMemberEdit} churchFallbackName={churchName} churchFallbackTitle={churchRepresentative} />
+        <ReceiptForm
+          receipt={receipt}
+          hasMemberEdit={hasMemberEdit}
+          churchFallbackName={churchName}
+          churchFallbackTitle={churchRepresentative}
+          receivedByOverride={receivedByOverride}
+        />
       )}
 
       {/* print styles */}
@@ -277,11 +305,13 @@ function ReceiptForm({
   hasMemberEdit,
   churchFallbackName,
   churchFallbackTitle,
+  receivedByOverride,
 }: {
   receipt: ReceiptData;
   hasMemberEdit: boolean;
   churchFallbackName: string;
   churchFallbackTitle: string;
+  receivedByOverride?: string;
 }) {
   const entries = receipt.entries || [];
 
@@ -497,13 +527,23 @@ function ReceiptForm({
       </div>
       <div className="flex justify-end items-center gap-3 mb-2">
         <span className="text-[12px]">기부금 수령인</span>
-        <span className="text-[13px] font-bold min-w-[6em] text-center border-b border-black">
-          {church?.name || churchFallbackName}
-        </span>
-        <span className="text-[12px]">
-          {church?.repTitle || churchFallbackTitle}{" "}
-          {church?.repName || ""}
-        </span>
+        {receivedByOverride && receivedByOverride.trim() ? (
+          // 사용자 입력 override: 한 줄로 그대로 표시
+          <span className="text-[13px] font-bold min-w-[12em] text-center border-b border-black">
+            {receivedByOverride}
+          </span>
+        ) : (
+          // 기본: 단체명 + 직함 + 대표자 성명 분리 표시
+          <>
+            <span className="text-[13px] font-bold min-w-[6em] text-center border-b border-black">
+              {church?.name || churchFallbackName}
+            </span>
+            <span className="text-[12px]">
+              {church?.repTitle || churchFallbackTitle}{" "}
+              {church?.repName || ""}
+            </span>
+          </>
+        )}
         <span className="text-[12px]">(인)</span>
       </div>
 
