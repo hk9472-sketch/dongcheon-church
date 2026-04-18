@@ -176,29 +176,8 @@ export default async function PostDetailPage({ params }: PageProps) {
     orderBy: { createdAt: "asc" },
   });
 
-  // 5. 이전글/다음글 (제로보드: prev_no, next_no)
-  const prevPost = await prisma.post.findFirst({
-    where: {
-      boardId: board.id,
-      isNotice: false,
-      createdAt: { lt: post.createdAt },
-    },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, subject: true },
-  });
-
-  const nextPost = await prisma.post.findFirst({
-    where: {
-      boardId: board.id,
-      isNotice: false,
-      createdAt: { gt: post.createdAt },
-    },
-    orderBy: { createdAt: "asc" },
-    select: { id: true, subject: true },
-  });
-
-  // 5-1. 인근 게시글 목록 (목록 화면과 같은 headnum/arrangenum 순서 기준
-  //      앞/뒤 각 5건). 현재글 포함, 공지 제외.
+  // 5. 인근 게시글 목록 (목록 화면과 같은 headnum/arrangenum 순서 기준
+  //    앞/뒤 각 5건). 현재글 포함, 공지 제외.
   const nearbyFields = {
     id: true, subject: true, authorName: true, createdAt: true,
     hit: true, totalComment: true, isSecret: true, depth: true,
@@ -446,6 +425,32 @@ export default async function PostDetailPage({ params }: PageProps) {
         <PostActions boardSlug={boardId} postId={post.id} currentVote={post.vote} canEdit={canEdit} canDelete={canDelete} isGuestPost={isGuestPost} />
       </article>
 
+      {/* 하단 버튼 — 게시글과 관련답글/댓글 사이 */}
+      <div className="flex items-center justify-between">
+        <Link
+          href={`/board/${boardId}`}
+          className="px-5 py-2 text-sm border border-gray-400 rounded hover:bg-gray-50 transition-colors"
+        >
+          목록
+        </Link>
+        <div className="flex gap-2">
+          {board.useReply && (
+            <Link
+              href={`/board/${boardId}/write?mode=reply&no=${post.id}`}
+              className="px-4 py-2 text-sm border border-gray-400 rounded hover:bg-gray-50 transition-colors"
+            >
+              답글
+            </Link>
+          )}
+          <Link
+            href={`/board/${boardId}/write`}
+            className="px-5 py-2 text-sm bg-blue-700 text-white rounded hover:bg-blue-800 transition-colors skin-btn-primary"
+          >
+            글쓰기
+          </Link>
+        </div>
+      </div>
+
       {/* 답글 목록 (같은 headnum 그룹) */}
       {posts.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-400 overflow-hidden">
@@ -493,71 +498,19 @@ export default async function PostDetailPage({ params }: PageProps) {
         />
       )}
 
-      {/* 이전글/다음글 네비게이션 */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-400 overflow-hidden text-sm">
-        <div className="divide-y divide-gray-200">
-          {nextPost && (
-            <Link
-              href={`/board/${boardId}/${nextPost.id}`}
-              className="flex items-center px-4 py-2.5 hover:bg-gray-50"
-            >
-              <span className="w-16 text-gray-400 font-medium">다음글</span>
-              <span className="text-gray-400 mx-2">▲</span>
-              <span className="text-gray-700 truncate">{nextPost.subject}</span>
-            </Link>
-          )}
-          {prevPost && (
-            <Link
-              href={`/board/${boardId}/${prevPost.id}`}
-              className="flex items-center px-4 py-2.5 hover:bg-gray-50"
-            >
-              <span className="w-16 text-gray-400 font-medium">이전글</span>
-              <span className="text-gray-400 mx-2">▼</span>
-              <span className="text-gray-700 truncate">{prevPost.subject}</span>
-            </Link>
-          )}
-        </div>
-      </div>
-
-      {/* 하단 버튼 — 관련글(인근 게시글 목록) 위로 이동 */}
-      <div className="flex items-center justify-between">
-        <Link
-          href={`/board/${boardId}`}
-          className="px-5 py-2 text-sm border border-gray-400 rounded hover:bg-gray-50 transition-colors"
-        >
-          목록
-        </Link>
-        <div className="flex gap-2">
-          {board.useReply && (
-            <Link
-              href={`/board/${boardId}/write?mode=reply&no=${post.id}`}
-              className="px-4 py-2 text-sm border border-gray-400 rounded hover:bg-gray-50 transition-colors"
-            >
-              답글
-            </Link>
-          )}
-          <Link
-            href={`/board/${boardId}/write`}
-            className="px-5 py-2 text-sm bg-blue-700 text-white rounded hover:bg-blue-800 transition-colors skin-btn-primary"
-          >
-            글쓰기
-          </Link>
-        </div>
-      </div>
-
       {/* 인근 게시글 목록 (앞뒤 5건씩, 현재 글은 강조) */}
       {nearbyPosts.length > 1 && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-400 overflow-hidden">
           <div className="px-4 py-2 bg-gray-50 border-b border-gray-300 flex items-center justify-between">
-            <h3 className="text-xs font-bold text-gray-600">게시글 목록</h3>
+            <h3 className="text-sm font-medium text-gray-700">게시글 목록</h3>
             <Link
               href={`/board/${boardId}`}
-              className="text-xs text-blue-600 hover:text-blue-800"
+              className="text-sm text-blue-600 hover:text-blue-800"
             >
               전체 목록 →
             </Link>
           </div>
-          <table className="w-full text-xs">
+          <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
                 <th className="py-2 text-left font-medium px-3">제목</th>
@@ -578,9 +531,9 @@ export default async function PostDetailPage({ params }: PageProps) {
                         : "hover:bg-gray-50 transition-colors"
                     }
                   >
-                    <td className="py-1.5 px-3">
+                    <td className="py-2.5 px-3">
                       <div style={{ paddingLeft: depthPad }} className="flex items-center gap-1">
-                        {p.depth > 0 && <span className="text-gray-300 text-[10px]">└</span>}
+                        {p.depth > 0 && <span className="text-gray-300 text-xs">└</span>}
                         {p.isCurrent ? (
                           <span className="text-blue-700 truncate">
                             <span className="text-blue-500 mr-1">▶</span>
@@ -595,28 +548,28 @@ export default async function PostDetailPage({ params }: PageProps) {
                           </Link>
                         )}
                         {p.totalComment > 0 && (
-                          <span className="ml-1 text-[10px] text-orange-500 font-bold">
+                          <span className="ml-1 text-xs text-orange-500 font-bold">
                             [{p.totalComment}]
                           </span>
                         )}
                         {p.isSecret && (
-                          <span className="ml-1 text-[10px] text-gray-400" title="비밀글">🔒</span>
+                          <span className="ml-1 text-xs text-gray-400" title="비밀글">🔒</span>
                         )}
                         {(p.fileName1 || p.fileName2) && (
-                          <span className="ml-1 text-[10px] text-gray-400" title="첨부파일">📎</span>
+                          <span className="ml-1 text-xs text-gray-400" title="첨부파일">📎</span>
                         )}
                       </div>
                     </td>
-                    <td className="py-1.5 text-center text-gray-600 hidden sm:table-cell">
+                    <td className="py-2.5 text-center text-gray-600 hidden sm:table-cell">
                       {p.authorName}
                     </td>
-                    <td className="py-1.5 text-center text-gray-500 hidden md:table-cell">
+                    <td className="py-2.5 text-center text-gray-500 hidden md:table-cell">
                       {new Date(p.createdAt).toLocaleDateString("ko-KR", {
                         month: "2-digit",
                         day: "2-digit",
                       }).replace(/\./g, "").replace(" ", "-")}
                     </td>
-                    <td className="py-1.5 text-center text-gray-500 hidden lg:table-cell">
+                    <td className="py-2.5 text-center text-gray-500 hidden lg:table-cell">
                       {p.hit}
                     </td>
                   </tr>
