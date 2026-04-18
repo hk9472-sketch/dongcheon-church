@@ -389,12 +389,13 @@ function ReceiptForm({
   return (
     <div
       id="receipt-print"
-      className="bg-white mx-auto text-[12px] leading-relaxed text-black print:shadow-none print:border-0 print:max-w-none"
+      className="bg-white mx-auto text-[12px] text-black print:shadow-none print:border-0 print:max-w-none"
       style={{
         maxWidth: "210mm",
-        padding: "10mm",
+        padding: "12mm 14mm",
         border: "1px solid #222",
-        fontFamily: "'Malgun Gothic', 'Nanum Gothic', sans-serif",
+        fontFamily: "'Malgun Gothic', 'Nanum Gothic', 'Noto Sans KR', sans-serif",
+        lineHeight: 1.45,
       }}
     >
       {/* 선택한 구성원이 가족 대표가 아니면 rollup 안내 (인쇄 시 숨김) */}
@@ -404,38 +405,55 @@ function ReceiptForm({
         </div>
       )}
 
-      {/* 상단: 일련번호 + 타이틀 */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="border border-black px-3 py-1 text-[11px] flex items-center gap-2">
-          <span className="bg-black text-white px-2 py-0.5 text-[11px]">일련번호</span>
-          <span className="font-mono">{fmtSerialNo(receipt.year, receipt.memberId)}</span>
-        </div>
-        <div className="flex-1 text-center">
-          <h1 className="text-2xl font-bold tracking-[0.5em] ml-14">기부금 영수증</h1>
-        </div>
-        <div className="w-36" />
+      {/* 상단: 일련번호(좌) + 타이틀(중앙) */}
+      <div className="relative flex items-center mb-3" style={{ minHeight: "48px" }}>
+        {/* 일련번호 박스 — 두 칸 table 스타일 */}
+        <table className="border-collapse text-[12px]">
+          <tbody>
+            <tr>
+              <td className="border border-black bg-gray-50 px-3 py-1 text-center font-medium">
+                일련번호
+              </td>
+              <td className="border border-black px-4 py-1 font-mono min-w-[5em] text-center">
+                {fmtSerialNo(receipt.year, receipt.memberId)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        {/* 타이틀 — 절대 중앙 */}
+        <h1
+          className="absolute left-0 right-0 mx-auto text-center font-bold"
+          style={{
+            fontSize: "28px",
+            letterSpacing: "0.35em",
+            paddingLeft: "0.35em",
+            pointerEvents: "none",
+          }}
+        >
+          기부금 영수증
+        </h1>
       </div>
 
       {/* 1. 기부자 */}
-      <section className="mb-2">
+      <section className="mb-1.5">
         <div className="text-[12px] font-bold mb-1">1. 기부자</div>
         <table className="w-full border-collapse border border-black text-[12px]">
           <tbody>
             <tr>
-              <td className="border border-black bg-gray-100 px-2 py-1 text-center w-20 font-medium">성&nbsp;명</td>
-              <td className="border border-black px-2 py-1">
+              <td className="border border-black bg-gray-50 px-2 py-1.5 text-center font-medium" style={{ width: "12%" }}>성&nbsp;명</td>
+              <td className="border border-black px-2 py-1.5" style={{ width: "33%" }}>
                 {hasMemberEdit ? receipt.memberName : "*".repeat(3)}
               </td>
-              <td className="border border-black bg-gray-100 px-2 py-1 text-center w-36 font-medium">
+              <td className="border border-black bg-gray-50 px-2 py-1.5 text-center font-medium leading-tight" style={{ width: "22%" }}>
                 주민등록번호<br />(사업자등록번호)
               </td>
-              <td className="border border-black px-2 py-1 font-mono">
+              <td className="border border-black px-2 py-1.5 font-mono" style={{ width: "33%" }}>
                 {receipt.donor?.residentNumber || ""}
               </td>
             </tr>
             <tr>
-              <td className="border border-black bg-gray-100 px-2 py-1 text-center font-medium">주&nbsp;소</td>
-              <td className="border border-black px-2 py-1" colSpan={3}>
+              <td className="border border-black bg-gray-50 px-2 py-1.5 text-center font-medium">주&nbsp;소</td>
+              <td className="border border-black px-2 py-1.5" colSpan={3}>
                 {receipt.donor?.address || ""}
               </td>
             </tr>
@@ -444,40 +462,40 @@ function ReceiptForm({
       </section>
 
       {/* 2. 기부금 단체 */}
-      <section className="mb-2">
+      <section className="mb-1.5">
         <div className="text-[12px] font-bold mb-1">2. 기부금 단체</div>
         <table className="w-full border-collapse border border-black text-[12px]">
           <tbody>
             <tr>
-              <td className="border border-black bg-gray-100 px-2 py-1 text-center w-20 font-medium">단체명</td>
-              <td className="border border-black px-2 py-1">{church?.name || churchFallbackName}</td>
-              <td className="border border-black bg-gray-100 px-2 py-1 text-center w-36 font-medium">
+              <td className="border border-black bg-gray-50 px-2 py-1.5 text-center font-medium" style={{ width: "12%" }}>단체명</td>
+              <td className="border border-black px-2 py-1.5" style={{ width: "33%" }}>{church?.name || churchFallbackName}</td>
+              <td className="border border-black bg-gray-50 px-2 py-1.5 text-center font-medium leading-tight" style={{ width: "22%" }}>
                 주민등록번호<br />(사업자등록번호)
               </td>
-              <td className="border border-black px-2 py-1 font-mono">{church?.regNo || ""}</td>
+              <td className="border border-black px-2 py-1.5 font-mono" style={{ width: "33%" }}>{church?.regNo || ""}</td>
             </tr>
             <tr>
-              <td className="border border-black bg-gray-100 px-2 py-1 text-center font-medium">소재지</td>
-              <td className="border border-black px-2 py-1" colSpan={3}>{church?.address || ""}</td>
+              <td className="border border-black bg-gray-50 px-2 py-1.5 text-center font-medium">소재지</td>
+              <td className="border border-black px-2 py-1.5" colSpan={3}>{church?.address || ""}</td>
             </tr>
           </tbody>
         </table>
       </section>
 
       {/* 3. 기부금 모집처 (선택) */}
-      <section className="mb-2">
+      <section className="mb-1.5">
         <div className="text-[12px] font-bold mb-1">3. 기부금 모집처 (언론기관 등)</div>
         <table className="w-full border-collapse border border-black text-[12px]">
           <tbody>
             <tr>
-              <td className="border border-black bg-gray-100 px-2 py-1 text-center w-20 font-medium">단체명</td>
-              <td className="border border-black px-2 py-1">&nbsp;</td>
-              <td className="border border-black bg-gray-100 px-2 py-1 text-center w-36 font-medium">사업자등록번호</td>
-              <td className="border border-black px-2 py-1">&nbsp;</td>
+              <td className="border border-black bg-gray-50 px-2 py-1.5 text-center font-medium" style={{ width: "12%" }}>단체명</td>
+              <td className="border border-black px-2 py-1.5" style={{ width: "33%" }}>&nbsp;</td>
+              <td className="border border-black bg-gray-50 px-2 py-1.5 text-center font-medium" style={{ width: "22%" }}>사업자등록번호</td>
+              <td className="border border-black px-2 py-1.5" style={{ width: "33%" }}>&nbsp;</td>
             </tr>
             <tr>
-              <td className="border border-black bg-gray-100 px-2 py-1 text-center font-medium">소재지</td>
-              <td className="border border-black px-2 py-1" colSpan={3}>&nbsp;</td>
+              <td className="border border-black bg-gray-50 px-2 py-1.5 text-center font-medium">소재지</td>
+              <td className="border border-black px-2 py-1.5" colSpan={3}>&nbsp;</td>
             </tr>
           </tbody>
         </table>
@@ -489,11 +507,11 @@ function ReceiptForm({
         <table className="w-full border-collapse border border-black text-[12px]">
           <thead>
             <tr>
-              <th className="border border-black bg-gray-100 px-2 py-1 w-36">유형</th>
-              <th className="border border-black bg-gray-100 px-2 py-1 w-14">코드</th>
-              <th className="border border-black bg-gray-100 px-2 py-1 w-32">년월일</th>
-              <th className="border border-black bg-gray-100 px-2 py-1">적요</th>
-              <th className="border border-black bg-gray-100 px-2 py-1 w-32">금액</th>
+              <th className="border border-black bg-gray-50 px-2 py-1.5 font-medium" style={{ width: "22%" }}>유형</th>
+              <th className="border border-black bg-gray-50 px-2 py-1.5 font-medium" style={{ width: "8%" }}>코드</th>
+              <th className="border border-black bg-gray-50 px-2 py-1.5 font-medium" style={{ width: "17%" }}>년월일</th>
+              <th className="border border-black bg-gray-50 px-2 py-1.5 font-medium" style={{ width: "33%" }}>적요</th>
+              <th className="border border-black bg-gray-50 px-2 py-1.5 font-medium" style={{ width: "20%" }}>금액</th>
             </tr>
           </thead>
           <tbody>
@@ -508,7 +526,6 @@ function ReceiptForm({
                 </tr>
               ))
             ) : (
-              // entries 가 없으면 유형별 합계로 한 줄
               <tr>
                 <td className="border border-black px-2 py-1 text-center">{donationTypeLabel}</td>
                 <td className="border border-black px-2 py-1 text-center">{donationCode}</td>
@@ -517,34 +534,25 @@ function ReceiptForm({
                 <td className="border border-black px-2 py-1 text-right font-mono">{fmtAmount(receipt.total)}</td>
               </tr>
             )}
-            {/* 빈 행 (디자인 안정감) */}
-            {monthRows.length > 0 && monthRows.length < 12 &&
-              Array.from({ length: Math.max(0, 3 - (12 - monthRows.length < 0 ? 0 : 3)) }).map((_, i) => (
-                <tr key={`empty-${i}`}>
-                  <td className="border border-black px-2 py-3">&nbsp;</td>
-                  <td className="border border-black px-2 py-3">&nbsp;</td>
-                  <td className="border border-black px-2 py-3">&nbsp;</td>
-                  <td className="border border-black px-2 py-3">&nbsp;</td>
-                  <td className="border border-black px-2 py-3">&nbsp;</td>
-                </tr>
-              ))}
             <tr>
-              <td className="border border-black bg-gray-100 px-2 py-1 text-center font-bold" colSpan={4}>계</td>
-              <td className="border border-black px-2 py-1 text-right font-mono font-bold">{fmtAmount(receipt.total)}</td>
+              <td className="border border-black bg-gray-50 px-2 py-1.5 text-center font-bold" colSpan={4}>계</td>
+              <td className="border border-black px-2 py-1.5 text-right font-mono font-bold">{fmtAmount(receipt.total)}</td>
             </tr>
           </tbody>
         </table>
       </section>
 
-      {/* 법정 문구 + 증명 */}
-      <p className="text-[12px] mt-3 mb-1 leading-6">
-        {legalRef}<br />
+      {/* 법정 문구 + 증명 블록 1 (기부자 증명 요청) */}
+      <p className="text-[12px] mt-3 mb-0 leading-6">
+        {legalRef}
+      </p>
+      <p className="text-[12px] mb-1 leading-6">
         위와 같이 기부하였음을 증명하여 주시기 바랍니다.
       </p>
-      <div className="flex justify-end items-center gap-2 my-2">
+      <div className="flex justify-end items-center gap-2 mt-3 mb-1">
         <span className="text-[12px]">{issueDateLabel}</span>
       </div>
-      <div className="flex justify-end items-center gap-2 mb-4">
+      <div className="flex justify-end items-center gap-2 mb-5">
         <span className="text-[12px]">신청인</span>
         <span className="text-[13px] font-bold text-center border-b border-black px-2 whitespace-nowrap">
           {hasMemberEdit ? receipt.memberName : ""}
@@ -552,19 +560,18 @@ function ReceiptForm({
         <span className="text-[12px]">(인)</span>
       </div>
 
+      {/* 증명 블록 2 (단체 증명) */}
       <p className="text-[12px] mt-4 mb-1">위와 같이 기부금을 기부하였음을 증명합니다.</p>
-      <div className="flex justify-end items-center gap-2 my-2">
+      <div className="flex justify-end items-center gap-2 mt-3 mb-1">
         <span className="text-[12px]">{issueDateLabel}</span>
       </div>
-      <div className="flex justify-end items-center gap-2 mb-2">
+      <div className="flex justify-end items-center gap-2 mb-3">
         <span className="text-[12px]">기부금 수령인</span>
         {receivedByOverride && receivedByOverride.trim() ? (
-          // 사용자 입력 override: 한 줄로 그대로 표시 (내용 길이만큼만)
           <span className="text-[13px] font-bold text-center border-b border-black px-2 whitespace-nowrap">
             {receivedByOverride}
           </span>
         ) : (
-          // 기본: 단체명 + 직함 + 대표자 성명 분리 표시
           <>
             <span className="text-[13px] font-bold text-center border-b border-black px-2 whitespace-nowrap">
               {church?.name || churchFallbackName}
