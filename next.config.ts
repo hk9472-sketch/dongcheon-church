@@ -32,6 +32,17 @@ const nextConfig: NextConfig = {
     ],
   },
 
+  // 파일 추적에서 data/ 디렉터리를 제외.
+  // 첨부파일 1.7GB · 15,000+ 파일이 writeFile(path.join(uploadDir, ...))
+  // 경로 추론에 걸려 "matches 15800 files" 경고 + 빌드 성능 저하 유발.
+  // data/ 는 런타임에만 읽고 쓰므로 서버 번들 tracing 대상이 아님.
+  outputFileTracingExcludes: {
+    "*": [
+      "./data/**/*",
+      "./temp_pptx_images/**/*",
+    ],
+  },
+
   async headers() {
     return [
       {

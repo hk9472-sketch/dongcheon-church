@@ -5,6 +5,7 @@ import prisma from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth";
 import { verifyCaptcha } from "@/lib/captcha";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
+import { getUploadDir, getRelUploadPath } from "@/lib/uploadPath";
 
 // ───── 파일 업로드 검증 상수 ─────
 const ALLOWED_EXTENSIONS = new Set([
@@ -179,15 +180,15 @@ export async function POST(request: NextRequest) {
     let fileName2: string | null = null;
     let origName2: string | null = null;
 
-    // ZeroBoard 구조와 호환: 파일을 data/{boardSlug}/ 에 저장
-    // DB에는 "data/{boardSlug}/{fileName}" 형식으로 저장 (download route와 동일 기준)
-    const uploadDir = path.join(process.cwd(), "data", boardSlug);
+    // ZeroBoard 구조와 호환: 파일을 {UPLOAD_DIR}/{boardSlug}/ 에 저장.
+    // 경로는 lib/uploadPath 에서 런타임 결정 (Turbopack 정적 분석 회피).
+    const uploadDir = getUploadDir(boardSlug);
     await mkdir(uploadDir, { recursive: true });
 
     if (file1 && file1.size > 0) {
       const ext = path.extname(file1.name).toLowerCase();
       const storedName = sanitizeStoredName(`${Date.now()}_1${ext}`);
-      fileName1 = `data/${boardSlug}/${storedName}`;
+      fileName1 = getRelUploadPath(boardSlug, storedName);
       origName1 = file1.name;
       const buffer = Buffer.from(await file1.arrayBuffer());
       await writeFile(path.join(uploadDir, storedName), buffer);
@@ -196,7 +197,7 @@ export async function POST(request: NextRequest) {
     if (file2 && file2.size > 0) {
       const ext = path.extname(file2.name).toLowerCase();
       const storedName = sanitizeStoredName(`${Date.now()}_2${ext}`);
-      fileName2 = `data/${boardSlug}/${storedName}`;
+      fileName2 = getRelUploadPath(boardSlug, storedName);
       origName2 = file2.name;
       const buffer = Buffer.from(await file2.arrayBuffer());
       await writeFile(path.join(uploadDir, storedName), buffer);
