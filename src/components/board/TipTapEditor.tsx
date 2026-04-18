@@ -305,7 +305,13 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
           .focus()
           .insertContent({
             type: "media",
-            attrs: { src: data.url, kind: isVideo ? "video" : "audio", title: file.name },
+            attrs: {
+              src: data.url,
+              kind: isVideo ? "video" : "audio",
+              title: file.name,
+              width: isVideo ? "60%" : "400px",
+              align: "left",
+            },
           })
           .run();
         return true;
@@ -352,10 +358,10 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       editor
         .chain()
         .focus()
-        .insertContent([
-          { type: "media", attrs: { src: url, kind, width: kind === "audio" ? "100%" : "60%" } },
-          { type: "paragraph" },
-        ])
+        .insertContent({
+          type: "media",
+          attrs: { src: url, kind, width: kind === "audio" ? "400px" : "60%", align: "left" },
+        })
         .run();
       return;
     }
@@ -364,10 +370,10 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       editor
         .chain()
         .focus()
-        .insertContent([
-          { type: "media", attrs: { src: embed, kind: "iframe", width: "60%" } },
-          { type: "paragraph" },
-        ])
+        .insertContent({
+          type: "media",
+          attrs: { src: embed, kind: "iframe", width: "60%", align: "left" },
+        })
         .run();
       return;
     }

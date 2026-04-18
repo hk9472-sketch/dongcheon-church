@@ -2,27 +2,35 @@
 
 import { Node, mergeAttributes } from "@tiptap/core";
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from "@tiptap/react";
+import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { useEffect, useRef, useState } from "react";
 
 // ============================================================
 // Media Extension (TipTap v3) — <video> · <audio> · <iframe>
 //
-//  · 노드 이름: "media"
-//  · 속성: kind="video"|"audio"|"iframe", src, width(예: "60%"), title
-//  · NodeView: 선택 시 25/50/75/100% 프리셋 + 우측 드래그 핸들 + 삭제
-//  · parseHTML: 본문 안의 <video>/<audio>/<iframe> 자동 인식
+//  · 노드 이름:  "media"
+//  · 그룹:       inline + atom  → 단락 안에 위치, 옆에 텍스트 입력 가능
+//  · 속성:       kind, src, width("60%"/"300px" 등), align(left/center/right), title
+//  · NodeView:   25/50/75/100% 프리셋 + 좌/중/우 정렬 + 우측 드래그 핸들 + 삭제
+//  · 키보드:     Enter/←/→ 시 미디어가 선택돼있으면 옆 텍스트로 캐럿 이동(삭제 X)
+//  · parseHTML:  <video>·<audio>·<iframe> 자동 인식 (이관 게시글 호환)
 // ============================================================
+
+type Align = "left" | "center" | "right";
+type Kind = "video" | "audio" | "iframe";
 
 export interface MediaAttrs {
   src: string;
-  kind: "video" | "audio" | "iframe";
+  kind: Kind;
   width?: string | null;
+  align?: Align;
   title?: string | null;
 }
 
 const MediaNode = Node.create({
   name: "media",
-  group: "block",
+  group: "inline",
+  inline: true,
   atom: true,
   draggable: true,
   selectable: true,
@@ -30,60 +38,58 @@ const MediaNode = Node.create({
   addAttributes() {
     return {
       src: { default: "" },
-      kind: { default: "video" },
-      width: { default: null },
-      title: { default: null },
+      kind: { default: "video" as Kind },
+      width: {
+        default: null,
+        parseHTML: (el: HTMLElement) => el.getAttribute("width") || el.style.width || null,
+        renderHTML: (attrs: Record<string, unknown>) => (attrs.width ? { width: attrs.width as string } : {}),
+      },
+      align: {
+        default: "left" as Align,
+        parseHTML: (el: HTMLElement) => (el.getAttribute("data-align") as Align) || "left",
+        renderHTML: (attrs: Record<string, unknown>) => ({ "data-align": ((attrs.align as Align) || "left") }),
+      },
+      title: {
+        default: null,
+        parseHTML: (el: HTMLElement) => el.getAttribute("title") || null,
+        renderHTML: (attrs: Record<string, unknown>) => (attrs.title ? { title: attrs.title as string } : {}),
+      },
     };
   },
 
   parseHTML() {
+    const grab = (el: HTMLElement, kind: Kind) => {
+      const src = el.getAttribute("src") || el.querySelector("source")?.getAttribute("src") || "";
+      return src ? { kind, src } : false;
+    };
     return [
-      {
-        tag: "video",
-        getAttrs: (el) => {
-          const e = el as HTMLElement;
-          const src = e.getAttribute("src") || e.querySelector("source")?.getAttribute("src") || "";
-          return src
-            ? { src, kind: "video", width: e.getAttribute("width") || e.style.width || null, title: e.getAttribute("title") }
-            : false;
-        },
-      },
-      {
-        tag: "audio",
-        getAttrs: (el) => {
-          const e = el as HTMLElement;
-          const src = e.getAttribute("src") || e.querySelector("source")?.getAttribute("src") || "";
-          return src
-            ? { src, kind: "audio", width: e.getAttribute("width") || e.style.width || null, title: e.getAttribute("title") }
-            : false;
-        },
-      },
-      {
-        tag: "iframe",
-        getAttrs: (el) => {
-          const e = el as HTMLElement;
-          const src = e.getAttribute("src") || "";
-          return src
-            ? { src, kind: "iframe", width: e.getAttribute("width") || e.style.width || null, title: e.getAttribute("title") }
-            : false;
-        },
-      },
+      { tag: "video", getAttrs: (el) => grab(el as HTMLElement, "video") },
+      { tag: "audio", getAttrs: (el) => grab(el as HTMLElement, "audio") },
+      { tag: "iframe", getAttrs: (el) => grab(el as HTMLElement, "iframe") },
     ];
   },
 
   renderHTML({ HTMLAttributes }) {
-    const kind = (HTMLAttributes.kind as string) === "audio"
-      ? "audio"
-      : (HTMLAttributes.kind as string) === "iframe"
-      ? "iframe"
-      : "video";
+    const kind: Kind =
+      HTMLAttributes.kind === "audio" ? "audio" : HTMLAttributes.kind === "iframe" ? "iframe" : "video";
     const src = (HTMLAttributes.src as string) || "";
     const w = (HTMLAttributes.width as string) || "";
+    const a: Align = ((HTMLAttributes["data-align"] as Align) || "left") as Align;
     const title = HTMLAttributes.title as string | undefined;
 
+    const styleParts: string[] = [];
+    if (w) styleParts.push(`width:${w}`);
+    if (kind === "iframe") styleParts.push("aspect-ratio:16/9", "border:0", "max-width:100%");
+    else if (kind === "video") styleParts.push("max-width:100%", "height:auto", "background:#000");
+    else styleParts.push("max-width:100%", "min-width:0");
+
+    if (a === "left") styleParts.push("float:left", "margin:4px 14px 8px 0");
+    else if (a === "right") styleParts.push("float:right", "margin:4px 0 8px 14px");
+    else if (a === "center") styleParts.push("display:block", "margin:0.5em auto", "clear:both");
+
+    const style = styleParts.join(";");
+
     if (kind === "iframe") {
-      const widthCss = w || "100%";
-      const style = `width:${widthCss};aspect-ratio:16/9;border:0;display:block;margin:0.5em 0`;
       return [
         "iframe",
         mergeAttributes({
@@ -92,8 +98,9 @@ const MediaNode = Node.create({
           frameborder: "0",
           allow: "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture",
           allowfullscreen: "",
-          ...(title ? { title } : {}),
+          "data-align": a,
           ...(w ? { width: w } : {}),
+          ...(title ? { title } : {}),
         }),
       ];
     }
@@ -102,21 +109,48 @@ const MediaNode = Node.create({
       src,
       controls: "",
       preload: "metadata",
+      style,
+      "data-align": a,
     };
+    if (kind === "video") baseAttrs.playsinline = "";
+    if (w) baseAttrs.width = w;
     if (title) baseAttrs.title = title;
-
-    if (kind === "video") {
-      const widthCss = w || "100%";
-      baseAttrs.style = `width:${widthCss};max-width:100%;height:auto;display:block;margin:0.5em 0;background:#000`;
-      baseAttrs.playsinline = "";
-      if (w) baseAttrs.width = w;
-    } else {
-      // audio
-      const widthCss = w || "100%";
-      baseAttrs.style = `width:${widthCss};max-width:100%;display:block;margin:0.5em 0`;
-      if (w) baseAttrs.width = w;
-    }
     return [kind, mergeAttributes(baseAttrs)];
+  },
+
+  addKeyboardShortcuts() {
+    const isMediaSelected = (sel: unknown): boolean =>
+      sel instanceof NodeSelection && sel.node?.type?.name === this.name;
+    return {
+      Enter: () => {
+        const { state, view } = this.editor;
+        const { selection } = state;
+        if (!isMediaSelected(selection)) return false;
+        const pos = selection.to;
+        const para = state.schema.nodes.paragraph?.create();
+        if (!para) return false;
+        const tr = state.tr.insert(pos, para);
+        tr.setSelection(TextSelection.near(tr.doc.resolve(pos + 1)));
+        view.dispatch(tr.scrollIntoView());
+        return true;
+      },
+      ArrowRight: () => {
+        const { state, view } = this.editor;
+        const { selection } = state;
+        if (!isMediaSelected(selection)) return false;
+        const $pos = state.doc.resolve(selection.to);
+        view.dispatch(state.tr.setSelection(TextSelection.near($pos, 1)).scrollIntoView());
+        return true;
+      },
+      ArrowLeft: () => {
+        const { state, view } = this.editor;
+        const { selection } = state;
+        if (!isMediaSelected(selection)) return false;
+        const $pos = state.doc.resolve(selection.from);
+        view.dispatch(state.tr.setSelection(TextSelection.near($pos, -1)).scrollIntoView());
+        return true;
+      },
+    };
   },
 
   addNodeView() {
@@ -125,16 +159,34 @@ const MediaNode = Node.create({
 });
 
 function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode }: ReactNodeViewProps) {
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLSpanElement>(null);
   const [drag, setDrag] = useState<{ startX: number; startW: number } | null>(null);
 
-  const kind = (node.attrs.kind as "video" | "audio" | "iframe") || "video";
+  const kind = (node.attrs.kind as Kind) || "video";
   const src = (node.attrs.src as string) || "";
   const widthAttr = (node.attrs.width as string | null) || null;
+  const align = ((node.attrs.align as Align) || "left") as Align;
   const title = (node.attrs.title as string | undefined) || undefined;
   const show = selected && editor.isEditable;
 
-  // 드래그 리사이즈 (우측 핸들) — % 기반
+  const effectiveWidth = widthAttr || (kind === "audio" ? "400px" : "60%");
+
+  // 래퍼 — float 가 적용되려면 너비를 명시해야 텍스트가 옆 공간으로 흐른다.
+  const wrapBase: React.CSSProperties = {
+    position: "relative",
+    width: effectiveWidth,
+    maxWidth: "100%",
+    lineHeight: 0,
+    verticalAlign: "top",
+  };
+  const wrapStyle: React.CSSProperties =
+    align === "center"
+      ? { ...wrapBase, display: "block", margin: "8px auto", clear: "both" }
+      : align === "right"
+      ? { ...wrapBase, float: "right", margin: "4px 0 8px 14px" }
+      : { ...wrapBase, float: "left", margin: "4px 14px 8px 0" };
+
+  // 드래그 리사이즈 — 우측 핸들, % 기반
   useEffect(() => {
     if (!drag) return;
     const onMove = (e: MouseEvent) => {
@@ -165,21 +217,10 @@ function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode }:
     setDrag({ startX: e.clientX, startW: rect.width });
   };
 
-  const wrapWidth = widthAttr || (kind === "audio" ? "100%" : kind === "iframe" ? "100%" : "100%");
-
-  const wrapStyle: React.CSSProperties = {
-    position: "relative",
-    width: wrapWidth,
-    maxWidth: "100%",
-    margin: "8px 0",
-    lineHeight: 0,
-    outline: show ? "2px solid #3b82f6" : "none",
-    outlineOffset: 2,
-    display: "block",
-  };
+  const setPercent = (pct: number) => updateAttributes({ width: `${pct}%` });
 
   return (
-    <NodeViewWrapper as="div" ref={wrapRef} className="resizable-media-wrap" style={wrapStyle}>
+    <NodeViewWrapper as="span" ref={wrapRef} className="resizable-media-wrap" style={wrapStyle}>
       {/* 컨트롤 바 */}
       {show && (
         <div
@@ -187,7 +228,9 @@ function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode }:
           style={{
             position: "absolute",
             top: -34,
-            left: 0,
+            left: align === "center" ? "50%" : align === "right" ? "auto" : 0,
+            right: align === "right" ? 0 : "auto",
+            transform: align === "center" ? "translateX(-50%)" : undefined,
             display: "flex",
             gap: 4,
             padding: "3px 6px",
@@ -208,7 +251,7 @@ function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode }:
             <button
               key={p}
               type="button"
-              onClick={() => updateAttributes({ width: `${p}%` })}
+              onClick={() => setPercent(p)}
               title={`${p}% 크기`}
               style={btnStyle(widthAttr === `${p}%`)}
             >
@@ -216,12 +259,17 @@ function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode }:
             </button>
           ))}
           <span style={{ opacity: 0.5, padding: "0 2px" }}>|</span>
-          <button
-            type="button"
-            onClick={() => deleteNode()}
-            title="삭제"
-            style={{ ...btnStyle(false), color: "#fca5a5" }}
-          >
+          <button type="button" onClick={() => updateAttributes({ align: "left" })} title="왼쪽(텍스트 오른쪽)" style={btnStyle(align === "left")}>
+            ⬅
+          </button>
+          <button type="button" onClick={() => updateAttributes({ align: "center" })} title="가운데" style={btnStyle(align === "center")}>
+            ↔
+          </button>
+          <button type="button" onClick={() => updateAttributes({ align: "right" })} title="오른쪽(텍스트 왼쪽)" style={btnStyle(align === "right")}>
+            ➡
+          </button>
+          <span style={{ opacity: 0.5, padding: "0 2px" }}>|</span>
+          <button type="button" onClick={() => deleteNode()} title="삭제" style={{ ...btnStyle(false), color: "#fca5a5" }}>
             🗑
           </button>
         </div>
@@ -235,7 +283,14 @@ function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode }:
           preload="metadata"
           playsInline
           title={title}
-          style={{ display: "block", width: "100%", height: "auto", background: "#000" }}
+          style={{
+            display: "block",
+            width: "100%",
+            height: "auto",
+            background: "#000",
+            outline: show ? "2px solid #3b82f6" : "none",
+            outlineOffset: 1,
+          }}
         />
       )}
       {kind === "audio" && (
@@ -244,20 +299,34 @@ function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode }:
           controls
           preload="metadata"
           title={title}
-          style={{ display: "block", width: "100%" }}
+          style={{
+            display: "block",
+            width: "100%",
+            minWidth: 0,
+            outline: show ? "2px solid #3b82f6" : "none",
+            outlineOffset: 1,
+            borderRadius: 4,
+          }}
         />
       )}
       {kind === "iframe" && (
         <iframe
           src={src}
           title={title}
-          style={{ display: "block", width: "100%", aspectRatio: "16 / 9", border: 0 }}
+          style={{
+            display: "block",
+            width: "100%",
+            aspectRatio: "16 / 9",
+            border: 0,
+            outline: show ? "2px solid #3b82f6" : "none",
+            outlineOffset: 1,
+          }}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
         />
       )}
 
-      {/* 우측 가운데 리사이즈 핸들 */}
+      {/* 우측 드래그 핸들 */}
       {show && (
         <span
           contentEditable={false}
@@ -300,7 +369,7 @@ function btnStyle(active: boolean): React.CSSProperties {
 export default MediaNode;
 
 // 유틸: URL 로부터 종류 자동 판정
-export function detectMediaKind(url: string): "video" | "audio" | "iframe" | null {
+export function detectMediaKind(url: string): Kind | null {
   const lower = url.toLowerCase().split("?")[0];
   if (/\.(mp4|webm|ogv|mov|m4v)$/.test(lower)) return "video";
   if (/\.(mp3|wav|ogg|m4a|aac|flac)$/.test(lower)) return "audio";
