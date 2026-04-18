@@ -2,9 +2,20 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useRef, Suspense, use } from "react";
-import TipTapEditor from "@/components/board/TipTapEditor";
+import dynamic from "next/dynamic";
 import HelpButton from "@/components/HelpButton";
 import CaptchaField from "@/components/CaptchaField";
+
+// TipTap 은 무거운 에디터 (@tiptap/* + prosemirror 다수). 글쓰기 진입 시에만 로드하도록
+// 동적 import 로 분리해 초기 번들 사이즈 감소.
+const TipTapEditor = dynamic(() => import("@/components/board/TipTapEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-400 min-h-[200px]">
+      에디터 로딩 중...
+    </div>
+  ),
+});
 
 // ============================================================
 // 글쓰기/수정/답글 페이지 (제로보드 write.php 대체)

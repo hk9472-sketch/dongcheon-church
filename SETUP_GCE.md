@@ -754,6 +754,93 @@ free -h
 htop
 ```
 
+### 운영 안정화 (권장 1회 설정)
+
+#### PM2 로그 로테이션
+
+PM2 기본 로그는 무한 증가한다. 일 단위 로테이트 + 보존 기간 설정 권장.
+
+```bash
+# 설치 (PM2 내부 모듈)
+pm2 install pm2-logrotate
+
+# 보존 30일, 10MB 단위 분할, gzip 압축
+pm2 set pm2-logrotate:max_size 10M
+pm2 set pm2-logrotate:retain 30
+pm2 set pm2-logrotate:compress true
+pm2 set pm2-logrotate:rotateInterval '0 0 * * *'   # 매일 자정
+pm2 save
+```
+
+#### MySQL slow query log
+
+장기적으로 느린 쿼리 추적.
+
+```bash
+sudo tee -a /etc/mysql/mysql.conf.d/mysqld.cnf <<'EOF'
+
+# --- slow query (dongcheon) ---
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 1
+log_queries_not_using_indexes = 0
+EOF
+
+sudo mkdir -p /var/log/mysql
+sudo chown mysql:mysql /var/log/mysql
+sudo systemctl restart mysql
+
+# 확인
+mysql -u root -p -e "SHOW VARIABLES LIKE 'slow_query%';"
+
+# 로그 확인
+sudo tail -f /var/log/mysql/slow.log
+```
+
+로그 로테이트는 `/etc/logrotate.d/mysql-server` 의 기본 설정이 커버.
+
+#### 디스크 공간 모니터링
+
+`data/` (첨부) + MySQL 데이터 + PM2 로그가 누적된다. 80% 도달 시 알림 권장.
+
+```bash
+# 1회 점검
+df -h /
+
+# 용량 큰 디렉터리 Top 10
+du -h --max-depth=2 ~/dongcheon-church 2>/dev/null | sort -rh | head -10
+
+# 간단한 알림 스크립트 (crontab 등록 예)
+cat > ~/disk_check.sh <<'EOF'
+#!/bin/bash
+THRESHOLD=80
+USAGE=$(df / | awk 'NR==2 {print $5}' | sed 's/%//')
+if [ "$USAGE" -ge "$THRESHOLD" ]; then
+  echo "[WARN] Disk usage ${USAGE}% on $(hostname)"
+  # 이메일/Slack 연동은 기존 알림 체계에 맞게 추가
+fi
+EOF
+chmod +x ~/disk_check.sh
+
+# crontab -e 에 추가
+# 0 9 * * * /home/hk9472/disk_check.sh | mail -s "dongcheon disk check" you@example.com
+```
+
+#### 헬스 상세 조회
+
+`/api/health` 는 이제 uptime/memory/active sessions 를 반환한다.
+
+```bash
+curl -s https://dongcheon.org/api/health | jq
+# {
+#   "status": "ok",
+#   "uptimeHuman": "3d 14h 22m 5s",
+#   "activeSessions": 42,
+#   "memory": { "rssMB": 187.4, "heapUsedMB": 92.1, ... },
+#   ...
+# }
+```
+
 ### VM 초기화 (전체 재설치 시)
 
 ```bash
