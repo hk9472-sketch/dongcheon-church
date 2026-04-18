@@ -371,6 +371,7 @@ function WriteForm({ boardId }: { boardId: string }) {
                   content={content}
                   onChange={(html) => setContent(html)}
                   placeholder="내용을 입력하세요"
+                  boardSlug={boardId}
                 />
               ) : (
                 <textarea

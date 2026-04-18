@@ -22,6 +22,8 @@ interface TipTapEditorProps {
   onChange: (html: string) => void;
   placeholder?: string;
   minHeight?: string;
+  /** 이미지 업로드 API 에 전달할 게시판 slug. 없으면 업로드 시도 시 알림. */
+  boardSlug?: string;
 }
 
 // ─── 색상 팔레트 ───
@@ -187,7 +189,7 @@ function Sep() {
 // ═══════════════════════════════════════════════
 // 메인 TipTapEditor 컴포넌트
 // ═══════════════════════════════════════════════
-export default function TipTapEditor({ content, onChange, placeholder, minHeight }: TipTapEditorProps) {
+export default function TipTapEditor({ content, onChange, placeholder, minHeight, boardSlug }: TipTapEditorProps) {
   // minHeight: CSS 픽셀값 (예: "60px", "400px")
   const minH = minHeight || "400px";
 
@@ -245,13 +247,92 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     }
   }, [editor, content]);
 
+  // 이미지 업로드 헬퍼 — 파일을 /api/board/image-upload 로 올리고 에디터에 삽입.
+  // boardSlug 가 없으면 실패 (글쓰기 페이지에서 prop 전달 필수).
+  const uploadAndInsertImage = useCallback(
+    async (file: File): Promise<boolean> => {
+      if (!editor) return false;
+      if (!boardSlug) {
+        alert("이 편집기는 현재 파일 업로드를 지원하지 않습니다.");
+        return false;
+      }
+      if (!file.type.startsWith("image/")) return false;
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("boardSlug", boardSlug);
+        const res = await fetch("/api/board/image-upload", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(`이미지 업로드 실패: ${data.message || res.status}`);
+          return false;
+        }
+        editor.chain().focus().setImage({ src: data.url, alt: file.name }).run();
+        return true;
+      } catch (e) {
+        alert(`이미지 업로드 실패: ${e instanceof Error ? e.message : String(e)}`);
+        return false;
+      }
+    },
+    [editor, boardSlug]
+  );
+
+  // 툴바 이미지 버튼: 파일 선택창 열기 (여러 장 선택 가능)
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const addImage = useCallback(() => {
-    if (!editor) return;
-    const url = prompt("이미지 URL을 입력하세요:");
-    if (url) {
-      editor.chain().focus().setImage({ src: url }).run();
-    }
-  }, [editor]);
+    imageInputRef.current?.click();
+  }, []);
+  const handleImageInputChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || []);
+      for (const f of files) {
+        await uploadAndInsertImage(f);
+      }
+      e.target.value = ""; // 같은 파일 재선택 허용
+    },
+    [uploadAndInsertImage]
+  );
+
+  // 클립보드 붙여넣기 — 이미지가 있으면 자동 업로드 후 삽입
+  useEffect(() => {
+    const dom = editor?.view.dom;
+    if (!dom) return;
+    const handler = async (e: ClipboardEvent) => {
+      if (!e.clipboardData || !boardSlug) return;
+      const files = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith("image/"));
+      if (files.length === 0) return;
+      e.preventDefault();
+      for (const f of files) {
+        await uploadAndInsertImage(f);
+      }
+    };
+    dom.addEventListener("paste", handler);
+    return () => dom.removeEventListener("paste", handler);
+  }, [editor, boardSlug, uploadAndInsertImage]);
+
+  // 드래그앤드롭 — 에디터 영역에 이미지 파일 놓으면 자동 업로드
+  useEffect(() => {
+    const dom = editor?.view.dom;
+    if (!dom) return;
+    const preventDefault = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
+    };
+    const handler = async (e: DragEvent) => {
+      if (!e.dataTransfer || !boardSlug) return;
+      const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
+      if (files.length === 0) return;
+      e.preventDefault();
+      for (const f of files) {
+        await uploadAndInsertImage(f);
+      }
+    };
+    dom.addEventListener("dragover", preventDefault);
+    dom.addEventListener("drop", handler);
+    return () => {
+      dom.removeEventListener("dragover", preventDefault);
+      dom.removeEventListener("drop", handler);
+    };
+  }, [editor, boardSlug, uploadAndInsertImage]);
 
   const addLink = useCallback(() => {
     if (!editor) return;
@@ -470,9 +551,17 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         <Sep />
 
         {/* 삽입 */}
-        <TBtn onClick={addImage} title="이미지 삽입">
+        <TBtn onClick={addImage} title="이미지 삽입 (붙여넣기·드래그앤드롭도 가능)">
           🖼
         </TBtn>
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={handleImageInputChange}
+        />
         <TBtn
           onClick={addLink}
           active={editor.isActive("link")}
