@@ -15,7 +15,7 @@ async function verifyAdmin() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { id: true, isAdmin: true },
+    select: { id: true, userId: true, isAdmin: true },
   });
   if (!user || user.isAdmin > 2) return null;
 
@@ -172,20 +172,21 @@ export async function POST(request: NextRequest) {
       }
       const realTable = TABLE_MAP[tableName];
 
-      // ==== User 는 관리자 보존 삭제 ====
-      // 마이그레이션 과정에서 관리자까지 지워져 락아웃되는 사고를 방지.
+      // ==== User 는 "현재 로그인 사용자"만 남기고 전부 삭제 ====
+      // 관리자 여럿인 경우를 고려해, 지금 요청한 세션의 userId 만 보존.
+      // (lockout 방지 + 레거시 권한 덤프가 기존 권한을 오염시키지 않도록 단일화)
       if (tableName === "User") {
         await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=0");
-        const preserved = await prisma.user.count({ where: { isAdmin: { lte: 2 } } });
-        // isAdmin 수치가 작을수록 상위 권한 (1=최고, 2=그룹). 3 이상만 삭제.
         const deleted = await prisma.$executeRawUnsafe(
-          `DELETE FROM \`${realTable}\` WHERE isAdmin >= 3`
+          `DELETE FROM \`${realTable}\` WHERE id <> ?`,
+          admin.id
         );
         await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=1");
         return NextResponse.json({
           success: true,
-          message: `User 테이블 초기화 완료 (일반회원 ${deleted}명 삭제, 관리자 ${preserved}명 보존).`,
-          preserved,
+          message: `User 테이블 초기화 완료 (${deleted}명 삭제, 현재 로그인 사용자 '${admin.userId}' 만 보존).`,
+          preserved: 1,
+          preservedUserId: admin.userId,
           deleted,
         });
       }

@@ -1144,7 +1144,7 @@ interface LegacyUserPreview {
   regDate: string | null;
   alreadyExists: boolean;
   hasPassword: boolean;
-  excludedReason?: "legacy-admin" | "existing-admin" | null;
+  excludedReason?: "current-login" | null;
 }
 
 // SQL에서 zetyx_member_table INSERT 문만 추출 (클라이언트)
@@ -1196,8 +1196,8 @@ function UserMigrationTab() {
     total: number;
     migrated: number;
     skipped: number;
-    skippedLegacyAdmin?: number;
-    skippedExistingAdmin?: number;
+    skippedCurrentLogin?: number;
+    currentLoginId?: string;
     errorCount: number;
     errors: string[];
   } | null>(null);
@@ -1224,7 +1224,7 @@ function UserMigrationTab() {
   };
 
   const handleTruncateUser = async () => {
-    if (!confirm("[User] 테이블을 초기화하시겠습니까?\n\n일반회원(isAdmin>=3)만 삭제되고 관리자(isAdmin<=2)는 자동 보존됩니다.\n로그인 세션(Session)도 초기화됩니다.\n이 작업은 되돌릴 수 없습니다.")) return;
+    if (!confirm("[User] 테이블을 초기화하시겠습니까?\n\n현재 로그인한 사용자 계정만 남기고 모두 삭제합니다.\n로그인 세션(Session)도 초기화됩니다.\n이 작업은 되돌릴 수 없습니다.")) return;
     setTruncateMsg("초기화 중...");
     try {
       await fetch("/api/admin/db", {
@@ -1279,7 +1279,7 @@ function UserMigrationTab() {
     const toMigrate = users.filter((u) => !u.alreadyExists && !u.excludedReason).length;
     const excluded = users.filter((u) => !!u.excludedReason).length;
     const note = excluded > 0
-      ? `\n\n관리자 ${excluded}명은 자동으로 제외됩니다 (레거시 admin / 기존 관리자 보호).`
+      ? `\n\n현재 로그인한 본인(동일 userId) ${excluded}명은 자동 제외됩니다.`
       : "";
     if (!confirm(`${toMigrate}명의 사용자를 이관하시겠습니까?\n\n기존에 존재하는 사용자는 건너뜁니다.${note}`)) return;
     setMigrating(true);
@@ -1366,7 +1366,7 @@ function UserMigrationTab() {
     const toMigrate = users.filter((u) => !u.alreadyExists && !u.excludedReason).length;
     const excluded = users.filter((u) => !!u.excludedReason).length;
     const note = excluded > 0
-      ? `\n\n관리자 ${excluded}명은 자동으로 제외됩니다 (레거시 admin / 기존 관리자 보호).`
+      ? `\n\n현재 로그인한 본인(동일 userId) ${excluded}명은 자동 제외됩니다.`
       : "";
     if (!confirm(`${toMigrate}명의 사용자를 이관하시겠습니까?\n\n기존에 존재하는 사용자는 건너뜁니다.${note}`)) return;
     setMigrating(true);
@@ -1420,8 +1420,8 @@ function UserMigrationTab() {
         <div className="px-4 py-3 bg-red-50 border-b border-red-200">
           <h2 className="text-sm font-bold text-red-700">이관 전 테이블 초기화</h2>
           <p className="text-xs text-red-600 mt-1">
-            일반회원(isAdmin≥3)만 삭제되고 관리자(isAdmin≤2)는 자동 보존됩니다.
-            이관된 덤프에 포함된 관리자 레코드도 업로드 시 자동으로 제외됩니다.
+            <strong>현재 로그인한 사용자 계정만 남기고</strong> 모두 삭제됩니다.
+            덤프 업로드 시에도 동일 userId 는 자동 제외되어 본인 권한이 보호됩니다.
           </p>
         </div>
         <div className="p-4 flex items-center gap-3">
@@ -1552,11 +1552,8 @@ function UserMigrationTab() {
             <p>
               전체: {result.total}명 | 이관됨: <strong>{result.migrated}명</strong>
               {" | "}건너뜀(기존): {result.skipped}명
-              {!!result.skippedLegacyAdmin && (
-                <> {" | "}제외(레거시 관리자): {result.skippedLegacyAdmin}명</>
-              )}
-              {!!result.skippedExistingAdmin && (
-                <> {" | "}제외(기존 관리자 보호): {result.skippedExistingAdmin}명</>
+              {!!result.skippedCurrentLogin && (
+                <> {" | "}제외(로그인 본인 <code className="bg-green-100 px-1 rounded">{result.currentLoginId}</code>): {result.skippedCurrentLogin}명</>
               )}
               {" | "}오류: {result.errorCount}건
             </p>
@@ -1584,7 +1581,7 @@ function UserMigrationTab() {
                 <span className="ml-2 text-gray-400 font-normal">이미 존재: {existingUsers.length}명</span>
               )}
               {excludedUsers.length > 0 && (
-                <span className="ml-2 text-orange-600 font-normal">관리자 제외: {excludedUsers.length}명</span>
+                <span className="ml-2 text-orange-600 font-normal">로그인 본인 제외: {excludedUsers.length}명</span>
               )}
             </h2>
             {newUsers.length > 0 && (
@@ -1640,13 +1637,9 @@ function UserMigrationTab() {
                       {u.regDate ? new Date(u.regDate).toLocaleDateString("ko-KR") : "-"}
                     </td>
                     <td className="py-1.5 px-3 text-center">
-                      {u.excludedReason === "legacy-admin" ? (
-                        <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px]" title="레거시 덤프의 관리자 레코드는 이관하지 않습니다.">
-                          관리자 제외
-                        </span>
-                      ) : u.excludedReason === "existing-admin" ? (
-                        <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px]" title="신규 DB 에 동일 userId 의 관리자가 이미 존재합니다.">
-                          기존 관리자
+                      {u.excludedReason === "current-login" ? (
+                        <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px]" title="현재 로그인한 본인 계정이므로 이관에서 제외됩니다.">
+                          로그인 본인
                         </span>
                       ) : u.alreadyExists ? (
                         <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px]">이관됨</span>

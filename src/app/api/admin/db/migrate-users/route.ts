@@ -95,7 +95,7 @@ async function verifyAdmin() {
   if (!session || session.expires < new Date()) return null;
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { id: true, isAdmin: true },
+    select: { id: true, userId: true, isAdmin: true },
   });
   if (!user || user.isAdmin > 2) return null;
   return user;
@@ -176,7 +176,7 @@ export async function GET(request: NextRequest) {
   const legacyDb = url.searchParams.get("db") || "pkistdc";
 
   try {
-    return await buildPreviewResponse(null, legacyDb);
+    return await buildPreviewResponse(null, legacyDb, admin.userId);
   } catch (e) {
     return NextResponse.json(
       { error: `레거시 DB 조회 실패: ${e instanceof Error ? e.message : String(e)}` },
@@ -201,23 +201,26 @@ export async function POST(request: NextRequest) {
       return await handleTestConnection(connectionInfo);
     }
 
+    // 현재 로그인한 userId — 이관 과정에서 이 id 는 스킵하여 권한 단일화 보장
+    const currentLoginId = admin.userId;
+
     if (action === "preview") {
-      return await buildPreviewResponse(connInfo, legacyDb);
+      return await buildPreviewResponse(connInfo, legacyDb, currentLoginId);
     }
 
     // SQL 덤프 미리보기
     if (action === "preview-sql") {
-      return await buildSqlPreviewResponse(body.sql);
+      return await buildSqlPreviewResponse(body.sql, currentLoginId);
     }
 
     // SQL 덤프 이관 실행
     if (action === "import-sql") {
       const users = parseMemberSql(body.sql || "");
-      return await runMigration(users, skipExisting);
+      return await runMigration(users, skipExisting, currentLoginId);
     }
 
     // 기본: 원격/로컬 DB 이관 실행
-    return await executeMigration(connInfo, legacyDb, skipExisting);
+    return await executeMigration(connInfo, legacyDb, skipExisting, currentLoginId);
   } catch (e) {
     return NextResponse.json(
       { error: `이관 실패: ${e instanceof Error ? e.message : String(e)}` },
@@ -229,37 +232,31 @@ export async function POST(request: NextRequest) {
 // ============================================================
 // 미리보기 응답 생성
 // ============================================================
-async function buildPreviewResponse(connInfo: ConnectionInfo | null, legacyDb: string) {
+async function buildPreviewResponse(
+  connInfo: ConnectionInfo | null,
+  legacyDb: string,
+  currentLoginId: string
+) {
   const legacyUsers = await fetchLegacyUsers(connInfo, legacyDb);
-  const existingUsers = await prisma.user.findMany({
-    select: { userId: true, isAdmin: true },
-  });
+  const existingUsers = await prisma.user.findMany({ select: { userId: true } });
   const existingSet = new Set(existingUsers.map((u) => u.userId));
-  const existingAdminSet = new Set(
-    existingUsers.filter((u) => u.isAdmin <= 2).map((u) => u.userId)
-  );
 
   const preview = legacyUsers.map((u) => {
     const uid = String(u.user_id || "");
-    const legacyIsAdmin = Number(u.is_admin || 3);
     const alreadyExists = existingSet.has(uid);
-    const skipLegacyAdmin = legacyIsAdmin <= 2;
-    const skipExistingAdmin = existingAdminSet.has(uid);
+    // "로그인한 본인" 과 동일 userId 는 절대 덮어쓰지 않는다
+    const skipSelf = uid === currentLoginId;
     return {
       no: Number(u.no || 0),
       userId: uid,
       name: String(u.name || ""),
       email: String(u.email || ""),
       level: Number(u.level || 10),
-      isAdmin: legacyIsAdmin,
+      isAdmin: Number(u.is_admin || 3),
       regDate: u.reg_date ? new Date(Number(u.reg_date) * 1000).toISOString() : null,
       alreadyExists,
       hasPassword: !!u.password,
-      excludedReason: skipLegacyAdmin
-        ? "legacy-admin"
-        : skipExistingAdmin
-        ? "existing-admin"
-        : null,
+      excludedReason: skipSelf ? "current-login" : null,
     };
   });
 
@@ -267,8 +264,8 @@ async function buildPreviewResponse(connInfo: ConnectionInfo | null, legacyDb: s
     total: legacyUsers.length,
     alreadyMigrated: preview.filter((p) => p.alreadyExists).length,
     toMigrate: preview.filter((p) => !p.alreadyExists && !p.excludedReason).length,
-    excludedLegacyAdmin: preview.filter((p) => p.excludedReason === "legacy-admin").length,
-    excludedExistingAdmin: preview.filter((p) => p.excludedReason === "existing-admin").length,
+    excludedCurrentLogin: preview.filter((p) => p.excludedReason === "current-login").length,
+    currentLoginId,
     users: preview,
   });
 }
@@ -276,40 +273,29 @@ async function buildPreviewResponse(connInfo: ConnectionInfo | null, legacyDb: s
 // ============================================================
 // SQL 덤프 미리보기
 // ============================================================
-async function buildSqlPreviewResponse(sql: string) {
+async function buildSqlPreviewResponse(sql: string, currentLoginId: string) {
   if (!sql || sql.length < 10) {
     return NextResponse.json({ error: "SQL 데이터가 필요합니다." }, { status: 400 });
   }
   const legacyUsers = parseMemberSql(sql);
-  const existingUsers = await prisma.user.findMany({
-    select: { userId: true, isAdmin: true },
-  });
+  const existingUsers = await prisma.user.findMany({ select: { userId: true } });
   const existingSet = new Set(existingUsers.map((u) => u.userId));
-  const existingAdminSet = new Set(
-    existingUsers.filter((u) => u.isAdmin <= 2).map((u) => u.userId)
-  );
 
   const preview = legacyUsers.map((u) => {
     const uid = String(u.user_id || "");
-    const legacyIsAdmin = Number(u.is_admin || 3);
     const alreadyExists = existingSet.has(uid);
-    const skipLegacyAdmin = legacyIsAdmin <= 2;
-    const skipExistingAdmin = existingAdminSet.has(uid);
+    const skipSelf = uid === currentLoginId;
     return {
       no: Number(u.no || 0),
       userId: uid,
       name: String(u.name || ""),
       email: String(u.email || ""),
       level: Number(u.level || 10),
-      isAdmin: legacyIsAdmin,
+      isAdmin: Number(u.is_admin || 3),
       regDate: u.reg_date ? new Date(Number(u.reg_date) * 1000).toISOString() : null,
       alreadyExists,
       hasPassword: !!u.password,
-      excludedReason: skipLegacyAdmin
-        ? "legacy-admin"
-        : skipExistingAdmin
-        ? "existing-admin"
-        : null,
+      excludedReason: skipSelf ? "current-login" : null,
     };
   });
 
@@ -317,8 +303,8 @@ async function buildSqlPreviewResponse(sql: string) {
     total: legacyUsers.length,
     alreadyMigrated: preview.filter((p) => p.alreadyExists).length,
     toMigrate: preview.filter((p) => !p.alreadyExists && !p.excludedReason).length,
-    excludedLegacyAdmin: preview.filter((p) => p.excludedReason === "legacy-admin").length,
-    excludedExistingAdmin: preview.filter((p) => p.excludedReason === "existing-admin").length,
+    excludedCurrentLogin: preview.filter((p) => p.excludedReason === "current-login").length,
+    currentLoginId,
     users: preview,
   });
 }
@@ -448,30 +434,25 @@ function _parseValueTuples(valuesStr: string): (string | null)[][] {
 async function executeMigration(
   connInfo: ConnectionInfo | null,
   legacyDb: string,
-  skipExisting: boolean
+  skipExisting: boolean,
+  currentLoginId: string
 ) {
   const legacyUsers = await fetchLegacyUsers(connInfo, legacyDb);
-  return runMigration(legacyUsers, skipExisting);
+  return runMigration(legacyUsers, skipExisting, currentLoginId);
 }
 
 async function runMigration(
   legacyUsers: Record<string, unknown>[],
-  skipExisting: boolean
+  skipExisting: boolean,
+  currentLoginId: string
 ) {
-  // 신규 DB 의 관리자(isAdmin <= 2) userId 집합 — 이관 중 절대 덮어쓰지 않음
-  const existingUsers = await prisma.user.findMany({
-    select: { userId: true, isAdmin: true },
-  });
+  const existingUsers = await prisma.user.findMany({ select: { userId: true } });
   const existingSet = new Set(existingUsers.map((u) => u.userId));
-  const existingAdminSet = new Set(
-    existingUsers.filter((u) => u.isAdmin <= 2).map((u) => u.userId)
-  );
   const tempHash = await hashPassword("__legacy_migration__");
 
   let migrated = 0;
   let skipped = 0;
-  let skippedLegacyAdmin = 0;      // 레거시 덤프의 관리자(is_admin<=2) 레코드 스킵
-  let skippedExistingAdmin = 0;    // 신규 DB 의 관리자와 userId 중복
+  let skippedCurrentLogin = 0;     // 로그인한 본인(userId 동일) 스킵
   const errors: string[] = [];
 
   for (const u of legacyUsers) {
@@ -481,18 +462,11 @@ async function runMigration(
       continue;
     }
 
-    // ==== 관리자 보호 ====
-    // 1) 레거시 덤프에 is_admin<=2 인 레코드는 이관하지 않는다.
-    //    신규 시스템의 관리자/권한 체계는 레거시 데이터와 독립이어야 함.
-    const legacyIsAdmin = Number(u.is_admin || 3);
-    if (legacyIsAdmin <= 2) {
-      skippedLegacyAdmin++;
-      continue;
-    }
-    // 2) 신규 DB 에 이미 관리자(isAdmin<=2) 로 등록된 userId 면 스킵.
-    //    동일 userId 덤프를 받아들이면 권한이 덮여질 수 있음.
-    if (existingAdminSet.has(userId)) {
-      skippedExistingAdmin++;
+    // ==== 로그인한 본인 보호 ====
+    // 현재 세션의 userId 와 동일한 레코드는 절대 생성/갱신하지 않는다.
+    // (권한/비밀번호가 덮여져 락아웃되는 것을 방지)
+    if (userId === currentLoginId) {
+      skippedCurrentLogin++;
       continue;
     }
 
@@ -559,8 +533,8 @@ async function runMigration(
     total: legacyUsers.length,
     migrated,
     skipped,
-    skippedLegacyAdmin,
-    skippedExistingAdmin,
+    skippedCurrentLogin,
+    currentLoginId,
     errorCount: errors.length,
     errors: errors.slice(0, 20),
   });
