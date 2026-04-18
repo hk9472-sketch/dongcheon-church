@@ -76,6 +76,7 @@ model User {
   postVotes     PostVote[]
   groupAccess   UserGroupAccess[]
   sessions      Session[]
+  passwordResets PasswordReset[]
 
   @@index([userId])
   @@index([name])
@@ -236,7 +237,7 @@ model Post {
   author        User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
   authorLevel   Int       @default(10)                 // islevel
   authorName    String    @db.VarChar(20)              // name
-  authorIp      String?   @db.VarChar(15)              // ip
+  authorIp      String?   @db.VarChar(45)              // ip (IPv4/IPv6 모두 수용)
   password      String?   @db.VarChar(255)             // 비회원 글 비밀번호
   email         String?   @db.VarChar(255)
   homepage      String?   @db.VarChar(255)
@@ -320,7 +321,7 @@ model Comment {
   password      String?   @db.VarChar(255)             // 비회원 댓글
   content       String    @db.MediumText               // memo
   isSecret      Boolean   @default(false)              // 비밀댓글
-  authorIp      String?   @db.VarChar(15)
+  authorIp      String?   @db.VarChar(45)              // IPv4/IPv6 모두 수용
 
   legacyDate    Int?                                   // 기존 reg_date
   createdAt     DateTime  @default(now())
@@ -409,6 +410,7 @@ model PasswordReset {
   id        Int       @id @default(autoincrement())
   token     String    @unique @db.VarChar(64)
   userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())

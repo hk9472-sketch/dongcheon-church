@@ -87,13 +87,15 @@ export default async function BoardListPage({ params, searchParams }: PageProps)
 
   const orderBy = buildOrderBy(query.select_arrange, query.desc);
 
-  // 3. 전체 글 수 조회
+  // 3. 전체 글 수 조회 (공지 제외 — 번호 컬럼/페이지네이션은 일반 글 기준)
   const where = {
     boardId: board.id,
     ...searchWhere,
   };
 
-  const totalPosts = await prisma.post.count({ where });
+  const totalPosts = await prisma.post.count({
+    where: { ...where, isNotice: false },
+  });
 
   // 4. 페이지네이션 계산
   const paging = calcPagination(totalPosts, page, board.postsPerPage, board.pagesPerBlock);

@@ -290,9 +290,12 @@ export default function HtmlToolbar({ textareaRef, content, onContentChange }: H
 
   function handleImage() {
     const url = prompt("이미지 URL을 입력하세요:");
-    if (url) {
-      insertAtCursor(`<img src="${url}" alt="" style="max-width:100%" />`);
-    }
+    if (!url) return;
+    // alt 기본값: URL 파일명 (접근성/SEO/이미지 로딩 실패 시 대체 텍스트)
+    const fileName = url.split("/").pop()?.split("?")[0]?.replace(/\.[^.]+$/, "") || "이미지";
+    const altInput = prompt("대체 텍스트(alt):", fileName);
+    const alt = (altInput || fileName).replace(/"/g, "&quot;");
+    insertAtCursor(`<img src="${url}" alt="${alt}" style="max-width:100%" />`);
   }
 
   function handleTable() {

@@ -1,0 +1,4 @@
+Contact: mailto:webmaster@dongcheonchurch.org
+Preferred-Languages: ko, en
+Expires: 2027-04-18T00:00:00Z
+Canonical: https://dongcheonchurch.org/.well-known/security.txt

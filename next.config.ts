@@ -1,5 +1,22 @@
 import type { NextConfig } from "next";
 
+// Content-Security-Policy: TipTap/YouTube 임베드/인라인 스타일 허용 포함한 운영용 정책.
+// 'unsafe-inline' style 은 TipTap 및 기존 인라인 스타일 호환성 때문에 유지.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "media-src 'self' blob:",
+  "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://youtube.com",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join("; ");
+
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
@@ -13,6 +30,21 @@ const nextConfig: NextConfig = {
         hostname: "pkistdc.net",
       },
     ],
+  },
+
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: CSP },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
   },
 
   // 레거시 제로보드 URL 리다이렉트는 src/middleware.ts 에서 전담한다.
