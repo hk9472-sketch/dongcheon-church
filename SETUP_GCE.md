@@ -754,6 +754,29 @@ free -h
 htop
 ```
 
+### 대용량 업로드 한도 (사용자 이관 등)
+
+`/admin/db/sql` 사용자 이관 · 덤프 업로드 등에서 수 MB 이상의 JSON 바디를
+보내는 경우, Nginx/Next.js 의 본문 한도를 확인한다. 제한 초과 시
+**"이관 실패: Unexpected token '<'"** 같은 증상으로 나타난다 (413/500 HTML 응답).
+
+**Nginx** — `/etc/nginx/sites-available/dongcheon` 의 server {} 에 추가:
+
+```nginx
+server {
+  # ...
+  client_max_body_size 50M;   # 기본 1M 이면 무조건 수정
+  client_body_timeout 120s;
+  # ...
+}
+```
+
+적용: `sudo nginx -t && sudo systemctl reload nginx`
+
+**Node/Next.js**: App Router 의 route handler 는 기본적으로 Node.js 스트림
+한도만 따르므로 Nginx 가 먼저 병목. Nginx 에서 통과했는데 여전히 실패하면
+PM2 로그(`pm2 logs dongcheon --lines 200`) 확인.
+
 ### 관리자 복구 / 재설정
 
 데이터 이관 · truncate · 실수 삭제 등으로 관리자 계정이 사라졌을 때 사용.

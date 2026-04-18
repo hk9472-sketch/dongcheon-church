@@ -1212,6 +1212,29 @@ function extractMemberSqlOnly(sql: string): string {
   return parts.join("\n");
 }
 
+// fetch 응답을 JSON 으로 파싱하되, 서버가 HTML 오류 페이지(413/500 등) 를
+// 반환할 때 "Unexpected token '<'" 대신 친절한 오류 메시지를 던지도록 한다.
+async function parseJsonResponse<T = unknown>(res: Response): Promise<T> {
+  const ct = res.headers.get("content-type") || "";
+  const text = await res.text();
+  if (ct.includes("application/json") || text.startsWith("{") || text.startsWith("[")) {
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error(`JSON 파싱 실패 (HTTP ${res.status}): ${text.slice(0, 200)}`);
+    }
+  }
+  // HTML/plain 응답
+  const snippet = text.replace(/\s+/g, " ").slice(0, 200);
+  if (res.status === 413) {
+    throw new Error(`요청 본문이 너무 큽니다 (HTTP 413). 서버의 Nginx client_max_body_size / Node body limit 를 확인하세요. 응답: ${snippet}`);
+  }
+  if (res.status >= 500) {
+    throw new Error(`서버 오류 (HTTP ${res.status}). 서버 로그를 확인하세요. 응답: ${snippet}`);
+  }
+  throw new Error(`예상치 못한 응답 (HTTP ${res.status}, ${ct}): ${snippet}`);
+}
+
 function UserMigrationTab() {
   const [method, setMethod] = useState<"direct" | "sql">("direct");
   const [legacyDb, setLegacyDb] = useState("pkistdc");
@@ -1248,7 +1271,7 @@ function UserMigrationTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "test-connection", connectionInfo: connInfo }),
       });
-      const data = await res.json();
+      const data = await parseJsonResponse<any>(res);
       setConnTestStatus(
         data.success
           ? `접속 성공${data.hasMemberTable ? " (zetyx_member_table 확인)" : " (zetyx_member_table 없음)"}`
@@ -1270,7 +1293,7 @@ function UserMigrationTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "truncate-table", tableName: "User" }),
       });
-      const data = await res.json();
+      const data = await parseJsonResponse<any>(res);
       setTruncateMsg(data.success ? (data.message || "User 테이블 초기화 완료") : `오류: ${data.error}`);
       setUsers([]);
       setPreviewLoaded(false);
@@ -1294,7 +1317,7 @@ function UserMigrationTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const data = await parseJsonResponse<any>(res);
       if (data.error) {
         setError(data.error);
       } else {
@@ -1327,7 +1350,7 @@ function UserMigrationTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const data = await parseJsonResponse<any>(res);
       if (data.error) {
         setError(data.error);
       } else {
@@ -1380,7 +1403,7 @@ function UserMigrationTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "preview-sql", sql: sqlContent }),
       });
-      const data = await res.json();
+      const data = await parseJsonResponse<any>(res);
       if (data.error) {
         setError(data.error);
       } else {
@@ -1411,7 +1434,7 @@ function UserMigrationTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "import-sql", sql: sqlContent, skipExisting: true }),
       });
-      const data = await res.json();
+      const data = await parseJsonResponse<any>(res);
       if (data.error) {
         setError(data.error);
       } else {
