@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { verifyPassword } from "@/lib/auth";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
+import { isSecureRequest } from "@/lib/cookieSecure";
 
 // POST /api/board/verify-post-password
 // body: { postId: number, password: string }
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({ success: true });
     response.cookies.set(`dc_post_unlock_${postId}`, "1", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: isSecureRequest(request),
       sameSite: "lax",
       maxAge: 30 * 60, // 30분
       path: "/",

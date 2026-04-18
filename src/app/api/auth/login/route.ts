@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import prisma from "@/lib/db";
 import { verifyPassword } from "@/lib/auth";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
+import { isSecureRequest } from "@/lib/cookieSecure";
 
 // POST /api/auth/login
 export async function POST(request: NextRequest) {
@@ -54,7 +55,8 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set("dc_session", sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      // HTTPS 요청일 때만 Secure (HTTP 배포 중에도 로그인 유지 위해)
+      secure: isSecureRequest(request),
       sameSite: "lax",
       expires,
       path: "/",

@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import prisma from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth";
 import { sanitizeHtml } from "@/lib/sanitize";
+import { isSecureFromHeaders } from "@/lib/cookieSecure";
 import CommentSection from "@/components/board/CommentSection";
 import PostActions from "@/components/board/PostActions";
 import SecretPostUnlock from "@/components/board/SecretPostUnlock";
@@ -84,9 +85,10 @@ export default async function PostDetailPage({ params }: PageProps) {
       // Next.js 15+ Server Component 에서도 cookies().set() 가능하지만,
       // 특정 렌더 단계에서는 실패할 수 있어 try/catch 로 방어
       try {
+        const h = await headers();
         cookieStore.set(viewCookieName, "1", {
           httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
+          secure: isSecureFromHeaders(h),
           sameSite: "lax",
           maxAge: 24 * 60 * 60, // 24시간
           path: "/",
