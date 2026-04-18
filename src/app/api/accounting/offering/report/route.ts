@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { decryptRrn } from "@/lib/rrnCrypto";
+
+/** 주민번호 복호화: 실패/미설정 시 null 반환 (영수증 렌더 계속) */
+function decryptRrnSafe(v: string | null | undefined): string | null {
+  try {
+    return decryptRrn(v);
+  } catch {
+    return null;
+  }
+}
 import { checkAccAccess, hasMemberEdit } from "@/lib/accountAuth";
 
 /**
@@ -427,7 +437,7 @@ async function handleReceipt(
     familyMembers: siblings,
     church,
     donor: {
-      residentNumber: head.residentNumber,
+      residentNumber: decryptRrnSafe(head.residentNumber),
       address: head.address,
       phone: head.phone,
       email: head.donorEmail,

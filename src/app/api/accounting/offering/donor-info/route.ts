@@ -1,19 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { checkAccAccess, hasMemberEdit } from "@/lib/accountAuth";
+import {
+  decryptRrn,
+  encryptRrn,
+  maskRrn,
+  rrnEncryptionReady,
+} from "@/lib/rrnCrypto";
 
 // 기부금영수증용 기부자 정보 (주민번호/주소/연락처/이메일).
 // 주민등록번호는 개인정보보호법상 고유식별정보 → memberEdit 권한 있는 회계 관리자만 접근.
-
-function maskResident(n: string | null | undefined): string | null {
-  if (!n) return null;
-  // 000000-0****** 형식으로 마스킹 (앞6자리 + 성별코드 1자리만 노출)
-  const digits = n.replace(/-/g, "");
-  if (digits.length < 7) return n;
-  const front = digits.slice(0, 6);
-  const genderDigit = digits.charAt(6);
-  return `${front}-${genderDigit}******`;
-}
+// DB 저장 시 AES-256-GCM 암호화 (v1:<iv>:<cipher+tag>).
 
 // GET /api/accounting/offering/donor-info?memberId=123
 //   단일 조회 (마스킹/원본 옵션)
@@ -45,11 +42,14 @@ export async function GET(request: NextRequest) {
       },
     });
     if (!m) return NextResponse.json({ error: "교인을 찾을 수 없습니다." }, { status: 404 });
+    // 복호화 (실패 시 null 로 처리하여 전체 조회 실패 방지)
+    let plainRrn: string | null = null;
+    try { plainRrn = decryptRrn(m.residentNumber); } catch { plainRrn = null; }
     return NextResponse.json({
       id: m.id,
       name: editor ? m.name : null,
       groupName: m.groupName,
-      residentNumber: reveal ? m.residentNumber : maskResident(m.residentNumber),
+      residentNumber: reveal ? plainRrn : maskRrn(plainRrn),
       address: m.address,
       phone: m.phone,
       donorEmail: m.donorEmail,
@@ -88,16 +88,20 @@ export async function GET(request: NextRequest) {
     total,
     page,
     limit,
-    rows: rows.map((m) => ({
-      id: m.id,
-      name: editor ? m.name : null,
-      groupName: m.groupName,
-      residentNumber: maskResident(m.residentNumber),
-      hasResidentNumber: !!m.residentNumber,
-      address: m.address,
-      phone: m.phone,
-      donorEmail: m.donorEmail,
-    })),
+    rows: rows.map((m) => {
+      let plainRrn: string | null = null;
+      try { plainRrn = decryptRrn(m.residentNumber); } catch { plainRrn = null; }
+      return {
+        id: m.id,
+        name: editor ? m.name : null,
+        groupName: m.groupName,
+        residentNumber: maskRrn(plainRrn),
+        hasResidentNumber: !!m.residentNumber,
+        address: m.address,
+        phone: m.phone,
+        donorEmail: m.donorEmail,
+      };
+    }),
   });
 }
 
@@ -156,16 +160,41 @@ export async function PUT(request: NextRequest) {
   const phoneNorm = normalize(phone);
   const emailNorm = normalize(donorEmail);
 
-  // 주민번호 저장 시 하이픈 통일
+  // 주민번호 저장 시 하이픈 통일 + AES-256-GCM 암호화
   let rrn: string | null = residentNorm;
   if (rrn && !/^\d{6}-\d{7}$/.test(rrn)) {
     rrn = `${rrn.slice(0, 6)}-${rrn.slice(6)}`;
   }
 
+  let encryptedRrn: string | null = null;
+  if (residentNumber !== undefined) {
+    if (rrn === null) {
+      encryptedRrn = null; // 초기화
+    } else {
+      if (!rrnEncryptionReady()) {
+        return NextResponse.json(
+          {
+            error:
+              "서버 암호화 키(RRN_ENCRYPTION_KEY)가 설정되지 않아 주민등록번호를 저장할 수 없습니다. 관리자에게 문의하세요.",
+          },
+          { status: 503 }
+        );
+      }
+      try {
+        encryptedRrn = encryptRrn(rrn);
+      } catch (e) {
+        return NextResponse.json(
+          { error: `주민등록번호 암호화 실패: ${(e as Error).message}` },
+          { status: 500 }
+        );
+      }
+    }
+  }
+
   await prisma.offeringMember.update({
     where: { id: memberId },
     data: {
-      ...(residentNumber !== undefined ? { residentNumber: rrn } : {}),
+      ...(residentNumber !== undefined ? { residentNumber: encryptedRrn } : {}),
       ...(address !== undefined ? { address: addressNorm } : {}),
       ...(phone !== undefined ? { phone: phoneNorm } : {}),
       ...(donorEmail !== undefined ? { donorEmail: emailNorm } : {}),
