@@ -202,11 +202,35 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // FK 제약 해제 후 TRUNCATE (AUTO_INCREMENT도 함께 초기화됨)
-      await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=0");
-      await prisma.$executeRawUnsafe(`TRUNCATE TABLE \`${realTable}\``);
-      await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=1");
-      return NextResponse.json({ success: true, message: `${tableName} 테이블 초기화 완료 (AUTO_INCREMENT 리셋)` });
+      // FK 참조로 인해 TRUNCATE 가 막히는 테이블은 의존 테이블을 먼저 비운다.
+      // 또한 SET FK_CHECKS 와 TRUNCATE 를 같은 커넥션에서 실행해야 세션 설정이
+      // 유효하므로 $transaction 콜백을 사용한다 ($executeRawUnsafe 를 배열로
+      // 넘기면 커넥션이 갈릴 수 있음).
+      const DEPENDENTS: Record<string, string[]> = {
+        posts: ["comments", "post_votes"],     // Comment.postId / PostVote.postId 가 posts 참조
+        users: ["sessions", "post_votes", "board_user_permissions",
+                "user_group_access", "password_resets"],
+      };
+      const dependents = DEPENDENTS[realTable] || [];
+
+      const started = Date.now();
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=0");
+        for (const dep of dependents) {
+          await tx.$executeRawUnsafe(`TRUNCATE TABLE \`${dep}\``);
+        }
+        await tx.$executeRawUnsafe(`TRUNCATE TABLE \`${realTable}\``);
+        await tx.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS=1");
+      }, { timeout: 60_000 });
+      const elapsedMs = Date.now() - started;
+      return NextResponse.json({
+        success: true,
+        message:
+          dependents.length > 0
+            ? `${tableName} 테이블 초기화 완료 (의존 테이블 ${dependents.length}개 포함, ${elapsedMs}ms)`
+            : `${tableName} 테이블 초기화 완료 (${elapsedMs}ms, AUTO_INCREMENT 리셋)`,
+        elapsedMs,
+      });
     }
 
     // 방문자 카운트 수정
