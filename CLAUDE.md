@@ -73,12 +73,24 @@ cd ~/pkistdc
 ```
 
 `apply-delta.sh` 가 자동으로:
-1. 아카이브 전개 + 이전 파일 백업
+1. 아카이브 전개 + 이전 파일 백업 (`~/.pkistdc-delta-backup/<timestamp>`)
 2. `prisma/schema.prisma` 변경 감지 시 `prisma generate` + `db push`
 3. `package(-lock).json` 변경 감지 시 `npm ci`
 4. `.next` 삭제 + `npm run build`
 5. `pm2 restart pkistdc` + `pm2 flush`
 6. 5초 후 에러 로그 자동 확인
+7. **성공 시** (에러 0 + 프로세스 online) **백업 디렉터리 + 아카이브 자동 삭제**
+    - `--keep` / `-k` 옵션 주면 보존
+    - 에러 감지 시엔 자동으로 보존 (롤백 대비)
+
+### 롤백이 필요할 때
+
+`--keep` 없이 성공하면 흔적이 남지 않으므로 실수 방지 됨. 문제 발생으로 자동 보존된 경우:
+
+```bash
+cp -r ~/.pkistdc-delta-backup/<timestamp>/* ~/pkistdc/
+pm2 restart pkistdc
+```
 
 ## PM2 프로세스 이름
 

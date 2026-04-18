@@ -3,15 +3,20 @@
 # apply-delta.sh — delta.tar.gz 를 현재 앱 경로에 적용 + 재빌드 + 재시작
 #
 # 사용법:
-#   ./apply-delta.sh <delta.tar.gz>
+#   ./apply-delta.sh <delta.tar.gz>              # 성공 시 백업·아카이브 자동 삭제
+#   ./apply-delta.sh <delta.tar.gz> --keep       # 성공해도 백업·아카이브 보관
 #
 # 동작:
-#   1) 아카이브 전개 (현재 디렉터리 기준으로 파일 덮어쓰기)
-#   2) prisma schema 변경 감지 → prisma generate + db push
-#   3) package(-lock).json 변경 감지 → npm ci
-#   4) .next 삭제 + npm run build (서버에서 빌드 — 교차 플랫폼 이슈 회피)
-#   5) pm2 restart pkistdc + flush
-#   6) 5초 후 에러 로그 확인
+#   1) 이전 파일 백업 → ~/.pkistdc-delta-backup/<timestamp>
+#   2) 아카이브 전개 (현재 디렉터리 기준으로 파일 덮어쓰기)
+#   3) prisma schema 변경 감지 → prisma generate + db push
+#   4) package(-lock).json 변경 감지 → npm ci
+#   5) .next 삭제 + npm run build (서버에서 빌드 — 교차 플랫폼 이슈 회피)
+#   6) pm2 restart pkistdc + flush
+#   7) 5초 후 에러 로그 확인
+#   8) 에러 없으면 (기본) 백업 디렉터리 + 아카이브(.tar.gz) 삭제
+#      - --keep 옵션 시 유지
+#      - 에러 발견 시 자동으로 유지 (롤백 대비)
 #
 # 주의: 반드시 앱 루트(~/pkistdc 등)에서 실행.
 # ============================================================
@@ -27,10 +32,19 @@ warn() { echo -e "${YELLOW}⚠ $1${NC}"; }
 err()  { echo -e "${RED}✗ $1${NC}"; }
 
 DELTA="${1:-}"
+KEEP=false
+for arg in "$@"; do
+  case "$arg" in
+    --keep|-k) KEEP=true ;;
+  esac
+done
+
 if [ -z "$DELTA" ] || [ ! -f "$DELTA" ]; then
-  err "사용법: $0 <delta.tar.gz>"
+  err "사용법: $0 <delta.tar.gz> [--keep]"
   exit 1
 fi
+# 절대 경로로 변환 (삭제 단계에서 cwd 변경돼도 안전)
+DELTA_ABS="$(readlink -f "$DELTA" 2>/dev/null || realpath "$DELTA" 2>/dev/null || echo "$DELTA")"
 
 # 무결성 확인
 step "아카이브 검증"
@@ -92,9 +106,11 @@ step "6) 5초 후 에러 로그 확인"
 sleep 5
 ERR=$(pm2 logs "$APP_NAME" --err --lines 15 --nostream 2>/dev/null | tail -20)
 TRIM=$(echo "$ERR" | grep -v '^$' | grep -v 'Tailing last' | grep -v '^/home' | grep -v 'last .* lines:')
+HAS_ERROR=false
 if [ -z "$TRIM" ]; then
   ok "새 에러 없음"
 else
+  HAS_ERROR=true
   warn "에러 상위:"
   echo "$ERR" | head -10
 fi
@@ -102,6 +118,38 @@ fi
 echo ""
 pm2 status | head -6
 echo ""
-echo -e "${GREEN}✅ 적용 완료${NC}"
-echo ""
-echo "문제 시 롤백: 백업 경로 $BACKUP_DIR"
+
+# 프로세스 online 여부 확인
+PM2_STATUS=$(pm2 jlist 2>/dev/null | grep -o "\"name\":\"$APP_NAME\",\"[^}]*\"status\":\"[^\"]*\"" | grep -o '"status":"[^"]*"' | head -1)
+if echo "$PM2_STATUS" | grep -q '"status":"online"'; then
+  IS_ONLINE=true
+else
+  IS_ONLINE=false
+fi
+
+# 배포 성공 판정: 에러 없음 + 프로세스 online
+if [ "$HAS_ERROR" = false ] && [ "$IS_ONLINE" = true ]; then
+  echo -e "${GREEN}✅ 배포 성공${NC}"
+  if $KEEP; then
+    warn "--keep 옵션 — 백업·아카이브 유지"
+    echo "   백업:    $BACKUP_DIR"
+    echo "   아카이브: $DELTA_ABS"
+  else
+    step "7) 정리 — 성공했으므로 백업·아카이브 삭제"
+    if [ -d "$BACKUP_DIR" ]; then
+      rm -rf "$BACKUP_DIR"
+      ok "백업 삭제: $BACKUP_DIR"
+    fi
+    if [ -f "$DELTA_ABS" ]; then
+      rm -f "$DELTA_ABS"
+      ok "아카이브 삭제: $DELTA_ABS"
+    fi
+  fi
+else
+  echo -e "${RED}⚠ 배포 문제 감지 — 백업·아카이브 보존${NC}"
+  warn "에러: $HAS_ERROR / online: $IS_ONLINE"
+  echo "   백업:    $BACKUP_DIR   (롤백용 원본 파일)"
+  echo "   아카이브: $DELTA_ABS       (재시도용)"
+  echo ""
+  echo "롤백 방법: cp -r $BACKUP_DIR/* . && pm2 restart $APP_NAME"
+fi
