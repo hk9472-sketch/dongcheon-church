@@ -197,6 +197,62 @@ export default async function PostDetailPage({ params }: PageProps) {
     select: { id: true, subject: true },
   });
 
+  // 5-1. 인근 게시글 목록 (목록 화면과 같은 headnum/arrangenum 순서 기준
+  //      앞/뒤 각 10건). 현재글 제외, 공지 제외.
+  const nearbyFields = {
+    id: true, subject: true, authorName: true, createdAt: true,
+    hit: true, totalComment: true, isSecret: true, depth: true,
+    fileName1: true, fileName2: true, headnum: true, arrangenum: true,
+  } as const;
+  const [prevList, nextList] = await Promise.all([
+    prisma.post.findMany({
+      where: {
+        boardId: board.id,
+        isNotice: false,
+        OR: [
+          { headnum: { lt: post.headnum } },
+          { headnum: post.headnum, arrangenum: { lt: post.arrangenum } },
+        ],
+      },
+      orderBy: [{ headnum: "desc" }, { arrangenum: "desc" }],
+      take: 10,
+      select: nearbyFields,
+    }),
+    prisma.post.findMany({
+      where: {
+        boardId: board.id,
+        isNotice: false,
+        OR: [
+          { headnum: { gt: post.headnum } },
+          { headnum: post.headnum, arrangenum: { gt: post.arrangenum } },
+        ],
+      },
+      orderBy: [{ headnum: "asc" }, { arrangenum: "asc" }],
+      take: 10,
+      select: nearbyFields,
+    }),
+  ]);
+  // 출력 순서: prev 역순 (목록의 순서 = headnum/arrangenum asc) → current → next
+  const nearbyPosts = [
+    ...prevList.reverse().map((p) => ({ ...p, isCurrent: false })),
+    {
+      id: post.id,
+      subject: post.subject,
+      authorName: post.authorName,
+      createdAt: post.createdAt,
+      hit: post.hit,
+      totalComment: post.totalComment,
+      isSecret: post.isSecret,
+      depth: post.depth,
+      fileName1: post.fileName1,
+      fileName2: post.fileName2,
+      headnum: post.headnum,
+      arrangenum: post.arrangenum,
+      isCurrent: true,
+    },
+    ...nextList.map((p) => ({ ...p, isCurrent: false })),
+  ];
+
   // 6. 관련 답글 조회 (같은 headnum 그룹)
   let replyList: { id: number; subject: string; authorName: string; depth: number; arrangenum: number; createdAt: Date }[] = [];
   if (post.headnum !== 0) {
@@ -462,6 +518,88 @@ export default async function PostDetailPage({ params }: PageProps) {
           )}
         </div>
       </div>
+
+      {/* 인근 게시글 목록 (앞뒤 10건씩, 현재 글은 강조) */}
+      {nearbyPosts.length > 1 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-400 overflow-hidden">
+          <div className="px-4 py-2 bg-gray-50 border-b border-gray-300 flex items-center justify-between">
+            <h3 className="text-xs font-bold text-gray-600">게시글 목록</h3>
+            <Link
+              href={`/board/${boardId}`}
+              className="text-xs text-blue-600 hover:text-blue-800"
+            >
+              전체 목록 →
+            </Link>
+          </div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
+                <th className="py-2 text-left font-medium px-3">제목</th>
+                <th className="py-2 text-center font-medium w-24 hidden sm:table-cell">작성자</th>
+                <th className="py-2 text-center font-medium w-20 hidden md:table-cell">날짜</th>
+                <th className="py-2 text-center font-medium w-12 hidden lg:table-cell">조회</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {nearbyPosts.map((p) => {
+                const depthPad = p.depth > 0 ? p.depth * 12 : 0;
+                return (
+                  <tr
+                    key={p.id}
+                    className={
+                      p.isCurrent
+                        ? "bg-blue-50 font-medium"
+                        : "hover:bg-gray-50 transition-colors"
+                    }
+                  >
+                    <td className="py-1.5 px-3">
+                      <div style={{ paddingLeft: depthPad }} className="flex items-center gap-1">
+                        {p.depth > 0 && <span className="text-gray-300 text-[10px]">└</span>}
+                        {p.isCurrent ? (
+                          <span className="text-blue-700 truncate">
+                            <span className="text-blue-500 mr-1">▶</span>
+                            {p.subject}
+                          </span>
+                        ) : (
+                          <Link
+                            href={`/board/${boardId}/${p.id}`}
+                            className="text-gray-700 hover:text-blue-700 truncate"
+                          >
+                            {p.subject}
+                          </Link>
+                        )}
+                        {p.totalComment > 0 && (
+                          <span className="ml-1 text-[10px] text-orange-500 font-bold">
+                            [{p.totalComment}]
+                          </span>
+                        )}
+                        {p.isSecret && (
+                          <span className="ml-1 text-[10px] text-gray-400" title="비밀글">🔒</span>
+                        )}
+                        {(p.fileName1 || p.fileName2) && (
+                          <span className="ml-1 text-[10px] text-gray-400" title="첨부파일">📎</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-1.5 text-center text-gray-600 hidden sm:table-cell">
+                      {p.authorName}
+                    </td>
+                    <td className="py-1.5 text-center text-gray-500 hidden md:table-cell">
+                      {new Date(p.createdAt).toLocaleDateString("ko-KR", {
+                        month: "2-digit",
+                        day: "2-digit",
+                      }).replace(/\./g, "").replace(" ", "-")}
+                    </td>
+                    <td className="py-1.5 text-center text-gray-500 hidden lg:table-cell">
+                      {p.hit}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* 하단 버튼 */}
       <div className="flex items-center justify-between">
