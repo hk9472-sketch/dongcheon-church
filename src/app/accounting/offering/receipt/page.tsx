@@ -3,10 +3,14 @@
 import { useEffect, useState } from "react";
 import { useAccountPerms } from "@/lib/useAccountPerms";
 
-/* ───── constants ───── */
-const OFFERING_TYPES = ["주일연보", "감사", "특별", "절기", "오일"] as const;
-
 /* ───── types ───── */
+interface ReceiptEntry {
+  date: string;             // YYYY-MM-DD
+  memberName: string;
+  offeringType: string;
+  amount: number;
+  description: string | null;
+}
 interface ReceiptData {
   memberId: number;          // 가족 대표(head)의 id
   memberName: string;        // 대표자 이름
@@ -30,6 +34,32 @@ interface ReceiptData {
     phone: string | null;
     email: string | null;
   };
+  entries?: ReceiptEntry[];
+}
+
+/** 날짜 문자열을 "25년 1월 26일" 형식으로 변환 */
+function fmtKorDate(s: string): string {
+  if (!s) return "";
+  const d = s.split("-");
+  if (d.length !== 3) return s;
+  return `${Number(d[0]) % 100}년 ${Number(d[1])}월 ${Number(d[2])}일`;
+}
+
+/** 오늘 날짜를 "2026 년 1 월 23 일" 형식으로 */
+function fmtIssueDate(): string {
+  const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  return `${d.getFullYear()} 년 ${d.getMonth() + 1} 월 ${d.getDate()} 일`;
+}
+
+/** 일련번호: YY-MMMM (연도 2자리 - memberId 4자리) */
+function fmtSerialNo(year: number, memberId: number): string {
+  return `${year % 100}-${String(memberId).padStart(3, "0")}`;
+}
+
+/** 유형별 적요 자동 생성 (엔트리들의 offeringType 집합) */
+function summaryOfEntries(entries: ReceiptEntry[]): string {
+  const types = Array.from(new Set(entries.map((e) => e.offeringType)));
+  return types.join(", ");
 }
 
 /* ───── helpers ───── */
@@ -105,12 +135,6 @@ export default function OfferingReceiptPage() {
   function handlePrint() {
     window.print();
   }
-
-  /* ---- today string ---- */
-  const todayFormatted = (() => {
-    const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-    return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
-  })();
 
   /* ======== render ======== */
   return (
@@ -207,151 +231,7 @@ export default function OfferingReceiptPage() {
           회원을 선택하면 영수증이 표시됩니다.
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 md:p-12 max-w-2xl mx-auto print:shadow-none print:border-2 print:border-gray-800 print:max-w-none print:mx-0 print:p-10">
-          {/* header */}
-          <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 tracking-widest print:text-3xl">
-              기부금 영수증
-            </h2>
-            <div className="mt-2 w-24 h-0.5 bg-teal-600 mx-auto print:bg-gray-800"></div>
-          </div>
-
-          {/* donor info */}
-          <div className="mb-8">
-            {/* 선택한 구성원이 가족 대표가 아니면 rollup 안내 (인쇄에서는 숨김) */}
-            {receipt.selectedMemberId && receipt.selectedMemberId !== receipt.memberId && (
-              <div className="mb-3 px-3 py-2 text-xs bg-teal-50 text-teal-700 rounded print:hidden">
-                선택한 구성원이 포함된 <strong>가족 대표({receipt.memberName})</strong> 명의로 가족 전원의 연보가 합산되어 발급됩니다.
-              </div>
-            )}
-            <table className="text-sm">
-              <tbody>
-                <tr>
-                  <td className="pr-4 py-1.5 text-gray-600 font-medium w-20">번호</td>
-                  <td className="py-1.5 text-gray-900">{receipt.memberId}</td>
-                </tr>
-                {hasMemberEdit && (
-                  <tr>
-                    <td className="pr-4 py-1.5 text-gray-600 font-medium">성명</td>
-                    <td className="py-1.5 text-gray-900 font-bold text-base">{receipt.memberName}</td>
-                  </tr>
-                )}
-                {receipt.groupName && (
-                  <tr>
-                    <td className="pr-4 py-1.5 text-gray-600 font-medium">구역</td>
-                    <td className="py-1.5 text-gray-900">{receipt.groupName}</td>
-                  </tr>
-                )}
-                {receipt.donor?.residentNumber && (
-                  <tr>
-                    <td className="pr-4 py-1.5 text-gray-600 font-medium">주민번호</td>
-                    <td className="py-1.5 text-gray-900 font-mono">{receipt.donor.residentNumber}</td>
-                  </tr>
-                )}
-                {receipt.donor?.address && (
-                  <tr>
-                    <td className="pr-4 py-1.5 text-gray-600 font-medium">주소</td>
-                    <td className="py-1.5 text-gray-900">{receipt.donor.address}</td>
-                  </tr>
-                )}
-                <tr>
-                  <td className="pr-4 py-1.5 text-gray-600 font-medium">기간</td>
-                  <td className="py-1.5 text-gray-900">
-                    {receipt.year}년 1월 1일 ~ {receipt.year}년 12월 31일
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            {/* 기부자 정보가 비어 있을 때 안내 (인쇄 시 숨김) */}
-            {(!receipt.donor?.residentNumber || !receipt.donor?.address) && (
-              <p className="mt-3 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5 print:hidden">
-                {!receipt.donor?.residentNumber && "주민등록번호"}
-                {!receipt.donor?.residentNumber && !receipt.donor?.address && " / "}
-                {!receipt.donor?.address && "주소"}
-                {" "}가 등록되어 있지 않습니다. 소득공제 제출용으로 사용하려면
-                <strong> 기부자 정보</strong> 메뉴에서 먼저 등록해 주세요.
-              </p>
-            )}
-          </div>
-
-          {/* offering details table */}
-          <div className="mb-8">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="border-t-2 border-b border-gray-800">
-                  <th className="px-4 py-3 text-left font-bold text-gray-800">연보종류</th>
-                  <th className="px-4 py-3 text-right font-bold text-gray-800">금액 (원)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {OFFERING_TYPES.map((t) => (
-                  <tr key={t} className="border-b border-gray-200">
-                    <td className="px-4 py-2.5 text-gray-700">{t}</td>
-                    <td className="px-4 py-2.5 text-right text-blue-700 font-medium">
-                      {receipt.items[t] ? fmtAmount(receipt.items[t]) : "-"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-gray-800 bg-gray-50 print:bg-gray-100">
-                  <td className="px-4 py-3 font-bold text-gray-900">총합계</td>
-                  <td className="px-4 py-3 text-right font-bold text-blue-900 text-lg">
-                    {fmtAmount(receipt.total)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          {/* 기부금 구분 (국세청 서식 29호 - 종교단체 41) */}
-          {receipt.church && (
-            <div className="mb-6">
-              <table className="w-full text-xs border-collapse border border-gray-400">
-                <tbody>
-                  <tr>
-                    <td className="border border-gray-300 bg-gray-50 px-3 py-2 text-gray-700 w-32">기부금 종류</td>
-                    <td className="border border-gray-300 px-3 py-2 text-gray-900">
-                      종교단체 기부금 (코드 {receipt.church.donationCode})
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* message */}
-          <div className="text-center text-sm text-gray-600 mb-8 leading-relaxed">
-            <p>위 금액을 「소득세법」 제34조 및 「조세특례제한법」에 의한 기부금으로 영수하였음을 증명합니다.</p>
-          </div>
-
-          {/* footer - 발급자(교회) 정보 */}
-          <div className="text-center space-y-2">
-            <p className="text-sm text-gray-600">{todayFormatted}</p>
-            <div className="mt-6 space-y-0.5">
-              <p className="text-lg font-bold text-gray-900">
-                {receipt.church?.name || churchName}
-              </p>
-              {receipt.church?.address && (
-                <p className="text-xs text-gray-600">{receipt.church.address}</p>
-              )}
-              {receipt.church?.regNo && (
-                <p className="text-xs text-gray-600">고유번호 {receipt.church.regNo}</p>
-              )}
-              <p className="text-sm text-gray-700 pt-1">
-                {receipt.church?.repTitle || churchRepresentative}{" "}
-                {receipt.church?.repName && <strong>{receipt.church.repName}</strong>}
-                <span className="ml-2 text-gray-400">(인)</span>
-              </p>
-            </div>
-          </div>
-
-          {/* 보존기간 안내 */}
-          <div className="mt-8 pt-4 border-t border-gray-200 text-[10px] text-gray-400 leading-relaxed print:text-gray-500">
-            <p>• 본 영수증은 「소득세법 시행령」 제208조의3 및 「법인세법 시행령」 제36조에 따라 5년간 보관해야 합니다.</p>
-            <p>• 국세청 홈택스 연말정산 간소화 서비스에서도 확인하실 수 있습니다.</p>
-          </div>
-        </div>
+        <ReceiptForm receipt={receipt} hasMemberEdit={hasMemberEdit} churchFallbackName={churchName} churchFallbackTitle={churchRepresentative} />
       )}
 
       {/* print styles */}
@@ -360,22 +240,301 @@ export default function OfferingReceiptPage() {
           body * {
             visibility: hidden;
           }
-          /* show only receipt area and its children */
-          .bg-white.max-w-2xl,
-          .bg-white.max-w-2xl * {
+          #receipt-print,
+          #receipt-print * {
             visibility: visible;
           }
-          .bg-white.max-w-2xl {
+          #receipt-print {
             position: absolute;
             left: 0;
             top: 0;
             width: 100%;
           }
           @page {
-            margin: 20mm;
+            size: A4 portrait;
+            margin: 15mm;
           }
         }
       `}</style>
+    </div>
+  );
+}
+
+/* ========================================================================
+ * 국세청 서식 29호 기부금 영수증
+ * ======================================================================== */
+function ReceiptForm({
+  receipt,
+  hasMemberEdit,
+  churchFallbackName,
+  churchFallbackTitle,
+}: {
+  receipt: ReceiptData;
+  hasMemberEdit: boolean;
+  churchFallbackName: string;
+  churchFallbackTitle: string;
+}) {
+  const entries = receipt.entries || [];
+
+  // 월별 요약 행 생성 (각 월의 마지막 날짜 + 금액 합 + 유형 집합)
+  const byMonth = new Map<
+    string,
+    { lastDate: string; amount: number; types: Set<string> }
+  >();
+  for (const e of entries) {
+    const key = e.date.slice(0, 7);
+    if (!byMonth.has(key)) {
+      byMonth.set(key, { lastDate: e.date, amount: 0, types: new Set() });
+    }
+    const row = byMonth.get(key)!;
+    if (e.date > row.lastDate) row.lastDate = e.date;
+    row.amount += e.amount;
+    row.types.add(e.offeringType);
+  }
+  const monthRows = Array.from(byMonth.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([, v]) => ({
+      date: v.lastDate,
+      summary: Array.from(v.types).join(", "),
+      amount: v.amount,
+    }));
+
+  const church = receipt.church;
+  const donationCode = church?.donationCode || "41";
+  const isReligion = donationCode === "41";
+  const donationTypeLabel = isReligion
+    ? "종교단체기부금"
+    : donationCode === "10"
+    ? "법정기부금"
+    : donationCode === "30"
+    ? "조특법 제73조 기부금"
+    : donationCode === "40"
+    ? "지정기부금"
+    : donationCode === "42"
+    ? "우리사주조합기부금"
+    : "기타기부금";
+
+  // 메시지에 사용할 법적 근거
+  const legalRef = isReligion
+    ? "소득세법 제34조, 조세특례제한법 제73조 및 동법 제88조의 4의 규정에 의한 기부금을"
+    : "소득세법 및 조세특례제한법에 의한 기부금을";
+
+  return (
+    <div
+      id="receipt-print"
+      className="bg-white mx-auto text-[12px] leading-relaxed text-black print:shadow-none print:border-0 print:max-w-none"
+      style={{
+        maxWidth: "210mm",
+        padding: "10mm",
+        border: "1px solid #222",
+        fontFamily: "'Malgun Gothic', 'Nanum Gothic', sans-serif",
+      }}
+    >
+      {/* 선택한 구성원이 가족 대표가 아니면 rollup 안내 (인쇄 시 숨김) */}
+      {receipt.selectedMemberId && receipt.selectedMemberId !== receipt.memberId && (
+        <div className="mb-3 px-3 py-2 text-xs bg-teal-50 text-teal-700 rounded print:hidden">
+          선택한 구성원이 포함된 <strong>가족 대표({receipt.memberName})</strong> 명의로 가족 전원의 연보가 합산되어 발급됩니다.
+        </div>
+      )}
+
+      {/* 상단: 일련번호 + 타이틀 */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="border border-black px-3 py-1 text-[11px] flex items-center gap-2">
+          <span className="bg-black text-white px-2 py-0.5 text-[11px]">일련번호</span>
+          <span className="font-mono">{fmtSerialNo(receipt.year, receipt.memberId)}</span>
+        </div>
+        <div className="flex-1 text-center">
+          <h1 className="text-2xl font-bold tracking-[0.5em] ml-14">기부금 영수증</h1>
+        </div>
+        <div className="w-36" />
+      </div>
+
+      {/* 1. 기부자 */}
+      <section className="mb-2">
+        <div className="text-[12px] font-bold mb-1">1. 기부자</div>
+        <table className="w-full border-collapse border border-black text-[12px]">
+          <tbody>
+            <tr>
+              <td className="border border-black bg-gray-100 px-2 py-1 text-center w-20 font-medium">성&nbsp;명</td>
+              <td className="border border-black px-2 py-1">
+                {hasMemberEdit ? receipt.memberName : "*".repeat(3)}
+              </td>
+              <td className="border border-black bg-gray-100 px-2 py-1 text-center w-36 font-medium">
+                주민등록번호<br />(사업자등록번호)
+              </td>
+              <td className="border border-black px-2 py-1 font-mono">
+                {receipt.donor?.residentNumber || ""}
+              </td>
+            </tr>
+            <tr>
+              <td className="border border-black bg-gray-100 px-2 py-1 text-center font-medium">주&nbsp;소</td>
+              <td className="border border-black px-2 py-1" colSpan={3}>
+                {receipt.donor?.address || ""}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      {/* 2. 기부금 단체 */}
+      <section className="mb-2">
+        <div className="text-[12px] font-bold mb-1">2. 기부금 단체</div>
+        <table className="w-full border-collapse border border-black text-[12px]">
+          <tbody>
+            <tr>
+              <td className="border border-black bg-gray-100 px-2 py-1 text-center w-20 font-medium">단체명</td>
+              <td className="border border-black px-2 py-1">{church?.name || churchFallbackName}</td>
+              <td className="border border-black bg-gray-100 px-2 py-1 text-center w-36 font-medium">
+                주민등록번호<br />(사업자등록번호)
+              </td>
+              <td className="border border-black px-2 py-1 font-mono">{church?.regNo || ""}</td>
+            </tr>
+            <tr>
+              <td className="border border-black bg-gray-100 px-2 py-1 text-center font-medium">소재지</td>
+              <td className="border border-black px-2 py-1" colSpan={3}>{church?.address || ""}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      {/* 3. 기부금 모집처 (선택) */}
+      <section className="mb-2">
+        <div className="text-[12px] font-bold mb-1">3. 기부금 모집처 (언론기관 등)</div>
+        <table className="w-full border-collapse border border-black text-[12px]">
+          <tbody>
+            <tr>
+              <td className="border border-black bg-gray-100 px-2 py-1 text-center w-20 font-medium">단체명</td>
+              <td className="border border-black px-2 py-1">&nbsp;</td>
+              <td className="border border-black bg-gray-100 px-2 py-1 text-center w-36 font-medium">사업자등록번호</td>
+              <td className="border border-black px-2 py-1">&nbsp;</td>
+            </tr>
+            <tr>
+              <td className="border border-black bg-gray-100 px-2 py-1 text-center font-medium">소재지</td>
+              <td className="border border-black px-2 py-1" colSpan={3}>&nbsp;</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      {/* 4. 기부내용 */}
+      <section className="mb-2">
+        <div className="text-right text-[12px] font-bold mb-1">4. 기부내용</div>
+        <table className="w-full border-collapse border border-black text-[12px]">
+          <thead>
+            <tr>
+              <th className="border border-black bg-gray-100 px-2 py-1 w-36">유형</th>
+              <th className="border border-black bg-gray-100 px-2 py-1 w-14">코드</th>
+              <th className="border border-black bg-gray-100 px-2 py-1 w-32">년월일</th>
+              <th className="border border-black bg-gray-100 px-2 py-1">적요</th>
+              <th className="border border-black bg-gray-100 px-2 py-1 w-32">금액</th>
+            </tr>
+          </thead>
+          <tbody>
+            {monthRows.length > 0 ? (
+              monthRows.map((r, i) => (
+                <tr key={i}>
+                  <td className="border border-black px-2 py-1 text-center">{donationTypeLabel}</td>
+                  <td className="border border-black px-2 py-1 text-center">{donationCode}</td>
+                  <td className="border border-black px-2 py-1 text-center">{fmtKorDate(r.date)}</td>
+                  <td className="border border-black px-2 py-1">{r.summary}</td>
+                  <td className="border border-black px-2 py-1 text-right font-mono">{fmtAmount(r.amount)}</td>
+                </tr>
+              ))
+            ) : (
+              // entries 가 없으면 유형별 합계로 한 줄
+              <tr>
+                <td className="border border-black px-2 py-1 text-center">{donationTypeLabel}</td>
+                <td className="border border-black px-2 py-1 text-center">{donationCode}</td>
+                <td className="border border-black px-2 py-1 text-center">{receipt.year}년</td>
+                <td className="border border-black px-2 py-1">{summaryOfEntries([])}</td>
+                <td className="border border-black px-2 py-1 text-right font-mono">{fmtAmount(receipt.total)}</td>
+              </tr>
+            )}
+            {/* 빈 행 (디자인 안정감) */}
+            {monthRows.length > 0 && monthRows.length < 12 &&
+              Array.from({ length: Math.max(0, 3 - (12 - monthRows.length < 0 ? 0 : 3)) }).map((_, i) => (
+                <tr key={`empty-${i}`}>
+                  <td className="border border-black px-2 py-3">&nbsp;</td>
+                  <td className="border border-black px-2 py-3">&nbsp;</td>
+                  <td className="border border-black px-2 py-3">&nbsp;</td>
+                  <td className="border border-black px-2 py-3">&nbsp;</td>
+                  <td className="border border-black px-2 py-3">&nbsp;</td>
+                </tr>
+              ))}
+            <tr>
+              <td className="border border-black bg-gray-100 px-2 py-1 text-center font-bold" colSpan={4}>계</td>
+              <td className="border border-black px-2 py-1 text-right font-mono font-bold">{fmtAmount(receipt.total)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      {/* 법정 문구 + 증명 */}
+      <p className="text-[12px] mt-3 mb-1 leading-6">
+        {legalRef}<br />
+        위와 같이 기부하였음을 증명하여 주시기 바랍니다.
+      </p>
+      <div className="flex justify-end items-center gap-2 my-2">
+        <span className="text-[12px]">{fmtIssueDate()}</span>
+      </div>
+      <div className="flex justify-end items-center gap-2 mb-4">
+        <span className="text-[12px]">신청인</span>
+        <span className="text-[13px] font-bold min-w-[4em] text-center border-b border-black">
+          {hasMemberEdit ? receipt.memberName : ""}
+        </span>
+        <span className="text-[12px]">(인)</span>
+      </div>
+
+      <p className="text-[12px] mt-4 mb-1">위와 같이 기부금을 기부하였음을 증명합니다.</p>
+      <div className="flex justify-end items-center gap-2 my-2">
+        <span className="text-[12px]">{fmtIssueDate()}</span>
+      </div>
+      <div className="flex justify-end items-center gap-3 mb-2">
+        <span className="text-[12px]">기부금 수령인</span>
+        <span className="text-[13px] font-bold min-w-[6em] text-center border-b border-black">
+          {church?.name || churchFallbackName}
+        </span>
+        <span className="text-[12px]">
+          {church?.repTitle || churchFallbackTitle}{" "}
+          {church?.repName || ""}
+        </span>
+        <span className="text-[12px]">(인)</span>
+      </div>
+
+      {/* 하단 범례 */}
+      <div className="mt-6 border-t border-black pt-2 text-[10px] leading-snug text-gray-800">
+        <div className="font-medium mb-1">유형, 코드 :</div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+          <span>· 소득세법 제34조 제2항 기부금</span>
+          <span>(법정기부금, 코드 10)</span>
+          <span>· 조세특례제한법 제73조 기부금</span>
+          <span>(조특법 73, 코드 30)</span>
+          <span>· 소득세법 제34조 제1항 기부금</span>
+          <span>(지정기부금, 코드 40)</span>
+          <span>· 소득세법 제34조 제1항 기부금 중 종교단체 기부금</span>
+          <span>(종교단체기부금, 코드 41)</span>
+          <span>· 조세특례제한법 제88조의4 기부금</span>
+          <span>(우리사주조합 기부금, 코드 42)</span>
+          <span>· 기타기부금</span>
+          <span></span>
+        </div>
+      </div>
+
+      {/* 용지 규격 */}
+      <div className="text-right text-[10px] text-gray-500 mt-2">
+        210㎜ × 297㎜ (신문용지 54g/㎡)
+      </div>
+
+      {/* 기부자 정보 미등록 안내 (인쇄 시 숨김) */}
+      {(!receipt.donor?.residentNumber || !receipt.donor?.address) && (
+        <p className="mt-3 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5 print:hidden">
+          {!receipt.donor?.residentNumber && "주민등록번호"}
+          {!receipt.donor?.residentNumber && !receipt.donor?.address && " / "}
+          {!receipt.donor?.address && "주소"}
+          {" "}가 등록되어 있지 않습니다. 연말정산 공제용으로 사용하려면
+          <strong> 기부자 정보</strong> 메뉴에서 먼저 등록해 주세요.
+        </p>
+      )}
     </div>
   );
 }
