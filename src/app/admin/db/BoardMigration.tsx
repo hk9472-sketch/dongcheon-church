@@ -181,7 +181,8 @@ export default function BoardMigration() {
   const [currentMapping, setCurrentMapping] = useState<ColumnMappingEntry[]>([]);
   const [mappingTableType, setMappingTableType] = useState<"post" | "comment" | "category">("post");
   const [confirmedMapping, setConfirmedMapping] = useState<ConfirmedMapping | null>(null);
-  const [mappingMethod, setMappingMethod] = useState<"direct" | "sql">("direct");
+  // MySQL 직접 이관 UI 제거(2026-04-18). 기본값을 "sql" 로 고정.
+  const [mappingMethod, setMappingMethod] = useState<"direct" | "sql">("sql");
   const [mappingBoardSlug, setMappingBoardSlug] = useState<string | null>(null);
   // SQL dump 방식: 게시판별 확인된 매핑 저장
   const [dumpMappings, setDumpMappings] = useState<Record<string, ConfirmedMapping>>({});
@@ -1128,7 +1129,10 @@ export default function BoardMigration() {
         </div>
       </div>
 
-      {/* ===== 방법 1: 원격 MySQL 서버 접속 이관 ===== */}
+      {/* ===== 방법 1 (MySQL 서버 접속 이관) 은 2026-04-18 UI에서 제거 =====
+          아래 블록은 유지보수를 위해 남겨두되 false 가드로 렌더 안 함.
+          SQL dump 업로드(방법 2) 만 실제로 사용. */}
+      {false && (
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="px-4 py-3 bg-blue-50 border-b border-blue-200">
           <h2 className="text-sm font-bold text-blue-700">
@@ -1293,12 +1297,13 @@ export default function BoardMigration() {
           {mappingMethod === "direct" && renderPresetSaveBar()}
         </div>
       </div>
+      )}
 
-      {/* ===== 방법 2: SQL dump 파일 이관 ===== */}
+      {/* ===== SQL dump 파일 이관 (유일한 방법) ===== */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="px-4 py-3 bg-green-50 border-b border-green-200">
           <h2 className="text-sm font-bold text-green-700">
-            방법 2: SQL dump 파일 이관
+            SQL dump 파일 이관
           </h2>
           <p className="text-xs text-green-600 mt-1">
             제로보드 SQL 백업 파일(mysqldump)을 업로드하면 게시판을 자동 감지하여 이관합니다.

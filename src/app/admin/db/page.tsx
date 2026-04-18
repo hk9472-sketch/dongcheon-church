@@ -859,53 +859,10 @@ counter_referer: no, date(unix), hit, referer(varchar 255)`}</pre>
             </div>
           </div>
 
-          {/* 방법 1: 직접 이관 */}
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="px-4 py-3 bg-blue-50 border-b border-blue-200">
-              <h2 className="text-sm font-bold text-blue-700">
-                방법 1: MySQL 직접 이관
-              </h2>
-              <p className="text-xs text-blue-600 mt-1">
-                원격 또는 같은 서버의 레거시 DB에서 직접 이관합니다.
-              </p>
-            </div>
-            <div className="p-4 space-y-4">
-              {/* 서버 접속 정보 */}
-              <ConnInfoPanel
-                connInfo={importConnInfo}
-                onChange={setImportConnInfo}
-                onTest={handleImportTestConn}
-                testStatus={importConnStatus}
-                placeholder={{ database: "pkistdcnet" }}
-              />
-              <div className="flex gap-2 items-end pt-1 border-t border-gray-100">
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">
-                    레거시 DB명 <span className="text-gray-400">(접속정보 미입력 시 사용)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={importDb}
-                    onChange={(e) => setImportDb(e.target.value)}
-                    className="border rounded px-3 py-1.5 text-sm w-40"
-                    placeholder="pkistdc"
-                  />
-                </div>
-                <button
-                  onClick={() => handleImport("direct")}
-                  disabled={importLoading}
-                  className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {importLoading ? "이관 중..." : "직접 이관 실행"}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* 방법 2: SQL 파일 업로드 */}
+          {/* SQL 파일 업로드 (유일한 이관 방법) */}
           <div className="bg-white rounded-lg border border-green-200 overflow-hidden">
             <div className="px-4 py-3 bg-green-50 border-b border-green-200">
-              <h2 className="text-sm font-bold text-green-700">방법 2: SQL 파일 업로드</h2>
+              <h2 className="text-sm font-bold text-green-700">SQL 파일 업로드</h2>
               <p className="text-xs text-green-600 mt-1">
                 mysqldump 파일에서 <code className="bg-green-100 px-1 rounded">counter_main</code>, <code className="bg-green-100 px-1 rounded">counter_ip</code>, <code className="bg-green-100 px-1 rounded">counter_referer</code> INSERT 문을 추출하여 이관합니다.
               </p>
@@ -956,55 +913,6 @@ counter_referer: no, date(unix), hit, referer(varchar 255)`}</pre>
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* 방법 3: JSON 이관 */}
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-              <h2 className="text-sm font-bold text-gray-700">
-                방법 3: JSON 데이터 이관
-              </h2>
-              <p className="text-xs text-gray-500 mt-1">
-                MySQL에서 JSON으로 내보낸 데이터를 붙여넣어 이관합니다.
-              </p>
-            </div>
-            <div className="p-4 space-y-3">
-              <div className="text-xs text-gray-500 space-y-1">
-                <p>아래 형식의 JSON을 입력하세요:</p>
-                <pre className="bg-gray-50 p-2 rounded overflow-x-auto">{`{
-  "counterMain": [
-    {"date": 1708560000, "unique_counter": 15, "pageview": 50}
-  ],
-  "counterIp": [
-    {"date": 1708560000, "ip": "192.168.1.1"}
-  ],
-  "counterReferer": [
-    {"date": 1708560000, "hit": 3, "referer": "https://google.com"}
-  ]
-}`}</pre>
-                <p className="text-gray-400">
-                  MySQL에서 추출: SELECT * FROM counter_main WHERE date &gt; 0
-                </p>
-              </div>
-              <textarea
-                id="json-input"
-                rows={8}
-                className="w-full border rounded px-3 py-2 text-sm font-mono"
-                placeholder='{"counterMain": [...], "counterIp": [...], "counterReferer": [...]}'
-              />
-              <button
-                onClick={() => {
-                  const el = document.getElementById(
-                    "json-input"
-                  ) as HTMLTextAreaElement;
-                  handleImport("json", el?.value || "");
-                }}
-                disabled={importLoading}
-                className="px-4 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50"
-              >
-                {importLoading ? "이관 중..." : "JSON 이관 실행"}
-              </button>
             </div>
           </div>
 
@@ -1236,7 +1144,8 @@ async function parseJsonResponse<T = unknown>(res: Response): Promise<T> {
 }
 
 function UserMigrationTab() {
-  const [method, setMethod] = useState<"direct" | "sql">("direct");
+  // SQL 파일 업로드만 사용 (MySQL 직접 접속 옵션 제거 2026-04-18)
+  const method: "sql" = "sql";
   const [legacyDb, setLegacyDb] = useState("pkistdc");
   const [connInfo, setConnInfo] = useState<ConnInfo>({
     host: "", port: 3306, user: "", password: "", database: "",
@@ -1495,68 +1404,8 @@ function UserMigrationTab() {
         </div>
       </div>
 
-      {/* 방법 선택 탭 */}
-      <div className="flex border-b border-gray-200">
-        <button
-          onClick={() => { setMethod("direct"); setUsers([]); setPreviewLoaded(false); setResult(null); setError(""); }}
-          className={`px-5 py-2 text-sm font-medium border-b-2 -mb-px ${
-            method === "direct" ? "border-blue-600 text-blue-700" : "border-transparent text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          방법 1: MySQL 서버 접속
-        </button>
-        <button
-          onClick={() => { setMethod("sql"); setUsers([]); setPreviewLoaded(false); setResult(null); setError(""); }}
-          className={`px-5 py-2 text-sm font-medium border-b-2 -mb-px ${
-            method === "sql" ? "border-green-600 text-green-700" : "border-transparent text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          방법 2: SQL 파일 업로드
-        </button>
-      </div>
-
-      {/* 방법 1: 원격 서버 직접 접속 */}
-      {method === "direct" && (
-        <div className="bg-white rounded-lg border border-blue-200 overflow-hidden">
-          <div className="px-4 py-3 bg-blue-50 border-b border-blue-200">
-            <h2 className="text-sm font-bold text-blue-700">방법 1: MySQL 서버 접속 이관</h2>
-            <p className="text-xs text-blue-600 mt-1">레거시 MySQL 서버에 직접 접속하여 사용자 목록을 조회하고 이관합니다.</p>
-          </div>
-          <div className="p-4 space-y-4">
-            <ConnInfoPanel
-              connInfo={connInfo}
-              onChange={setConnInfo}
-              onTest={handleTestConn}
-              testStatus={connTestStatus}
-              placeholder={{ database: "pkistdcnet" }}
-            />
-            <div className="flex gap-2 items-end pt-1 border-t border-gray-100">
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">
-                  레거시 DB명 <span className="text-gray-400">(접속정보 미입력 시 사용)</span>
-                </label>
-                <input
-                  type="text"
-                  value={legacyDb}
-                  onChange={(e) => setLegacyDb(e.target.value)}
-                  className="border rounded px-3 py-1.5 text-sm w-40 font-mono"
-                  placeholder="pkistdc"
-                />
-              </div>
-              <button
-                onClick={loadDirectPreview}
-                disabled={loading}
-                className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                {loading ? "조회 중..." : "사용자 조회"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 방법 2: SQL 파일 업로드 */}
-      {method === "sql" && (
+      {/* SQL 파일 업로드 (유일한 이관 방법) */}
+      {true && (
         <div className="bg-white rounded-lg border border-green-200 overflow-hidden">
           <div className="px-4 py-3 bg-green-50 border-b border-green-200">
             <h2 className="text-sm font-bold text-green-700">방법 2: SQL 파일 업로드 이관</h2>
@@ -1642,7 +1491,7 @@ function UserMigrationTab() {
             </h2>
             {newUsers.length > 0 && (
               <button
-                onClick={method === "sql" ? executeSqlMigration : executeDirectMigration}
+                onClick={executeSqlMigration}
                 disabled={migrating}
                 className="px-4 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50"
               >
