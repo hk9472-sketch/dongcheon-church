@@ -7,7 +7,7 @@ import TextAlign from "@tiptap/extension-text-align";
 import { TextStyle, FontSize } from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
-import Image from "@tiptap/extension-image";
+import ResizableImage from "./ResizableImage";
 import Link from "@tiptap/extension-link";
 import { Table } from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
@@ -207,7 +207,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       TextAlign.configure({
         types: ["heading", "paragraph"],
       }),
-      Image.configure({
+      ResizableImage.configure({
         HTMLAttributes: { class: "max-w-full" },
       }),
       Link.configure({
