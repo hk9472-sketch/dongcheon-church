@@ -106,6 +106,7 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
     { href: "/accounting/offering/thanks", label: "감사연보현황" },
     { href: "/accounting/offering/summary", label: "연보집계" },
     { href: "/accounting/offering/receipt", label: "기부금영수증" },
+    { href: "/accounting/offering/certificate", label: "소속증명서" },
   ];
 
   const settingsItems = [
@@ -114,13 +115,14 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
     { href: "/accounting/settings/balance", label: "이월잔액" },
   ];
 
-  // 관리번호/기부자정보 메뉴는 memberEdit 권한이 있을 때만
+  // 관리번호/기부자정보/소속증명서 메뉴는 memberEdit 권한이 있을 때만
   const visibleOfferingItems = hasMemberEdit
     ? offeringItems
     : offeringItems.filter(
         (i) =>
           i.href !== "/accounting/offering/members" &&
-          i.href !== "/accounting/offering/donor-info"
+          i.href !== "/accounting/offering/donor-info" &&
+          i.href !== "/accounting/offering/certificate"
       );
 
   const allMenuItems = [
