@@ -17,10 +17,10 @@ import { getUploadDir, getRelUploadPath } from "@/lib/uploadPath";
 // 보안
 // - 해당 게시판의 grantWrite 기준으로 접근 제어 (비회원 허용 게시판은 비로그인 OK)
 // - Rate limit: IP 당 60개/10분 (연속 붙여넣기 과다 업로드 차단)
-// - 허용 확장자: jpg/jpeg/png/gif/webp, 최대 10MB
+// - 허용 확장자: jpg/jpeg/png/gif/webp, 최대 100MB
 // ────────────────────────────────────────────────────────────
 const ALLOWED = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]);
-const MAX_SIZE = 10 * 1024 * 1024;
+const MAX_SIZE = 100 * 1024 * 1024;
 
 function sanitizeStoredName(name: string): string {
   return name.replace(/[\\/]+/g, "_").replace(/\.\.+/g, ".").replace(/[^A-Za-z0-9_.]/g, "_");

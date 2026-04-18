@@ -339,14 +339,24 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     [uploadAndInsertMedia]
   );
 
-  // 툴바 미디어 URL 버튼 — 외부 mp3/mp4 또는 YouTube 링크 삽입
+  // 툴바 미디어 URL 버튼 — 외부 mp3/mp4 또는 YouTube 링크 삽입.
+  // 같은 위치에 연속 삽입해도 이전 노드가 덮어써지지 않도록, 삽입 후 캐럿을
+  // 노드 다음 빈 단락으로 이동(미디어 + 단락 함께 삽입).
   const addMediaUrl = useCallback(() => {
     if (!editor) return;
     const url = prompt("동영상/음성 URL을 입력하세요\n(mp4·mp3 직접 링크 또는 YouTube/Vimeo URL)", "https://");
     if (!url || url === "https://") return;
     const kind = detectMediaKind(url);
+
     if (kind === "video" || kind === "audio") {
-      editor.chain().focus().insertContent({ type: "media", attrs: { src: url, kind } }).run();
+      editor
+        .chain()
+        .focus()
+        .insertContent([
+          { type: "media", attrs: { src: url, kind, width: kind === "audio" ? "100%" : "60%" } },
+          { type: "paragraph" },
+        ])
+        .run();
       return;
     }
     if (kind === "iframe") {
@@ -354,15 +364,23 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       editor
         .chain()
         .focus()
-        .insertContent(
-          `<p><iframe src="${embed}" width="560" height="315" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></p>`
-        )
+        .insertContent([
+          { type: "media", attrs: { src: embed, kind: "iframe", width: "60%" } },
+          { type: "paragraph" },
+        ])
         .run();
       return;
     }
-    // 알 수 없는 URL — 일반 링크로 삽입
-    if (confirm("일반 링크로 삽입할까요?")) {
-      editor.chain().focus().setLink({ href: url }).insertContent(url).run();
+    if (confirm("미디어로 인식할 수 없습니다. 일반 텍스트 링크로 삽입할까요?")) {
+      editor
+        .chain()
+        .focus()
+        .insertContent({
+          type: "text",
+          text: url,
+          marks: [{ type: "link", attrs: { href: url, target: "_blank", rel: "noopener noreferrer" } }],
+        })
+        .run();
     }
   }, [editor]);
   const handleImageInputChange = useCallback(
@@ -419,15 +437,34 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     };
   }, [editor, boardSlug, uploadAndInsertImage, uploadAndInsertMedia]);
 
+  // 링크: 빈 선택이면 새 링크를 텍스트로 삽입(인접 링크 영향 없음),
+  //       선택된 텍스트가 있으면 해당 범위에만 적용.
   const addLink = useCallback(() => {
     if (!editor) return;
+    const { empty } = editor.state.selection;
+    if (empty) {
+      const url = prompt("링크 URL을 입력하세요:", "https://");
+      if (!url || url === "https://") return;
+      const text = prompt("표시할 텍스트(공백 시 URL 그대로):", url) || url;
+      editor
+        .chain()
+        .focus()
+        .insertContent({
+          type: "text",
+          text,
+          marks: [{ type: "link", attrs: { href: url, target: "_blank", rel: "noopener noreferrer" } }],
+        })
+        .run();
+      return;
+    }
+    // 선택된 텍스트가 있을 때만 기존 링크 mark 갱신
     const previousUrl = editor.getAttributes("link").href;
     const url = prompt("링크 URL을 입력하세요:", previousUrl || "https://");
     if (url === null) return;
     if (url === "") {
-      editor.chain().focus().extendMarkRange("link").unsetLink().run();
+      editor.chain().focus().unsetLink().run();
     } else {
-      editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+      editor.chain().focus().setLink({ href: url, target: "_blank", rel: "noopener noreferrer" }).run();
     }
   }, [editor]);
 

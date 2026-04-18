@@ -123,18 +123,26 @@ function ResizableImageNodeView({ node, updateAttributes, selected, editor }: Re
 
   const show = selected && editor.isEditable;
 
-  // 래퍼 스타일 — float / block
+  // 래퍼 스타일 — float 시 width 가 비어있으면 텍스트가 래퍼 옆으로 흐를 공간이
+  // 안 생기므로(브라우저가 부모 너비 100% 로 늘림), widthAttr 을 래퍼에도 적용한다.
+  // 이미지는 래퍼의 100% 를 채워 결과적으로 동일 비율 유지.
+  const wrapBase: React.CSSProperties = {
+    position: "relative",
+    lineHeight: 0,
+    width: widthAttr || "auto",
+    maxWidth: "100%",
+  };
   const wrapStyle: React.CSSProperties =
     align === "center"
-      ? { display: "block", margin: "8px auto", clear: "both", position: "relative", lineHeight: 0 }
+      ? { ...wrapBase, display: "block", margin: "8px auto", clear: "both" }
       : align === "right"
-      ? { float: "right", margin: "4px 0 8px 14px", position: "relative", lineHeight: 0, maxWidth: "100%" }
-      : { float: "left", margin: "4px 14px 8px 0", position: "relative", lineHeight: 0, maxWidth: "100%" };
+      ? { ...wrapBase, float: "right", margin: "4px 0 8px 14px" }
+      : { ...wrapBase, float: "left", margin: "4px 14px 8px 0" };
 
-  // 이미지 스타일
+  // 이미지 — 래퍼 폭을 그대로 채움. widthAttr 가 없을 때만 자연 크기.
   const imgStyle: React.CSSProperties = {
     display: "block",
-    width: widthAttr || "auto",
+    width: widthAttr ? "100%" : "auto",
     height: "auto",
     maxWidth: "100%",
     outline: show ? "2px solid #3b82f6" : "none",
