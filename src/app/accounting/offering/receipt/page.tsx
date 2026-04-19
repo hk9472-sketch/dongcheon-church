@@ -21,6 +21,8 @@ interface ReceiptData {
   total: number;
   selectedMemberId?: number; // 사용자가 선택한 구성원 (head와 다르면 rollup 안내)
   familyMembers?: { id: number; name: string }[];
+  familyAll?: { id: number; name: string }[]; // head + siblings 전체
+  includedMemberIds?: number[];                // 이번 영수증에 합산된 멤버
   church?: {
     name: string;
     regNo: string;          // 고유번호/사업자등록번호
@@ -92,6 +94,15 @@ export default function OfferingReceiptPage() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [errorKind, setErrorKind] = useState<"permission" | "notfound" | "empty" | "fail" | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>("");
+
+  // 가족 전체(head + siblings) — 체크박스 UI 용
+  const [familyAll, setFamilyAll] = useState<{ id: number; name: string }[]>([]);
+  // 체크된 구성원 id 집합 (미선택 = 자동: 단일 본인)
+  const [checkedIds, setCheckedIds] = useState<number[]>([]);
+  // 사용자가 체크박스를 명시적으로 조작했는지 여부 (자동으로 덮어쓰지 않도록)
+  const [checkboxTouched, setCheckboxTouched] = useState(false);
 
   // 기부금 수령인 override (출력 시 "동천교회 담임목사 ○○○" 부분 대체)
   const [receivedByOverride, setReceivedByOverride] = useState("");
@@ -130,24 +141,99 @@ export default function OfferingReceiptPage() {
     return () => clearTimeout(t);
   }, [memberSearch]);
 
+  /* ---- 회원/연도 변경 시 체크박스 터치 플래그 초기화 ---- */
+  useEffect(() => {
+    setCheckboxTouched(false);
+  }, [selectedMemberId, year]);
+
   /* ---- fetch receipt ---- */
   useEffect(() => {
     if (!selectedMemberId) {
       setReceipt(null);
+      setFamilyAll([]);
+      setCheckedIds([]);
+      setErrorKind(null);
+      setErrorMessage("");
       return;
     }
     setLoading(true);
+    setErrorKind(null);
+    setErrorMessage("");
     const params = new URLSearchParams({
       reportType: "receipt",
       memberId: String(selectedMemberId),
       year: String(year),
     });
+    // 사용자가 체크박스를 조작했고, 체크된 멤버가 있다면 그 집합만 합산
+    if (checkboxTouched && checkedIds.length > 0) {
+      params.set("memberIds", checkedIds.join(","));
+    } else if (checkboxTouched && checkedIds.length === 0) {
+      // 전부 해제 → 본인만 (backward compatible: 본인 id 하나 전달)
+      params.set("memberIds", String(selectedMemberId));
+    }
+    let cancelled = false;
     fetch(`/api/accounting/offering/report?${params}`)
-      .then((r) => r.json())
-      .then((d) => setReceipt(d))
-      .catch(() => setReceipt(null))
-      .finally(() => setLoading(false));
-  }, [selectedMemberId, year]);
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!r.ok) {
+          setReceipt(null);
+          if (r.status === 403) {
+            setErrorKind("permission");
+            setErrorMessage(
+              d?.message ||
+                "기부금영수증을 조회하려면 '관리번호 수정 권한' 이 필요합니다. 관리자에게 문의해 주세요."
+            );
+          } else if (r.status === 404) {
+            setErrorKind("notfound");
+            setErrorMessage(d?.error || "교인을 찾을 수 없습니다.");
+          } else {
+            setErrorKind("fail");
+            setErrorMessage(d?.error || d?.message || "영수증 조회에 실패했습니다.");
+          }
+          return;
+        }
+        // 정상 응답이지만 해당 연도 내역 없음
+        const hasAnyEntry = Array.isArray(d.entries) && d.entries.length > 0;
+        const total = typeof d.total === "number" ? d.total : 0;
+        if (!hasAnyEntry && total === 0) {
+          setReceipt(null);
+          setErrorKind("empty");
+          setErrorMessage(`${year}년 기부 내역이 없습니다.`);
+          // 가족 목록은 그대로 유지 (다른 연도로 바꿔볼 수 있음)
+          if (Array.isArray(d.familyAll)) {
+            setFamilyAll(d.familyAll);
+            if (!checkboxTouched) {
+              setCheckedIds([selectedMemberId]);
+            }
+          }
+          return;
+        }
+        setReceipt(d);
+        if (Array.isArray(d.familyAll)) {
+          setFamilyAll(d.familyAll);
+        }
+        // 체크박스를 아직 조작하지 않았다면: 기본값 = 본인만 체크
+        if (!checkboxTouched) {
+          setCheckedIds([selectedMemberId]);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setReceipt(null);
+        setErrorKind("fail");
+        setErrorMessage("네트워크 오류로 영수증을 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // checkedIds 는 checkboxTouched=true 일 때만 의미를 가지므로 의존성은 touched 시의 집합 길이+내용으로 충분.
+    // JSON 키로 압축해 참조 동등성 이슈 회피.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMemberId, year, checkboxTouched, JSON.stringify(checkedIds)]);
 
   /* ---- print ---- */
   function handlePrint() {
@@ -239,6 +325,77 @@ export default function OfferingReceiptPage() {
             )}
           </div>
 
+          {/* 가족 구성원 선택 (같은 공동번호 구성원 체크박스) */}
+          {selectedMemberId && familyAll.length > 1 && (
+            <div className="mt-4 pt-3 border-t border-gray-200">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-gray-600">
+                  가족 구성원 (같은 공동번호)
+                </label>
+                <div className="flex gap-3 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCheckboxTouched(true);
+                      setCheckedIds(familyAll.map((m) => m.id));
+                    }}
+                    className="text-teal-600 hover:text-teal-700 underline-offset-2 hover:underline"
+                  >
+                    전체선택
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCheckboxTouched(true);
+                      setCheckedIds(selectedMemberId ? [selectedMemberId] : []);
+                    }}
+                    className="text-gray-500 hover:text-gray-700 underline-offset-2 hover:underline"
+                  >
+                    본인만
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {familyAll.map((m) => {
+                  const checked = checkedIds.includes(m.id);
+                  const isSelf = m.id === selectedMemberId;
+                  return (
+                    <label
+                      key={m.id}
+                      className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-sm cursor-pointer transition-colors ${
+                        checked
+                          ? "border-teal-500 bg-teal-50 text-teal-800"
+                          : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          setCheckboxTouched(true);
+                          setCheckedIds((prev) =>
+                            e.target.checked
+                              ? Array.from(new Set([...prev, m.id]))
+                              : prev.filter((x) => x !== m.id)
+                          );
+                        }}
+                        className="accent-teal-600"
+                      />
+                      <span>
+                        <span className="text-xs text-gray-400 mr-1">{m.id}</span>
+                        {m.name}
+                        {isSelf && <span className="ml-1 text-[10px] text-teal-600">(본인)</span>}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-2">
+                체크한 구성원의 연보만 합산하여 영수증을 발급합니다. 기본값은 본인 1인입니다.
+              </p>
+            </div>
+          )}
+
           {/* 영수증 출력 추가 옵션 */}
           {receipt && (
             <div className="mt-4 pt-3 border-t border-gray-200 space-y-3">
@@ -278,6 +435,19 @@ export default function OfferingReceiptPage() {
       {/* receipt preview / print area */}
       {loading ? (
         <div className="text-center py-8 text-gray-400 print:hidden">로딩 중...</div>
+      ) : errorKind === "permission" ? (
+        <div className="print:hidden max-w-2xl mx-auto bg-amber-50 border border-amber-200 rounded-lg px-5 py-4 text-sm text-amber-800">
+          <div className="font-semibold mb-1">영수증 조회 권한이 없습니다</div>
+          <div>{errorMessage}</div>
+        </div>
+      ) : errorKind === "empty" ? (
+        <div className="print:hidden max-w-2xl mx-auto bg-gray-50 border border-gray-200 rounded-lg px-5 py-4 text-sm text-gray-700 text-center">
+          {errorMessage}
+        </div>
+      ) : errorKind ? (
+        <div className="print:hidden max-w-2xl mx-auto bg-red-50 border border-red-200 rounded-lg px-5 py-4 text-sm text-red-700">
+          {errorMessage}
+        </div>
       ) : !receipt ? (
         <div className="text-center py-8 text-gray-400 print:hidden">
           회원을 선택하면 영수증이 표시됩니다.
@@ -399,12 +569,24 @@ function ReceiptForm({
         lineHeight: 1.45,
       }}
     >
-      {/* 선택한 구성원이 가족 대표가 아니면 rollup 안내 (인쇄 시 숨김) */}
-      {receipt.selectedMemberId && receipt.selectedMemberId !== receipt.memberId && (
-        <div className="mb-3 px-3 py-2 text-xs bg-teal-50 text-teal-700 rounded print:hidden">
-          선택한 구성원이 포함된 <strong>가족 대표({receipt.memberName})</strong> 명의로 가족 전원의 연보가 합산되어 발급됩니다.
-        </div>
-      )}
+      {/* 합산 대상 안내 (인쇄 시 숨김) */}
+      {receipt.selectedMemberId && (() => {
+        const included = receipt.includedMemberIds || [];
+        const familyAllLen = (receipt.familyAll?.length ?? included.length);
+        const isAllFamily = familyAllLen > 1 && included.length === familyAllLen;
+        const isSelfOnly = included.length === 1;
+        const needNotice = receipt.selectedMemberId !== receipt.memberId || !isSelfOnly;
+        if (!needNotice) return null;
+        return (
+          <div className="mb-3 px-3 py-2 text-xs bg-teal-50 text-teal-700 rounded print:hidden">
+            <strong>가족 대표({receipt.memberName})</strong> 명의로{" "}
+            {isAllFamily
+              ? "가족 전원의 연보가 합산되어"
+              : `선택한 ${included.length}명 구성원의 연보가 합산되어`}{" "}
+            발급됩니다.
+          </div>
+        );
+      })()}
 
       {/* 상단: 일련번호(좌) + 타이틀(중앙) */}
       <div className="relative flex items-center mb-3" style={{ minHeight: "48px" }}>

@@ -95,11 +95,39 @@ export default function OfferingSummaryPage() {
   const [periodTo, setPeriodTo] = useState(todayKST());
   const [periodSummary, setPeriodSummary] = useState<PeriodSummary | null>(null);
 
+  /* ---- tab → API reportType 매핑 ----
+   * 페이지 내부 탭 이름과 API 스펙이 달라 어댑터 역할을 한다.
+   *   member → individual
+   *   date   → daily
+   *   month  → monthly
+   *   period → period
+   */
+  const TAB_TO_API: Record<ViewTab, "individual" | "daily" | "monthly" | "period"> = {
+    member: "individual",
+    date: "daily",
+    month: "monthly",
+    period: "period",
+  };
+
+  /* ---- byType 레코드 → OFFERING_TYPES 평면화 ---- */
+  function flattenByType(byType: Record<string, number> | undefined): Record<(typeof OFFERING_TYPES)[number], number> {
+    const out = { 주일연보: 0, 감사: 0, 특별: 0, 절기: 0, 오일: 0 };
+    if (!byType) return out;
+    for (const t of OFFERING_TYPES) {
+      out[t] = byType[t] || 0;
+    }
+    return out;
+  }
+
+  /* ---- 에러 메시지 표시용 ---- */
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   /* ---- fetch report ---- */
   const fetchReport = useCallback(() => {
     setLoading(true);
+    setErrorMsg(null);
     const params = new URLSearchParams();
-    params.set("reportType", viewTab);
+    params.set("reportType", TAB_TO_API[viewTab]);
 
     if (viewTab === "member") {
       params.set("dateFrom", memberFrom);
@@ -115,20 +143,86 @@ export default function OfferingSummaryPage() {
     }
 
     fetch(`/api/accounting/offering/report?${params}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (viewTab === "member") setMemberRows(Array.isArray(d) ? d : d.rows || []);
-        else if (viewTab === "date") setDateRows(Array.isArray(d) ? d : d.rows || []);
-        else if (viewTab === "month") setMonthRows(Array.isArray(d) ? d : d.rows || []);
-        else setPeriodSummary(d);
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          throw new Error((d && (d.error as string)) || `오류 (${r.status})`);
+        }
+        return d;
       })
-      .catch(() => {
+      .then((d) => {
+        if (viewTab === "member") {
+          /* API shape: { data: [{ member:{id,name,groupName}, byType:{종류:금액}, total }] } */
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const arr: any[] = Array.isArray(d?.data) ? d.data : [];
+          const rows: MemberSummaryRow[] = arr.map((g) => ({
+            memberId: g.member?.id ?? 0,
+            memberName: g.member?.name ?? "",
+            groupName: g.member?.groupName ?? null,
+            ...flattenByType(g.byType),
+            total: typeof g.total === "number" ? g.total : 0,
+          }));
+          setMemberRows(rows);
+        } else if (viewTab === "date") {
+          /* API shape: { data: [{ date, amount, count }] } — 유형별 세분 없음.
+           * UI 는 유형별 컬럼을 기대하므로 합계만 "주일연보" 컬럼 대신 total 에 넣고
+           * 유형별 컬럼은 0 으로 둔다. (일자별은 API 가 offeringType 별로 집계를 안 준다.)
+           */
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const arr: any[] = Array.isArray(d?.data) ? d.data : [];
+          const rows: DateSummaryRow[] = arr.map((e) => ({
+            date: String(e.date ?? ""),
+            주일연보: 0,
+            감사: 0,
+            특별: 0,
+            절기: 0,
+            오일: 0,
+            total: typeof e.amount === "number" ? e.amount : 0,
+          }));
+          setDateRows(rows);
+        } else if (viewTab === "month") {
+          /* API shape: { data: [{ month:"YYYY-MM", byType, total }] } */
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const arr: any[] = Array.isArray(d?.data) ? d.data : [];
+          const rows: MonthSummaryRow[] = arr.map((g) => {
+            const mm = typeof g.month === "string" ? g.month.slice(5, 7) : "";
+            return {
+              month: Number(mm) || 0,
+              ...flattenByType(g.byType),
+              total: typeof g.total === "number" ? g.total : 0,
+            };
+          });
+          // 월 오름차순 정렬
+          rows.sort((a, b) => a.month - b.month);
+          setMonthRows(rows);
+        } else {
+          /* period — API shape: { data: [{ member, offeringType, amount, count }] }
+           * 전체 유형별 합계로 재집계 → PeriodSummary
+           */
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const arr: any[] = Array.isArray(d?.data) ? d.data : [];
+          const agg: PeriodSummary = { 주일연보: 0, 감사: 0, 특별: 0, 절기: 0, 오일: 0, total: 0 };
+          for (const row of arr) {
+            const t = row.offeringType as (typeof OFFERING_TYPES)[number];
+            const amt = typeof row.amount === "number" ? row.amount : 0;
+            if (t && t in agg) {
+              agg[t] += amt;
+            }
+            agg.total += amt;
+          }
+          setPeriodSummary(agg);
+        }
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : "조회 중 오류가 발생했습니다.";
+        setErrorMsg(msg);
         if (viewTab === "member") setMemberRows([]);
         else if (viewTab === "date") setDateRows([]);
         else if (viewTab === "month") setMonthRows([]);
         else setPeriodSummary(null);
       })
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewTab, memberFrom, memberTo, dateFrom, dateTo, monthYear, periodFrom, periodTo]);
 
   /* ---- auto-fetch ---- */
@@ -252,6 +346,13 @@ export default function OfferingSummaryPage() {
           </div>
         )}
       </div>
+
+      {/* error banner */}
+      {errorMsg && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {errorMsg}
+        </div>
+      )}
 
       {/* results */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">

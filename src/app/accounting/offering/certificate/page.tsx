@@ -262,8 +262,19 @@ export default function CertificatePage() {
           }
           @page {
             size: A4 portrait;
-            margin: 25mm 20mm;
+            margin: 18mm 20mm;
           }
+          #cert-print {
+            min-height: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            line-height: 1.6 !important;
+          }
+          #cert-print .cert-serial { margin-bottom: 2rem !important; }
+          #cert-print .cert-title { margin-bottom: 30px !important; }
+          #cert-print .cert-fields { margin-bottom: 2rem !important; }
+          #cert-print .cert-fields > div + div { margin-top: 1rem !important; }
+          #cert-print .cert-body { margin-bottom: 2.5rem !important; }
         }
       `}</style>
     </div>
@@ -292,33 +303,32 @@ function CertificateForm({
       className="bg-white mx-auto text-black print:shadow-none print:max-w-none"
       style={{
         maxWidth: "210mm",
-        minHeight: "297mm",
-        padding: "30mm 25mm",
+        padding: "22mm 22mm",
         border: "1px solid #ccc",
         fontFamily: "'Malgun Gothic', 'Nanum Gothic', 'Noto Sans KR', sans-serif",
-        lineHeight: 1.8,
+        lineHeight: 1.6,
       }}
     >
       {/* 발급번호 */}
-      <div className="text-[13px] mb-16">
+      <div className="cert-serial text-[13px] mb-8">
         발급번호 : <span className="font-mono">{serialNo}</span>
       </div>
 
       {/* 타이틀 */}
       <h1
-        className="text-center font-bold"
+        className="cert-title text-center font-bold"
         style={{
           fontSize: "32px",
           letterSpacing: "0.6em",
           paddingLeft: "0.6em",
-          marginBottom: "50px",
+          marginBottom: "30px",
         }}
       >
         소속증명서
       </h1>
 
       {/* 필드 3개 */}
-      <div className="text-[14px] space-y-6 mb-16">
+      <div className="cert-fields text-[14px] space-y-4 mb-8">
         <div className="flex items-start">
           <span className="inline-block w-[140px] shrink-0">
             1. 이&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;름 :
@@ -338,7 +348,7 @@ function CertificateForm({
       </div>
 
       {/* 본문 증명 문구 */}
-      <p className="text-[14px] mb-20 leading-8">
+      <p className="cert-body text-[14px] mb-10 leading-8">
         상기인은 본 예수교장로회 한국총공회 동천교회에 소속된 교인임을 증명합니다.
       </p>
 

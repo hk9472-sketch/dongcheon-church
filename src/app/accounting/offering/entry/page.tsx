@@ -27,8 +27,8 @@ interface EntryRow {
 interface SavedEntry {
   id: number;
   date: string;
-  memberId: number;
-  member: { id: number; name: string };
+  memberId: number | null;
+  member: { id: number; name: string } | null;
   offeringType: string;
   amount: number;
   description: string | null;
@@ -268,9 +268,8 @@ export default function OfferingEntryPage() {
 
   /* ---- save ---- */
   async function handleSave() {
-    const validRows = rows.filter(
-      (r) => parseInt(r.memberId, 10) > 0 && parseAmount(r.amount) > 0
-    );
+    // memberId 는 선택 — 금액 > 0 만 필수. 연보종류는 항상 기본값이 있음.
+    const validRows = rows.filter((r) => parseAmount(r.amount) > 0 && r.offeringType);
     if (validRows.length === 0) {
       setMessage({ type: "err", text: "최소 1개 이상의 유효한 항목을 입력하세요." });
       return;
@@ -280,13 +279,16 @@ export default function OfferingEntryPage() {
     setMessage(null);
 
     const payload = {
-      entries: validRows.map((r) => ({
-        date,
-        memberId: parseInt(r.memberId, 10),
-        offeringType: r.offeringType,
-        amount: parseAmount(r.amount),
-        description: r.description || null,
-      })),
+      entries: validRows.map((r) => {
+        const mid = parseInt(r.memberId, 10);
+        return {
+          date,
+          memberId: Number.isFinite(mid) && mid > 0 ? mid : null,
+          offeringType: r.offeringType,
+          amount: parseAmount(r.amount),
+          description: r.description || null,
+        };
+      }),
     };
 
     try {
@@ -467,7 +469,17 @@ export default function OfferingEntryPage() {
                     )}
                     {/* 연보종류 */}
                     <td className="px-2 py-1.5">
-                      <span className="text-sm text-gray-700">{row.offeringType}</span>
+                      <select
+                        value={row.offeringType}
+                        onChange={(e) => updateRow(row.key, "offeringType", e.target.value)}
+                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                      >
+                        {OFFERING_TYPES.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     {/* 금액 */}
                     <td className="px-2 py-1.5">
@@ -572,8 +584,12 @@ export default function OfferingEntryPage() {
               ) : (
                 todayEntries.map((e) => (
                   <tr key={e.id} className="border-t border-gray-100 hover:bg-gray-50">
-                    <td className="px-3 py-2 text-gray-600">{e.memberId}</td>
-                    {hasMemberEdit && <td className="px-3 py-2 text-gray-800">{e.member.name}</td>}
+                    <td className="px-3 py-2 text-gray-600">{e.memberId ?? "-"}</td>
+                    {hasMemberEdit && (
+                      <td className="px-3 py-2 text-gray-800">
+                        {e.member?.name ?? "(개인번호없음)"}
+                      </td>
+                    )}
                     <td className="px-3 py-2 text-gray-600">{e.offeringType}</td>
                     <td className="px-3 py-2 text-right text-blue-700 font-medium">
                       {fmtAmount(e.amount)}

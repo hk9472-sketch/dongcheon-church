@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const reportType = searchParams.get("reportType");
   const memberId = searchParams.get("memberId");
+  const memberIdsRaw = searchParams.get("memberIds");
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
   const offeringType = searchParams.get("offeringType");
@@ -73,7 +74,7 @@ export async function GET(req: NextRequest) {
     case "period":
       return handlePeriod({ dateFrom, dateTo, offeringType }, canSeeName);
     case "receipt":
-      return handleReceipt({ memberId, year }, canSeeName);
+      return handleReceipt({ memberId, memberIds: memberIdsRaw, year }, canSeeName);
     default:
       return NextResponse.json(
         { error: "유효하지 않은 reportType입니다" },
@@ -122,15 +123,18 @@ async function handleIndividual(
     }
   > = {};
 
+  // 익명(memberId=null) 버킷 키: 0 (리포트 화면에선 '익명' 으로 표기)
+  const ANON_KEY = 0;
   for (const e of entries) {
-    if (!grouped[e.memberId]) {
-      grouped[e.memberId] = {
-        member: e.member,
+    const bucket = e.memberId ?? ANON_KEY;
+    if (!grouped[bucket]) {
+      grouped[bucket] = {
+        member: e.member ?? { id: ANON_KEY, name: "(개인번호없음)", groupName: null },
         byType: {},
         total: 0,
       };
     }
-    const g = grouped[e.memberId];
+    const g = grouped[bucket];
     g.byType[e.offeringType] = (g.byType[e.offeringType] || 0) + e.amount;
     g.total += e.amount;
   }
@@ -283,11 +287,13 @@ async function handlePeriod(
     }
   > = {};
 
+  const ANON_KEY = 0;
   for (const e of entries) {
-    const key = `${e.memberId}_${e.offeringType}`;
+    const bucket = e.memberId ?? ANON_KEY;
+    const key = `${bucket}_${e.offeringType}`;
     if (!grouped[key]) {
       grouped[key] = {
-        member: e.member,
+        member: e.member ?? { id: ANON_KEY, name: "(개인번호없음)", groupName: null },
         offeringType: e.offeringType,
         amount: 0,
         count: 0,
@@ -316,10 +322,16 @@ async function handlePeriod(
 /**
  * 기부금영수증 리포트: 특정 교인의 연간 유형별 합계 + 교인 정보
  * 성명이 필수적인 출력이므로 memberEdit 권한이 없으면 거부한다
+ *
+ * 파라미터:
+ *   memberId  - 기준 교인 (가족 대표 자동 탐색의 seed)
+ *   memberIds - (선택) 합산에 포함할 구성원 id 콤마 목록. 지정 시 이 목록만 합산.
+ *               미지정·빈 값이면 가족 전원(head + siblings) 합산 (기존 동작)
  */
 async function handleReceipt(
   params: {
     memberId: string | null;
+    memberIds: string | null;
     year: string | null;
   },
   canSeeName: boolean
@@ -334,7 +346,10 @@ async function handleReceipt(
   if (!canSeeName) {
     // 영수증은 이름/가족정보가 반드시 노출되므로 권한 필요
     return NextResponse.json(
-      { error: "기부금영수증 조회 권한이 없습니다." },
+      {
+        error: "PERMISSION_REQUIRED",
+        message: "기부금영수증을 조회하려면 '관리번호 수정 권한' 이 필요합니다. 관리자에게 문의해 주세요.",
+      },
       { status: 403 }
     );
   }
@@ -376,11 +391,27 @@ async function handleReceipt(
     where: { familyId: head.id, id: { not: head.id } },
     select: { id: true, name: true },
   });
-  const familyMemberIds = [head.id, ...siblings.map((m) => m.id)];
+  const familyAllIds = [head.id, ...siblings.map((m) => m.id)];
+
+  // 합산 대상 결정:
+  //   - memberIds 지정 시 가족 구성원 집합과의 교집합만 사용 (외부 id 오염 방지)
+  //   - 미지정 시 가족 전원
+  let includeIds: number[] = familyAllIds;
+  if (params.memberIds && params.memberIds.trim()) {
+    const requested = params.memberIds
+      .split(",")
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const familySet = new Set(familyAllIds);
+    const filtered = requested.filter((id) => familySet.has(id));
+    if (filtered.length > 0) {
+      includeIds = filtered;
+    }
+  }
 
   const entries = await prisma.offeringEntry.findMany({
     where: {
-      memberId: { in: familyMemberIds },
+      memberId: { in: includeIds },
       date: {
         gte: toDateOnly(`${targetYear}-01-01`),
         lt: toNextDay(`${targetYear}-12-31`),
@@ -435,6 +466,9 @@ async function handleReceipt(
     // 부가 정보 (UI 확장용)
     selectedMemberId: selected.id,
     familyMembers: siblings,
+    // 가족 전체(head+형제) — UI 선택 체크박스 용
+    familyAll: [{ id: head.id, name: head.name }, ...siblings],
+    includedMemberIds: includeIds,
     church,
     donor: {
       residentNumber: decryptRrnSafe(head.residentNumber),
@@ -444,7 +478,7 @@ async function handleReceipt(
     },
     entries: entries.map((e) => ({
       date: toKSTDateStr(e.date),
-      memberName: e.member.name,
+      memberName: e.member?.name ?? "",
       offeringType: e.offeringType,
       amount: e.amount,
       description: e.description,

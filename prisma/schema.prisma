@@ -951,8 +951,8 @@ model OfferingMember {
 model OfferingEntry {
   id           Int      @id @default(autoincrement())
   date         DateTime @db.Date                     // 일자
-  memberId     Int                                   // 개인번호
-  member       OfferingMember @relation(fields: [memberId], references: [id])
+  memberId     Int?                                  // 개인번호 (null 허용 = 익명/개인번호없음)
+  member       OfferingMember? @relation(fields: [memberId], references: [id])
   offeringType String   @db.VarChar(20)              // 주일연보, 감사, 특별, 절기, 오일
   amount       Int                                   // 금액
   description  String?  @db.VarChar(200)             // 비고

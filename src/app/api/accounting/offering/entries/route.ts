@@ -95,14 +95,19 @@ export async function POST(req: NextRequest) {
   }
 
   // 유효성 검사
+  // memberId 는 선택 (null/0/undefined 허용 = 익명/개인번호없음)
   const validTypes = ["주일연보", "십일조연보", "감사연보", "특별연보", "오일연보", "절기연보", "감사", "특별", "절기", "오일"];
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
     // date가 개별 entry에 없으면 공통 date 사용
     if (!e.date && commonDate) e.date = commonDate;
-    if (!e.date || !e.memberId || !e.offeringType || e.amount == null) {
+    // memberId 정규화: 빈 문자열/0/undefined → null
+    if (e.memberId === "" || e.memberId === 0 || e.memberId === undefined) {
+      e.memberId = null;
+    }
+    if (!e.date || !e.offeringType || e.amount == null) {
       return NextResponse.json(
-        { error: `entries[${i}]: date, memberId, offeringType, amount는 필수입니다` },
+        { error: `entries[${i}]: date, offeringType, amount는 필수입니다` },
         { status: 400 }
       );
     }
@@ -118,21 +123,35 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-  }
-
-  // memberId 유효성 일괄 확인
-  const memberIds = [...new Set(entries.map((e: { memberId: number }) => e.memberId))];
-  const existingMembers = await prisma.offeringMember.findMany({
-    where: { id: { in: memberIds as number[] } },
-    select: { id: true },
-  });
-  const existingIds = new Set(existingMembers.map((m) => m.id));
-  for (const mid of memberIds) {
-    if (!existingIds.has(mid as number)) {
+    if (e.memberId !== null && (typeof e.memberId !== "number" || e.memberId <= 0)) {
       return NextResponse.json(
-        { error: `교인 ID ${mid}을(를) 찾을 수 없습니다` },
+        { error: `entries[${i}]: memberId는 양의 정수 또는 null이어야 합니다` },
         { status: 400 }
       );
+    }
+  }
+
+  // memberId 유효성 일괄 확인 (null 제외)
+  const memberIds = [
+    ...new Set(
+      entries
+        .map((e: { memberId: number | null }) => e.memberId)
+        .filter((v): v is number => typeof v === "number" && v > 0)
+    ),
+  ];
+  if (memberIds.length > 0) {
+    const existingMembers = await prisma.offeringMember.findMany({
+      where: { id: { in: memberIds } },
+      select: { id: true },
+    });
+    const existingIds = new Set(existingMembers.map((m) => m.id));
+    for (const mid of memberIds) {
+      if (!existingIds.has(mid)) {
+        return NextResponse.json(
+          { error: `교인 ID ${mid}을(를) 찾을 수 없습니다` },
+          { status: 400 }
+        );
+      }
     }
   }
 
@@ -142,7 +161,7 @@ export async function POST(req: NextRequest) {
     data: entries.map(
       (e: {
         date: string;
-        memberId: number;
+        memberId: number | null;
         offeringType: string;
         amount: number;
         description?: string;

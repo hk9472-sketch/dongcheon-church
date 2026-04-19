@@ -84,16 +84,27 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     data.date = toDateOnly(date);
   }
   if (memberId !== undefined) {
-    const member = await prisma.offeringMember.findUnique({
-      where: { id: memberId },
-    });
-    if (!member) {
-      return NextResponse.json(
-        { error: "교인을 찾을 수 없습니다" },
-        { status: 400 }
-      );
+    // null/0/빈문자열 → null (익명)
+    if (memberId === null || memberId === 0 || memberId === "") {
+      data.memberId = null;
+    } else {
+      if (typeof memberId !== "number" || memberId <= 0) {
+        return NextResponse.json(
+          { error: "memberId는 양의 정수 또는 null이어야 합니다" },
+          { status: 400 }
+        );
+      }
+      const member = await prisma.offeringMember.findUnique({
+        where: { id: memberId },
+      });
+      if (!member) {
+        return NextResponse.json(
+          { error: "교인을 찾을 수 없습니다" },
+          { status: 400 }
+        );
+      }
+      data.memberId = memberId;
     }
-    data.memberId = memberId;
   }
   if (offeringType !== undefined) {
     // POST와 동일한 유효 타입 목록 사용

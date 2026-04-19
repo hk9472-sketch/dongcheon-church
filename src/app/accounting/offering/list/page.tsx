@@ -330,11 +330,13 @@ export default function OfferingListPage() {
                     ({items.length}건, {fmtAmount(items.reduce((s, e) => s + e.amount, 0))}원)
                   </span>
                 </div>
-                <table className="w-full text-sm">
+                <table className="w-full text-sm table-fixed">
                   <thead>
                     <tr className="bg-gray-50 text-gray-600">
+                      <th className="px-4 py-2 text-left font-medium w-28">일자</th>
                       <th className="px-4 py-2 text-left font-medium w-16">번호</th>
                       {hasMemberEdit && <th className="px-4 py-2 text-left font-medium">성명</th>}
+                      <th className="px-4 py-2 text-left font-medium w-28">연보종류</th>
                       <th className="px-4 py-2 text-right font-medium w-32">금액</th>
                       <th className="px-4 py-2 text-left font-medium">비고</th>
                     </tr>
@@ -342,8 +344,12 @@ export default function OfferingListPage() {
                   <tbody>
                     {items.map((e) => (
                       <tr key={e.id} className="border-t border-gray-100">
+                        <td className="px-4 py-2 text-gray-600">
+                          {typeof e.date === "string" ? e.date.slice(0, 10) : ""}
+                        </td>
                         <td className="px-4 py-2 text-gray-600">{e.memberId}</td>
                         {hasMemberEdit && <td className="px-4 py-2 text-gray-800">{e.member.name}</td>}
+                        <td className="px-4 py-2 text-gray-400">—</td>
                         <td className="px-4 py-2 text-right text-blue-700 font-medium">{fmtAmount(e.amount)}</td>
                         <td className="px-4 py-2 text-gray-500">{e.description || ""}</td>
                       </tr>
@@ -360,13 +366,13 @@ export default function OfferingListPage() {
         ) : (
           /* member / period tab: flat list */
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm table-fixed">
               <thead>
                 <tr className="bg-teal-50 text-teal-800">
-                  <th className="px-4 py-3 text-left font-medium">일자</th>
+                  <th className="px-4 py-3 text-left font-medium w-28">일자</th>
                   <th className="px-4 py-3 text-left font-medium w-16">번호</th>
                   {hasMemberEdit && <th className="px-4 py-3 text-left font-medium">성명</th>}
-                  <th className="px-4 py-3 text-left font-medium">연보종류</th>
+                  <th className="px-4 py-3 text-left font-medium w-28">연보종류</th>
                   <th className="px-4 py-3 text-right font-medium w-32">금액</th>
                   <th className="px-4 py-3 text-left font-medium">비고</th>
                 </tr>
