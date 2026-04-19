@@ -54,13 +54,16 @@ function mysqlOldPassword(password: string): string {
  * 비밀번호 검증
  * - 새 시스템: bcrypt 해시 비교
  * - 레거시 이관 사용자: legacyPwHash와 비교 후 자동으로 bcrypt로 업그레이드
+ * - 레거시 게시글/댓글(Post.password, Comment.password): 컬럼이 하나뿐이라
+ *   legacyHash 인자 대신 hashedPassword 자체가 레거시 해시로 들어올 수 있다.
+ *   bcrypt 가 아닌 값이면 레거시 후보로 간주해 함께 시도.
  *
- * 주의: 이관 시 password 필드에 임시 bcrypt 해시("__legacy_migration__")가 저장되므로
- * bcrypt 비교가 실패해도 legacyPwHash 검사로 fall-through해야 함
+ * 주의: 이관 시 User.password 필드에 임시 bcrypt 해시("__legacy_migration__")가
+ * 저장되므로 bcrypt 비교가 실패해도 legacyHash 검사로 fall-through해야 함.
  */
 export async function verifyPassword(
   password: string,
-  hashedPassword: string,
+  hashedPassword: string | null | undefined,
   legacyHash?: string | null,
   userId?: number
 ): Promise<boolean> {
@@ -68,22 +71,28 @@ export async function verifyPassword(
   if (hashedPassword && hashedPassword.startsWith("$2")) {
     const bcryptMatch = await bcrypt.compare(password, hashedPassword);
     if (bcryptMatch) return true;
-    // bcrypt 비교 실패 → legacyHash 검사로 fall-through
+    // bcrypt 비교 실패 → 레거시 검사로 fall-through
     // (이관 사용자의 경우 password 필드가 "__legacy_migration__"의 bcrypt 해시이므로 항상 실패)
   }
 
   // 2) 제로보드 레거시 해시 비교
   //    · 41자 "*...": MySQL 4.1+ PASSWORD() → mysqlNewPassword
   //    · 16자 hex:    MySQL 4.0 이전 OLD_PASSWORD() → mysqlOldPassword
-  if (legacyHash) {
+  //
+  //  레거시 후보: User.legacyPwHash (로그인 흐름) OR Post/Comment.password (bcrypt 아님).
+  const legacyCandidates: string[] = [];
+  if (legacyHash) legacyCandidates.push(legacyHash);
+  if (hashedPassword && !hashedPassword.startsWith("$2")) legacyCandidates.push(hashedPassword);
+
+  for (const hash of legacyCandidates) {
     let matched = false;
-    if (legacyHash.length === 41 && legacyHash.startsWith("*")) {
-      matched = mysqlNewPassword(password) === legacyHash;
-    } else if (legacyHash.length === 16 && /^[0-9a-fA-F]+$/.test(legacyHash)) {
-      matched = mysqlOldPassword(password) === legacyHash.toLowerCase();
+    if (hash.length === 41 && hash.startsWith("*")) {
+      matched = mysqlNewPassword(password) === hash;
+    } else if (hash.length === 16 && /^[0-9a-fA-F]+$/.test(hash)) {
+      matched = mysqlOldPassword(password) === hash.toLowerCase();
     }
     if (matched) {
-      // 로그인 성공 → bcrypt 로 업그레이드 (이후엔 bcrypt 만 사용)
+      // User 로그인 시에만 bcrypt 업그레이드 (Post/Comment 는 대상 아님).
       if (userId) {
         const newHash = await hashPassword(password);
         await prisma.user.update({
