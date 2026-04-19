@@ -166,13 +166,16 @@ export async function POST(request: NextRequest) {
         },
       });
     } else {
-      // 오늘 첫 방문 IP → 카운트 증가 + 로그 생성
+      // 오늘 첫 방문 IP → 카운트 증가 + 로그 생성.
+      // Prisma upsert 는 내부적으로 SELECT + INSERT/UPDATE 라 동시 요청이 몰리면 P2002
+      // (유니크 제약 위반) 가 발생한다. MySQL 의 INSERT ... ON DUPLICATE KEY UPDATE 로
+      // 원자적 처리하여 경합 상황에서도 오류 없이 카운트 1 증가.
       await prisma.$transaction([
-        prisma.visitorCount.upsert({
-          where: { date: today },
-          create: { date: today, count: 1 },
-          update: { count: { increment: 1 } },
-        }),
+        prisma.$executeRaw`
+          INSERT INTO visitor_counts (date, count)
+          VALUES (${today}, 1)
+          ON DUPLICATE KEY UPDATE count = count + 1
+        `,
         prisma.visitLog.create({
           data: {
             ip: ip || "unknown",
