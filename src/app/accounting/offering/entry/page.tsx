@@ -159,15 +159,28 @@ export default function OfferingEntryPage() {
   }, [fetchTodayEntries]);
 
   /* ---- member lookup by id → expand to 6 rows ---- */
+  // 번호가 빈 칸이거나 0 이면 "익명 연보" 입력 모드 — 이름 비우고 행 확장하지 않음.
+  // 번호가 양수면 서버에서 교인 조회 후 6종 연보 행으로 확장.
   function handleMemberIdBlur(key: string, idStr: string) {
-    const id = parseInt(idStr, 10);
-    if (!id || id <= 0) {
+    const trimmed = idStr.trim();
+    // 빈 칸이거나 명시적 0 → 익명 연보로 간주
+    if (trimmed === "" || trimmed === "0") {
       updateRow(key, "memberName", "");
       return;
     }
+    const id = parseInt(trimmed, 10);
+    if (!Number.isFinite(id) || id <= 0) {
+      updateRow(key, "memberName", "(없음)");
+      return;
+    }
     fetch(`/api/accounting/offering/members/${id}`)
-      .then((r) => {
-        if (!r.ok) throw new Error();
+      .then(async (r) => {
+        if (!r.ok) {
+          // 404 는 "없는 번호", 나머지는 권한·서버 오류
+          const msg = r.status === 404 ? "(없음)" : `(오류 ${r.status})`;
+          updateRow(key, "memberName", msg);
+          throw new Error(msg);
+        }
         return r.json();
       })
       .then((d) => {
@@ -181,14 +194,21 @@ export default function OfferingEntryPage() {
           const idx = prev.findIndex((r) => r.key === key);
           if (idx < 0) return prev;
           const current = prev[idx];
-          // 이미 확장된 행이면 이름만 갱신
-          if (current.memberName === name) {
+          // 같은 번호가 이미 확장된 상태면 그대로 유지 (중복 확장 방지)
+          if (current.memberId === String(id) && current.memberName === name) {
             return prev;
           }
-          // 빈 줄이면 → 6줄로 확장
+          // 빈 줄 → 6줄로 확장. 이름만 다른 경우에도 새로 확장하여 일관성 유지.
           const newRows = memberRows(String(id), name);
           const result = [...prev];
-          result.splice(idx, 1, ...newRows);
+          // 같은 번호 그룹이 뒤에 이어져 있으면 한꺼번에 교체
+          let removeCount = 1;
+          for (let i = idx + 1; i < result.length; i++) {
+            if (result[i].memberId === current.memberId && current.memberId !== "") {
+              removeCount++;
+            } else break;
+          }
+          result.splice(idx, removeCount, ...newRows);
           // 끝에 빈 줄이 없으면 추가
           const last = result[result.length - 1];
           if (last.memberId !== "") {
@@ -202,7 +222,7 @@ export default function OfferingEntryPage() {
         });
       })
       .catch(() => {
-        updateRow(key, "memberName", "(없음)");
+        // updateRow 는 위에서 이미 호출됨 — 여기서는 삼킴
       });
   }
 
@@ -433,7 +453,16 @@ export default function OfferingEntryPage() {
                             value={row.memberId}
                             onChange={(e) => updateRow(row.key, "memberId", e.target.value)}
                             onBlur={() => handleMemberIdBlur(row.key, row.memberId)}
-                            onKeyDown={(e) => handleNavKeyDown(e, rowIdx, 0)}
+                            onKeyDown={(e) => {
+                              // Enter → 즉시 조회 + 금액 칸으로 포커스 이동.
+                              // onBlur 로직을 명시적으로 호출한 뒤 기본 동작 차단.
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleMemberIdBlur(row.key, row.memberId);
+                                return;
+                              }
+                              handleNavKeyDown(e, rowIdx, 0);
+                            }}
                             placeholder="번호"
                             className="w-16 border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                           />
