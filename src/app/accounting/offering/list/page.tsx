@@ -11,8 +11,8 @@ const OFFERING_TYPES = ["주일연보", "감사", "특별", "절기", "오일"] 
 interface EntryItem {
   id: number;
   date: string;
-  memberId: number;
-  member: { id: number; name: string; groupName: string | null };
+  memberId: number | null;
+  member: { id: number; name: string; groupName: string | null } | null;
   offeringType: string;
   amount: number;
   description: string | null;
@@ -347,8 +347,8 @@ export default function OfferingListPage() {
                         <td className="px-4 py-2 text-gray-600">
                           {typeof e.date === "string" ? e.date.slice(0, 10) : ""}
                         </td>
-                        <td className="px-4 py-2 text-gray-600">{e.memberId}</td>
-                        {hasMemberEdit && <td className="px-4 py-2 text-gray-800">{e.member.name}</td>}
+                        <td className="px-4 py-2 text-gray-600">{e.memberId ?? "-"}</td>
+                        {hasMemberEdit && <td className="px-4 py-2 text-gray-800">{e.member?.name ?? "(개인번호없음)"}</td>}
                         <td className="px-4 py-2 text-gray-400">—</td>
                         <td className="px-4 py-2 text-right text-blue-700 font-medium">{fmtAmount(e.amount)}</td>
                         <td className="px-4 py-2 text-gray-500">{e.description || ""}</td>
@@ -392,8 +392,8 @@ export default function OfferingListPage() {
                       <td className="px-4 py-2 text-gray-600">
                         {typeof e.date === "string" ? e.date.slice(0, 10) : ""}
                       </td>
-                      <td className="px-4 py-2 text-gray-600">{e.memberId}</td>
-                      {hasMemberEdit && <td className="px-4 py-2 text-gray-800">{e.member.name}</td>}
+                      <td className="px-4 py-2 text-gray-600">{e.memberId ?? "-"}</td>
+                      {hasMemberEdit && <td className="px-4 py-2 text-gray-800">{e.member?.name ?? "(개인번호없음)"}</td>}
                       <td className="px-4 py-2 text-gray-600">{e.offeringType}</td>
                       <td className="px-4 py-2 text-right text-blue-700 font-medium">
                         {fmtAmount(e.amount)}

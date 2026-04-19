@@ -154,7 +154,12 @@ async function handleIndividual(
 }
 
 /**
- * 일별 리포트: 날짜별 합계 (교인 정보 없음 — 마스킹 불필요)
+ * 일별 리포트: 날짜 × 연보종류 합계 (교인 정보 없음 — 마스킹 불필요)
+ *
+ * 응답 형식:
+ *   data: [{ date, byType:{"주일연보":n,...}, total, amount, count }]
+ *
+ * 주: `amount` 는 `total` 과 동일한 값으로 backward-compat 유지 (과거 호출처 대비).
  */
 async function handleDaily(params: {
   dateFrom: string | null;
@@ -175,16 +180,28 @@ async function handleDaily(params: {
     orderBy: { date: "asc" },
   });
 
-  // 날짜별 합계
-  const grouped: Record<string, { date: string; amount: number; count: number }> = {};
+  // 날짜 × 연보종류 합계
+  const grouped: Record<
+    string,
+    {
+      date: string;
+      byType: Record<string, number>;
+      total: number;
+      amount: number; // backward-compat (= total)
+      count: number;
+    }
+  > = {};
 
   for (const e of entries) {
     const dateStr = toKSTDateStr(e.date);
     if (!grouped[dateStr]) {
-      grouped[dateStr] = { date: dateStr, amount: 0, count: 0 };
+      grouped[dateStr] = { date: dateStr, byType: {}, total: 0, amount: 0, count: 0 };
     }
-    grouped[dateStr].amount += e.amount;
-    grouped[dateStr].count += 1;
+    const g = grouped[dateStr];
+    g.byType[e.offeringType] = (g.byType[e.offeringType] || 0) + e.amount;
+    g.total += e.amount;
+    g.amount += e.amount;
+    g.count += 1;
   }
 
   return NextResponse.json({

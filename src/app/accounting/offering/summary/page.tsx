@@ -164,20 +164,20 @@ export default function OfferingSummaryPage() {
           }));
           setMemberRows(rows);
         } else if (viewTab === "date") {
-          /* API shape: { data: [{ date, amount, count }] } — 유형별 세분 없음.
-           * UI 는 유형별 컬럼을 기대하므로 합계만 "주일연보" 컬럼 대신 total 에 넣고
-           * 유형별 컬럼은 0 으로 둔다. (일자별은 API 가 offeringType 별로 집계를 안 준다.)
+          /* API shape: { data: [{ date, byType:{종류:금액}, total, amount, count }] }
+           * byType 을 OFFERING_TYPES 컬럼으로 펼치고, 합계는 total (없으면 amount) 로.
            */
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const arr: any[] = Array.isArray(d?.data) ? d.data : [];
           const rows: DateSummaryRow[] = arr.map((e) => ({
             date: String(e.date ?? ""),
-            주일연보: 0,
-            감사: 0,
-            특별: 0,
-            절기: 0,
-            오일: 0,
-            total: typeof e.amount === "number" ? e.amount : 0,
+            ...flattenByType(e.byType),
+            total:
+              typeof e.total === "number"
+                ? e.total
+                : typeof e.amount === "number"
+                ? e.amount
+                : 0,
           }));
           setDateRows(rows);
         } else if (viewTab === "month") {
