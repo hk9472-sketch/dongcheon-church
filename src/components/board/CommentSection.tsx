@@ -387,8 +387,10 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                       </div>
                     </div>
                   ) : (
+                    // whitespace-pre-wrap 는 legacy 제로보드 댓글(평문 + \n) 과
+                    // 새 TipTap 댓글(<p>/<br>) 모두에서 줄바꿈이 보이도록 보장.
                     <div
-                      className="prose prose-sm max-w-none text-sm text-gray-700 leading-relaxed"
+                      className="prose prose-sm max-w-none text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words"
                       dangerouslySetInnerHTML={{ __html: sanitizeHtml(comment.content) }}
                     />
                   )

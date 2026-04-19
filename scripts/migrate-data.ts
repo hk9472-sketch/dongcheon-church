@@ -3,12 +3,18 @@
 // ============================================================
 //
 // 사용법:
-//   1. .env에 기존 제로보드 DB와 새 DB 접속 정보 설정
-//   2. npx ts-node scripts/migrate-data.ts
+//   npx tsx scripts/migrate-data.ts                    # 기본: 전체 이관
+//   npx tsx scripts/migrate-data.ts --board DcNotice   # 특정 게시판만
+//   npx tsx scripts/migrate-data.ts --board DcNotice --clear
+//                                                       # 해당 게시판의 기존 게시글+댓글 삭제 후 재이관
+//   npx tsx scripts/migrate-data.ts --no-members       # 회원 건너뛰기 (회원은 이미 이관된 상태)
+//   npx tsx scripts/migrate-data.ts --no-messages      # 쪽지 건너뛰기
 //
 // 주의사항:
 //   - 기존 DB는 EUC-KR 인코딩일 수 있음 → MySQL 접속 시 charset 설정 필요
-//   - 이 스크립트는 READ ONLY로 기존 DB를 읽고, 새 DB에 INSERT함
+//   - 이 스크립트는 기존 제로보드 DB 는 READ ONLY 로만 접근, 새 DB 에 INSERT.
+//   - 게시글/댓글 본문은 원본 그대로 저장 (stripAllHtml/sanitize 적용 없음).
+//   - --clear 는 '지정된 게시판'의 posts/comments 만 삭제. 회원·쪽지는 영향 없음.
 //   - 반드시 기존 DB 백업 후 실행할 것
 // ============================================================
 
@@ -279,29 +285,71 @@ async function main() {
   console.log("  제로보드 → Node.js 데이터 마이그레이션");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
+  // CLI 인자 파싱
+  const args = process.argv.slice(2);
+  const boardArgIdx = args.indexOf("--board");
+  const boardFilter = boardArgIdx >= 0 ? args[boardArgIdx + 1] : null;
+  const clear = args.includes("--clear");
+  const skipMembers = args.includes("--no-members");
+  const skipMessages = args.includes("--no-messages");
+
+  const boards = boardFilter
+    ? BOARDS_TO_MIGRATE.filter((b) => b === boardFilter)
+    : BOARDS_TO_MIGRATE;
+
+  if (boardFilter && boards.length === 0) {
+    console.error(`❌ --board ${boardFilter} 을 찾을 수 없습니다. 유효한 값: ${BOARDS_TO_MIGRATE.join(", ")}`);
+    process.exit(1);
+  }
+
+  console.log(`📋 대상 게시판: ${boards.join(", ")}`);
+  if (clear) console.log("⚠️  --clear: 대상 게시판의 기존 게시글·댓글을 삭제한 뒤 재이관합니다.");
+  if (skipMembers) console.log("ℹ️  --no-members: 회원 이관 건너뜀");
+  if (skipMessages) console.log("ℹ️  --no-messages: 쪽지 이관 건너뜀");
+
   // 기존 DB 연결
   const legacy = await mysql.createConnection(LEGACY_DB);
   console.log("✅ 기존 DB 연결 완료");
 
   try {
+    // --clear 가 있으면 대상 게시판의 기존 데이터를 먼저 삭제.
+    // 회원/쪽지는 건드리지 않음. 게시글이 삭제되면 FK 로 연결된 댓글도 자동 삭제된다
+    // (schema 의 onDelete: Cascade 전제 — Comment.post 참조 확인 필요).
+    if (clear) {
+      for (const slug of boards) {
+        const board = await prisma.board.findUnique({ where: { slug } });
+        if (!board) {
+          console.log(`  ⚠️  ${slug} 게시판이 새 DB 에 없어 건너뜀`);
+          continue;
+        }
+        const delComments = await prisma.comment.deleteMany({
+          where: { post: { boardId: board.id } },
+        });
+        const delPosts = await prisma.post.deleteMany({ where: { boardId: board.id } });
+        console.log(`  🗑️  ${slug}: 댓글 ${delComments.count}건 · 게시글 ${delPosts.count}건 삭제`);
+      }
+    }
+
     // 1. 회원 이전
-    await migrateMembers(legacy);
+    if (!skipMembers) await migrateMembers(legacy);
 
     // 2. 게시판별 게시글 + 댓글 이전
-    for (const boardSlug of BOARDS_TO_MIGRATE) {
+    for (const boardSlug of boards) {
       await migrateBoard(legacy, boardSlug);
     }
 
     // 3. 쪽지 이전
-    await migrateMessages(legacy);
+    if (!skipMessages && !boardFilter) await migrateMessages(legacy);
 
     console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("  🎉 마이그레이션 완료!");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("\n다음 단계:");
-    console.log("  1. 첨부파일 복사: scp 기존서버:data/ → public/uploads/");
-    console.log("  2. 관리자 비밀번호 재설정");
-    console.log("  3. 회원 비밀번호 초기화 안내");
+    if (!boardFilter) {
+      console.log("\n다음 단계:");
+      console.log("  1. 첨부파일 복사: scp 기존서버:data/ → public/uploads/");
+      console.log("  2. 관리자 비밀번호 재설정");
+      console.log("  3. 회원 비밀번호 초기화 안내");
+    }
   } finally {
     await legacy.end();
     await prisma.$disconnect();
