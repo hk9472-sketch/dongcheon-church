@@ -237,15 +237,15 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     },
   });
 
-  // content prop 변경 시 에디터 동기화 (수정 모드 진입 시)
-  const initialContentRef = useRef(content);
+  // content prop 변경 시 에디터 동기화.
+  // 과거 구현은 initialContentRef 를 사용자 타이핑 중에 갱신하지 않아,
+  // 제출 후 부모가 setContent("") 해도 비교가 "" !== "" 로 스킵돼 에디터가 비워지지 않았다.
+  // 단순히 editor.getHTML() 과 직접 비교하면 타이핑 루프는 자동으로 no-op 이 되고
+  // 외부 리셋은 정상적으로 반영된다.
   useEffect(() => {
-    if (editor && content !== initialContentRef.current) {
-      const currentHtml = editor.getHTML();
-      if (content !== currentHtml) {
-        editor.commands.setContent(content);
-        initialContentRef.current = content;
-      }
+    if (!editor) return;
+    if (content !== editor.getHTML()) {
+      editor.commands.setContent(content);
     }
   }, [editor, content]);
 

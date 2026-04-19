@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth";
-import { stripAllHtml } from "@/lib/sanitize";
+import { sanitizeHtml, stripAllHtml } from "@/lib/sanitize";
 
 /** 세션 쿠키에서 사용자 정보를 가져오는 헬퍼 */
 async function getSessionUser(request: NextRequest) {
@@ -63,9 +63,10 @@ export async function POST(request: NextRequest) {
       hashedPw = await hashPassword(password);
     }
 
-    // 댓글은 리치 텍스트가 필요 없으므로 모든 HTML 태그 제거
-    const safeContent = stripAllHtml(content).trim();
-    if (!safeContent) {
+    // 게시글 본문과 동일한 리치 텍스트 규칙으로 안전화 — <p>/<br>/<strong>/<a> 등 허용,
+    // 스크립트·위험 요소는 제거. 빈 판정은 태그 제거 기준.
+    const safeContent = sanitizeHtml(content);
+    if (!stripAllHtml(safeContent).trim()) {
       return NextResponse.json({ message: "내용을 입력하세요." }, { status: 400 });
     }
 
@@ -148,8 +149,8 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const safeContent = stripAllHtml(content).trim();
-    if (!safeContent) {
+    const safeContent = sanitizeHtml(content);
+    if (!stripAllHtml(safeContent).trim()) {
       return NextResponse.json({ message: "내용을 입력하세요." }, { status: 400 });
     }
 
