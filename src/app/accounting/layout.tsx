@@ -156,11 +156,11 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
         {/* 사이드바 - 데스크톱 (인쇄 시 숨김) */}
         <aside className="w-48 shrink-0 hidden lg:block print:hidden">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden sticky top-24">
-            {/* 장부관리 (회계) */}
+            {/* 행정실 (회계) */}
             {hasLedger && (
               <>
                 <div className="px-4 py-3 bg-teal-700 text-white">
-                  <h2 className="text-sm font-bold">장부관리</h2>
+                  <h2 className="text-sm font-bold">행정실</h2>
                 </div>
                 <nav className="py-1">
                   {ledgerItems.map((item) => (

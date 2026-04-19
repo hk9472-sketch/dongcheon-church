@@ -225,7 +225,7 @@ export default function AdminMemberEditPage() {
               </label>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">장부관리 권한</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">행정실 권한</label>
               <div className="space-y-1 px-3 py-2">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
