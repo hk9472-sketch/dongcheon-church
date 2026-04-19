@@ -52,7 +52,7 @@ function registerIframeHook() {
 export function sanitizeHtml(dirty: string | null | undefined): string {
   if (!dirty) return "";
   registerIframeHook();
-  return DOMPurify.sanitize(dirty, {
+  const clean = DOMPurify.sanitize(dirty, {
     ALLOWED_TAGS: [
       "p", "br", "strong", "em", "u", "s", "a", "ul", "ol", "li",
       "blockquote", "pre", "code", "h1", "h2", "h3", "h4",
@@ -75,6 +75,10 @@ export function sanitizeHtml(dirty: string | null | undefined): string {
     // 외부 iframe 도 허용해야 하므로 ADD_TAGS 가 아닌 ALLOWED_TAGS 로 처리
     ADD_TAGS: [],
   });
+  // TipTap 등 리치 에디터는 연속 Enter 를 <p></p><p></p>... 로 출력하는데,
+  // 브라우저는 내용이 없는 <p></p> 를 0 높이로 렌더하고 인접 margin 도 collapse 되어
+  // 입력한 공백 줄이 화면에서 사라진다. 빈 단락 안에 <br> 을 넣어 한 줄 높이를 확보.
+  return clean.replace(/<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, "<p><br></p>");
 }
 
 /**
