@@ -238,28 +238,40 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const body = await request.clone().text().catch(() => "");
-  void body; // 사용 안 함, 참고만
-
   const start = Date.now();
   const errors: ExecError[] = [];
   let succeeded = 0;
   const stopOnError = true; // 기본 정책: 첫 실패 시 중단. 향후 옵션으로 확장 가능.
 
-  for (let i = 0; i < statements.length; i++) {
-    const stmt = statements[i];
-    try {
-      await prisma.$executeRawUnsafe(stmt);
-      succeeded++;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      errors.push({
-        index: i + 1,
-        statement: stmt.length > 200 ? stmt.slice(0, 200) + "…" : stmt,
-        error: msg,
-      });
-      if (stopOnError) break;
+  try {
+    for (let i = 0; i < statements.length; i++) {
+      const stmt = statements[i];
+      try {
+        await prisma.$executeRawUnsafe(stmt);
+        succeeded++;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        errors.push({
+          index: i + 1,
+          statement: stmt.length > 200 ? stmt.slice(0, 200) + "…" : stmt,
+          error: msg,
+        });
+        if (stopOnError) break;
+      }
     }
+  } catch (e) {
+    // 예기치 못한 최상위 예외도 JSON 으로 보고
+    return NextResponse.json(
+      {
+        error: `서버 예외: ${e instanceof Error ? e.message : String(e)}`,
+        source,
+        total: statements.length,
+        succeeded,
+        failed: errors.length,
+        errors,
+      },
+      { status: 500 }
+    );
   }
 
   const elapsed = Date.now() - start;

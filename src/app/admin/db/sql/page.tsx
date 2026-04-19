@@ -247,12 +247,29 @@ export default function SqlManagementPage() {
       const fd = new FormData();
       fd.append("file", dumpFile);
       const res = await fetch("/api/admin/db/sql/import", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) {
-        setDumpError(data.error || `HTTP ${res.status}`);
+      // 서버가 빈 응답/HTML 오류 페이지를 돌려주는 경우를 대비해 텍스트를 먼저 읽어 JSON 파싱.
+      const raw = await res.text();
+      let data: { error?: string; source?: string; total?: number; succeeded?: number; failed?: number; errors?: typeof dumpResult extends null ? never : NonNullable<typeof dumpResult>["errors"]; elapsed?: number } | null = null;
+      if (raw) {
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          setDumpError(
+            `서버 응답을 해석할 수 없습니다 (HTTP ${res.status}). ` +
+              `응답 본문: ${raw.slice(0, 400)}${raw.length > 400 ? "…" : ""}`
+          );
+          return;
+        }
+      }
+      if (!res.ok || !data) {
+        setDumpError(data?.error || `HTTP ${res.status}${raw ? "" : " (본문 없음 — 서버가 중간에 끊겼거나 프록시 타임아웃일 수 있음)"}`);
         return;
       }
-      setDumpResult(data);
+      if (data.error) {
+        setDumpError(data.error);
+        return;
+      }
+      setDumpResult(data as NonNullable<typeof dumpResult>);
       if (data.failed === 0) {
         showMsg(`덤프 실행 완료: ${data.succeeded}건 성공 (${data.elapsed}ms)`, "success");
       } else {
