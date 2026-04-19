@@ -39,7 +39,9 @@ export default function AdminHelpPage() {
   const [editing, setEditing] = useState<{ id?: number; slug: string; title: string; content: string; sortOrder: number } | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [htmlMode, setHtmlMode] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
+  const htmlAreaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadItems = async () => {
@@ -54,6 +56,7 @@ export default function AdminHelpPage() {
 
   const startNew = () => {
     setEditing({ slug: "", title: "", content: "", sortOrder: 0 });
+    setHtmlMode(false);
     setMsg("");
   };
 
@@ -67,6 +70,7 @@ export default function AdminHelpPage() {
       content: data.content,
       sortOrder: data.sortOrder,
     });
+    setHtmlMode(false);
     setMsg("");
     // contentEditable에 내용 로드
     setTimeout(() => {
@@ -74,9 +78,30 @@ export default function AdminHelpPage() {
     }, 100);
   };
 
+  // WYSIWYG ↔ HTML 소스 토글.
+  // 켤 때: 현재 DOM innerHTML 을 textarea 로 옮긴다.
+  // 끌 때: textarea 의 HTML 을 DOM 에 다시 주입한다 (붙여넣은 태그가 실제 서식으로 해석됨).
+  const toggleHtmlMode = () => {
+    if (!editing) return;
+    if (!htmlMode) {
+      const html = editorRef.current?.innerHTML || "";
+      setEditing({ ...editing, content: html });
+      setHtmlMode(true);
+    } else {
+      const html = htmlAreaRef.current?.value ?? editing.content;
+      setEditing({ ...editing, content: html });
+      setHtmlMode(false);
+      setTimeout(() => {
+        if (editorRef.current) editorRef.current.innerHTML = html;
+      }, 0);
+    }
+  };
+
   const handleSave = async () => {
     if (!editing) return;
-    const content = editorRef.current?.innerHTML || "";
+    const content = htmlMode
+      ? (htmlAreaRef.current?.value ?? editing.content)
+      : (editorRef.current?.innerHTML || "");
     if (!editing.slug.trim() || !editing.title.trim()) {
       setMsg("슬러그와 제목을 입력하세요.");
       return;
@@ -222,16 +247,37 @@ export default function AdminHelpPage() {
             <span className="text-gray-300 mx-1">|</span>
             <button onClick={handleImageUpload} className="px-2 py-1 text-xs hover:bg-gray-200 rounded" title="이미지">📷 이미지</button>
             <input ref={fileInputRef} type="file" accept="image/*" onChange={onFileSelected} className="hidden" />
+            <span className="text-gray-300 mx-1">|</span>
+            <button
+              onClick={toggleHtmlMode}
+              className={`px-2 py-1 text-xs rounded font-mono ${
+                htmlMode ? "bg-blue-600 text-white hover:bg-blue-700" : "hover:bg-gray-200"
+              }`}
+              title="HTML 소스 보기/편집 — 태그가 그대로 보이면 여기서 붙여넣으세요"
+            >
+              &lt;/&gt; HTML
+            </button>
           </div>
 
-          {/* contentEditable 에디터 */}
+          {/* contentEditable 에디터 (WYSIWYG) */}
           <div
             ref={editorRef}
             contentEditable
             suppressContentEditableWarning
-            className="min-h-[400px] border border-gray-200 border-t-0 rounded-b px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-300 prose prose-sm max-w-none"
+            className={`min-h-[400px] border border-gray-200 border-t-0 rounded-b px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-300 prose prose-sm max-w-none ${
+              htmlMode ? "hidden" : ""
+            }`}
             dangerouslySetInnerHTML={{ __html: editing.content }}
           />
+          {/* HTML 소스 편집 모드 */}
+          {htmlMode && (
+            <textarea
+              ref={htmlAreaRef}
+              defaultValue={editing.content}
+              className="w-full min-h-[400px] border border-gray-200 border-t-0 rounded-b px-4 py-3 text-xs font-mono leading-relaxed focus:outline-none focus:ring-1 focus:ring-blue-300 whitespace-pre"
+              spellCheck={false}
+            />
+          )}
         </div>
 
         <div className="flex justify-end gap-2">
