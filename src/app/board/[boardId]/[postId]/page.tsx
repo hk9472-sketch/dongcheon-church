@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import prisma from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth";
 import { sanitizeHtml } from "@/lib/sanitize";
-import { isSecureFromHeaders } from "@/lib/cookieSecure";
 import CommentSection from "@/components/board/CommentSection";
 import PostActions from "@/components/board/PostActions";
 import SecretPostUnlock from "@/components/board/SecretPostUnlock";
+import HitCounter from "@/components/board/HitCounter";
 
 
 // ============================================================
@@ -59,7 +59,7 @@ export default async function PostDetailPage({ params }: PageProps) {
     );
   }
 
-  // 쿠키 스토어 (비밀글 unlock 확인 + 조회수 중복 방지에 사용)
+  // 쿠키 스토어 (비밀글 unlock 확인용)
   const cookieStore = await cookies();
   const hasUnlockCookie = !!cookieStore.get(`dc_post_unlock_${post.id}`)?.value;
 
@@ -72,32 +72,10 @@ export default async function PostDetailPage({ params }: PageProps) {
     !(currentUser?.id !== undefined && currentUser.id === post.authorId) &&
     !(post.authorId === null && hasUnlockCookie);
 
-  // 조회수 증가 (비밀글로 차단되지 않을 때만, 쿠키로 중복 방지 - 24시간)
-  // Prisma 5+ 는 updateMany 에서도 @updatedAt 이 갱신되므로, 원시 UPDATE 로
-  // updatedAt 컬럼을 건드리지 않고 hit 만 증가시킨다.
-  let hitIncremented = false;
-  if (!isSecretBlocked) {
-    const viewCookieName = `dc_view_${post.id}`;
-    const alreadyViewed = !!cookieStore.get(viewCookieName)?.value;
-    if (!alreadyViewed) {
-      await prisma.$executeRaw`UPDATE posts SET hit = hit + 1 WHERE id = ${post.id}`;
-      hitIncremented = true;
-      // Next.js 15+ Server Component 에서도 cookies().set() 가능하지만,
-      // 특정 렌더 단계에서는 실패할 수 있어 try/catch 로 방어
-      try {
-        const h = await headers();
-        cookieStore.set(viewCookieName, "1", {
-          httpOnly: true,
-          secure: isSecureFromHeaders(h),
-          sameSite: "lax",
-          maxAge: 24 * 60 * 60, // 24시간
-          path: "/",
-        });
-      } catch {
-        // Server Component 쓰기 제약으로 실패 시: 중복 방지 없이 증가만 유지
-      }
-    }
-  }
+  // 조회수 증가는 <HitCounter /> 클라이언트 컴포넌트가 /api/board/view 를 호출해 처리.
+  // Server Component 에서는 cookies().set() 이 렌더 단계에 따라 실패할 수 있어,
+  // 과거에는 카운트만 증가하고 쿠키가 안 찍혀 무한 증가하는 문제가 있었다.
+  // Route Handler 는 쿠키 쓰기가 항상 허용되므로 24시간 중복 방지가 확실히 걸린다.
 
   // 수정/삭제 권한 확인
   // isGuestPost: authorId=null인 비회원(ZeroBoard 이관) 글 → 비밀번호로 처리
@@ -277,6 +255,9 @@ export default async function PostDetailPage({ params }: PageProps) {
 
   return (
     <div className="space-y-4">
+      {/* 조회수 증가 — 클라이언트에서 Route Handler 호출 */}
+      <HitCounter postId={post.id} />
+
       {/* 게시판 제목 */}
       <div className="flex items-center justify-between">
         <Link href={`/board/${boardId}`} className="text-lg font-bold text-gray-800 hover:text-blue-700">
@@ -316,7 +297,7 @@ export default async function PostDetailPage({ params }: PageProps) {
                 수정: {formatDate(post.lastEditedAt)} ({post.lastEditorName || post.lastEditorUserId})
               </span>
             )}
-            <span>조회 {post.hit + (hitIncremented ? 1 : 0)}</span>
+            <span>조회 {post.hit}</span>
             {post.vote > 0 && <span>추천 {post.vote}</span>}
             {post.email && (
               <a href={`mailto:${post.email}`} className="text-blue-600 hover:underline">
