@@ -46,7 +46,7 @@ export default function HelpButton({ slug }: HelpButtonProps) {
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setOpen(false)}>
           <div
-            className="bg-white rounded-xl shadow-2xl w-full max-w-[998px] mx-4 max-h-[90vh] flex flex-col"
+            className="bg-white rounded-xl shadow-2xl w-full max-w-[998px] mx-4 max-h-[72vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* 헤더 */}
