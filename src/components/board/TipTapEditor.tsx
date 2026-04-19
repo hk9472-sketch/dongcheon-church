@@ -187,6 +187,85 @@ function Sep() {
   return <div className="w-px h-5 bg-gray-300 mx-0.5" />;
 }
 
+// ─── 표 생성 그리드 피커 (PPT 스타일) ───
+function TablePicker({ onInsert, title }: { onInsert: (rows: number, cols: number) => void; title?: string }) {
+  const [open, setOpen] = useState(false);
+  const [hover, setHover] = useState<{ r: number; c: number }>({ r: 0, c: 0 });
+  const ref = useRef<HTMLDivElement>(null);
+
+  const MAX_ROWS = 8;
+  const MAX_COLS = 10;
+
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  const label = hover.r > 0 && hover.c > 0 ? `${hover.r} × ${hover.c} 표` : "크기 선택";
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        title={title}
+        onClick={() => {
+          setOpen((v) => !v);
+          setHover({ r: 0, c: 0 });
+        }}
+        className="w-7 h-7 flex items-center justify-center text-xs rounded border transition-colors bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+      >
+        ▦
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded shadow-lg z-50 p-2">
+          <div className="text-[11px] text-gray-600 mb-1 text-center font-medium">{label}</div>
+          <div
+            className="grid gap-0.5"
+            style={{ gridTemplateColumns: `repeat(${MAX_COLS}, 16px)` }}
+            onMouseLeave={() => setHover({ r: 0, c: 0 })}
+          >
+            {Array.from({ length: MAX_ROWS * MAX_COLS }).map((_, idx) => {
+              const r = Math.floor(idx / MAX_COLS) + 1;
+              const c = (idx % MAX_COLS) + 1;
+              const active = r <= hover.r && c <= hover.c;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onMouseEnter={() => setHover({ r, c })}
+                  onClick={() => {
+                    onInsert(hover.r || r, hover.c || c);
+                    setOpen(false);
+                  }}
+                  className={`w-4 h-4 border ${
+                    active ? "bg-blue-500 border-blue-600" : "bg-gray-50 border-gray-300 hover:bg-gray-200"
+                  }`}
+                />
+              );
+            })}
+          </div>
+          <div className="mt-2 pt-2 border-t border-gray-200 flex items-center justify-between gap-2">
+            <span className="text-[10px] text-gray-400">생성 후 열 경계·셀 하단을 드래그해 크기 조절</span>
+            <button
+              type="button"
+              onClick={() => {
+                onInsert(3, 3);
+                setOpen(false);
+              }}
+              className="text-[11px] text-blue-600 hover:underline"
+            >
+              기본 3×3
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════
 // 메인 TipTapEditor 컴포넌트
 // ═══════════════════════════════════════════════
@@ -216,7 +295,9 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         openOnClick: false,
         HTMLAttributes: { class: "text-blue-600 underline" },
       }),
-      Table.configure({ resizable: false }),
+      // resizable: true → 컬럼 경계를 마우스로 드래그해 폭 조정.
+      // 행 높이는 CSS resize: vertical 로 셀마다 개별 조절(아래 globals.css 참고).
+      Table.configure({ resizable: true, handleWidth: 6, cellMinWidth: 40 }),
       TableRow,
       TableCell,
       TableHeader,
@@ -474,10 +555,17 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     }
   }, [editor]);
 
-  const addTable = useCallback(() => {
-    if (!editor) return;
-    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
-  }, [editor]);
+  const addTable = useCallback(
+    (rows: number, cols: number) => {
+      if (!editor) return;
+      editor
+        .chain()
+        .focus()
+        .insertTable({ rows, cols, withHeaderRow: true })
+        .run();
+    },
+    [editor]
+  );
 
   if (!editor) return null;
 
@@ -711,9 +799,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         >
           🔗
         </TBtn>
-        <TBtn onClick={addTable} title="표 삽입">
-          ▦
-        </TBtn>
+        <TablePicker onInsert={addTable} title="표 삽입 — 행·열 크기 선택" />
         <TBtn
           onClick={() => editor.chain().focus().setHorizontalRule().run()}
           title="구분선"

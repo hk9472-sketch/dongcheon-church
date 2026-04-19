@@ -62,7 +62,7 @@ export function sanitizeHtml(dirty: string | null | undefined): string {
     ],
     ALLOWED_ATTR: [
       "href", "target", "rel", "src", "alt", "title",
-      "class", "style", "width", "height", "colspan", "rowspan",
+      "class", "style", "width", "height", "colspan", "rowspan", "colwidth",
       "data-align",
       // <video>/<audio>
       "controls", "autoplay", "loop", "muted", "preload", "poster", "playsinline",

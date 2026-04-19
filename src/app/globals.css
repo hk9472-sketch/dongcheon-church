@@ -276,8 +276,10 @@ html {
 }
 .tiptap-editor .ProseMirror table {
   border-collapse: collapse;
-  width: 100%;
+  /* width: 100% → 고정폭 기반 resize 가 먹도록 제거. 컬럼 합계가 자동 폭 */
   margin: 0.5em 0;
+  table-layout: fixed;
+  overflow: hidden;
 }
 .tiptap-editor .ProseMirror td,
 .tiptap-editor .ProseMirror th {
@@ -285,10 +287,55 @@ html {
   padding: 0.4rem 0.6rem;
   min-width: 60px;
   vertical-align: top;
+  position: relative;
+  /* 편집 모드에서 셀 높이를 마우스로 조절할 수 있게 — 내용이 적어도 사용자가 늘릴 수 있음 */
+  resize: vertical;
+  overflow: auto;
 }
 .tiptap-editor .ProseMirror th {
   background-color: #f3f4f6;
   font-weight: 600;
+}
+/* TipTap 컬럼 리사이즈 핸들 (셀 오른쪽 경계 6px 영역) */
+.tiptap-editor .ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background-color: #3b82f6;
+  opacity: 0;
+  cursor: col-resize;
+  z-index: 20;
+  pointer-events: none;
+}
+.tiptap-editor .ProseMirror td:hover > .column-resize-handle,
+.tiptap-editor .ProseMirror th:hover > .column-resize-handle {
+  opacity: 0.4;
+  pointer-events: auto;
+}
+.tiptap-editor .ProseMirror .column-resize-handle:hover,
+.tiptap-editor .ProseMirror.resize-cursor .column-resize-handle {
+  opacity: 0.8;
+}
+/* 리사이즈 중 전체 커서 col-resize 로 고정 */
+.tiptap-editor .ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+/* 테이블 가로 스크롤 래퍼 — 너무 넓어지면 영역 넘어가지 않게 */
+.tiptap-editor .ProseMirror .tableWrapper {
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+/* 조회 페이지(prose) 에서도 에디터에서 조절한 컬럼 폭이 그대로 적용되도록 */
+.prose table {
+  table-layout: fixed;
+  word-break: break-word;
+}
+.prose td,
+.prose th {
+  vertical-align: top;
 }
 .tiptap-editor .ProseMirror hr {
   border-top: 1px solid #d1d5db;
