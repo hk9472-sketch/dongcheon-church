@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import HelpButton from "@/components/HelpButton";
 
 interface AccUnit {
   id: number;
@@ -129,7 +130,7 @@ export default function AccUnitsPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-800 mb-6">회계단위 관리</h1>
+      <h1 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">회계단위 관리 <HelpButton slug="accounting-units" /></h1>
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">

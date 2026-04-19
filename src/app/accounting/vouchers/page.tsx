@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import HelpButton from "@/components/HelpButton";
 
 /* ───── types ───── */
 interface AccUnit {
@@ -388,7 +389,7 @@ export default function VoucherListPage() {
   /* ======================================== render ======================================== */
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-gray-800">전표현황</h1>
+      <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">전표현황 <HelpButton slug="accounting-vouchers" /></h1>
 
       {/* ─── search area ─── */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-3">

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { SKINS, getSkinTypeLabel } from "@/lib/skins";
 import type { SkinConfig, SkinType } from "@/lib/skins";
+import HelpButton from "@/components/HelpButton";
 
 const SKIN_TYPES: { value: string; label: string }[] = [
   { value: "all", label: "전체" },
@@ -30,7 +31,7 @@ export default function AdminSkinsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-800">스킨 관리</h1>
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">스킨 관리 <HelpButton slug="admin-skins" /></h1>
         <span className="text-sm text-gray-500">총 {SKINS.length}개 스킨</span>
       </div>
 

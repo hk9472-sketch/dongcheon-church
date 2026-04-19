@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import HelpButton from "@/components/HelpButton";
 
 function Spinner() {
   return (
@@ -240,7 +241,7 @@ export default function BackupPage() {
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
       <div className="px-4 py-3 border-b border-gray-200">
-        <h1 className="text-base font-bold text-gray-800">백업</h1>
+        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">백업 <HelpButton slug="admin-backup" /></h1>
         <p className="text-xs text-gray-500 mt-1">
           홈페이지 프로그램, 첨부파일, 데이터베이스를 백업합니다.
         </p>

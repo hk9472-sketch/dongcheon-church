@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SKINS, getSkinTypeLabel } from "@/lib/skins";
 import type { SkinConfig } from "@/lib/skins";
+import HelpButton from "@/components/HelpButton";
 
 type BoardType = "BBS" | "GALLERY" | "DOWNLOAD" | "MUSIC" | "VOTE";
 
@@ -113,7 +114,7 @@ export default function AdminBoardCreatePage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-gray-800">게시판 생성</h1>
+      <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">게시판 생성 <HelpButton slug="admin-boards-create" /></h1>
 
       {error && (
         <div className="px-4 py-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg">

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAccountPerms } from "@/lib/useAccountPerms";
+import HelpButton from "@/components/HelpButton";
 
 /* ───── types ───── */
 interface CertificateData {
@@ -124,7 +125,7 @@ export default function CertificatePage() {
     <div className="space-y-6">
       {/* controls — hidden on print */}
       <div className="print:hidden space-y-6">
-        <h1 className="text-xl font-bold text-gray-800">소속증명서</h1>
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">소속증명서 <span className="print:hidden"><HelpButton slug="offering-certificate" /></span></h1>
 
         <div className="bg-white rounded-lg shadow-sm border-t-4 border-teal-500 p-4 md:p-6">
           <div className="flex flex-wrap gap-4 items-end">

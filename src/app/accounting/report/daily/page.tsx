@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState, useCallback } from "react";
+import HelpButton from "@/components/HelpButton";
 
 interface AccUnit {
   id: number;
@@ -125,7 +126,7 @@ export default function DailyReportPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-800 mb-6">일자별 현황</h1>
+      <h1 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">일자별 현황 <HelpButton slug="accounting-report-daily" /></h1>
 
       {/* 필터 */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6 print:hidden">

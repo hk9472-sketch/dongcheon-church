@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import HelpButton from "@/components/HelpButton";
 
 interface AccUnit {
   id: number;
@@ -112,7 +113,7 @@ export default function ClosingPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-800 mb-6">마감 관리</h1>
+      <h1 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">마감 관리 <HelpButton slug="accounting-closing" /></h1>
 
       {/* 필터 */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6 print:hidden">

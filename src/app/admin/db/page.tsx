@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import BoardMigration from "./BoardMigration";
+import HelpButton from "@/components/HelpButton";
 
 type Tab = "visitor-stats" | "site-settings" | "visit-logs" | "import" | "board-migrate" | "user-migrate";
 
@@ -463,7 +464,7 @@ export default function AdminDbPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-gray-800">DB 관리</h1>
+      <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">DB 관리 <HelpButton slug="admin-db" /></h1>
 
       {message && (
         <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded text-sm">

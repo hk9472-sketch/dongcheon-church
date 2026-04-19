@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import HelpButton from "@/components/HelpButton";
 
 /* ───── types ───── */
 interface OfferingMember {
@@ -176,7 +177,7 @@ export default function OfferingMembersPage() {
   /* ======== render ======== */
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-gray-800">관리번호 관리</h1>
+      <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">관리번호 관리 <HelpButton slug="offering-members" /></h1>
 
       {/* search bar */}
       <form onSubmit={handleSearch} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">

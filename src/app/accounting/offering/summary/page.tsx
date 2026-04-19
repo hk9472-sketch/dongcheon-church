@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAccountPerms } from "@/lib/useAccountPerms";
+import HelpButton from "@/components/HelpButton";
 
 /* ───── constants ───── */
 const OFFERING_TYPES = ["주일연보", "감사", "특별", "절기", "오일"] as const;
@@ -151,7 +152,7 @@ export default function OfferingSummaryPage() {
   /* ======== render ======== */
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-gray-800">연보집계</h1>
+      <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">연보집계 <HelpButton slug="offering-summary" /></h1>
 
       {/* view tabs */}
       <div className="flex gap-1">

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import HelpButton from "@/components/HelpButton";
 
 interface MemberUser {
   id: number;
@@ -246,7 +247,7 @@ export default function MemberListClient({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-800">회원 관리</h1>
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">회원 관리 <HelpButton slug="admin-members" /></h1>
         <span className="text-sm text-gray-500">
           총 <strong>{total}</strong>명
         </span>

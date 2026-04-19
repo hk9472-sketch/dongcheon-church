@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import HelpButton from "@/components/HelpButton";
 
 // ==================== 테마 (색상) ====================
 const THEME_FIELDS = [
@@ -292,7 +293,7 @@ export default function AdminSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-gray-800">사이트 설정</h1>
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">사이트 설정 <HelpButton slug="admin-settings" /></h1>
         <p className="text-sm text-gray-500 mt-1">색상, 위젯 스킨, 글쓰기 페이지 디자인을 관리합니다.</p>
       </div>
 

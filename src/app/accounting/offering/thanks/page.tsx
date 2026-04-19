@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useAccountPerms } from "@/lib/useAccountPerms";
+import HelpButton from "@/components/HelpButton";
 
 interface ThanksEntry {
   id: number;
@@ -70,7 +71,7 @@ export default function ThanksOfferingPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-gray-800">감사연보현황</h1>
+      <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">감사연보현황 <HelpButton slug="offering-thanks" /></h1>
 
       {/* 필터 */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 print:hidden">

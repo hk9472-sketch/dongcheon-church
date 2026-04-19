@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAccountPerms } from "@/lib/useAccountPerms";
+import HelpButton from "@/components/HelpButton";
 
 /* ───── constants ───── */
 const OFFERING_TYPES = [
@@ -353,7 +354,7 @@ export default function OfferingEntryPage() {
   /* ======== render ======== */
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-gray-800">연보입력</h1>
+      <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">연보입력 <HelpButton slug="offering-entry" /></h1>
 
       {/* message */}
       {message && (

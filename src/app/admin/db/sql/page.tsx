@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import HelpButton from "@/components/HelpButton";
 
 // ============================================================
 // 타입 정의
@@ -311,7 +312,7 @@ export default function SqlManagementPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-800">SQL 관리</h1>
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">SQL 관리 <HelpButton slug="admin-sql" /></h1>
         <button
           onClick={loadTables}
           className="px-3 py-1.5 text-xs border border-gray-300 rounded hover:bg-gray-50"

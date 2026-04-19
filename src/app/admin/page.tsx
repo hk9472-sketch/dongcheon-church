@@ -1,6 +1,7 @@
 import prisma from "@/lib/db";
 import Link from "next/link";
 import CounterRecalcButton from "@/components/admin/CounterRecalcButton";
+import HelpButton from "@/components/HelpButton";
 
 export default async function AdminDashboard() {
   const [boardCount, userCount, postCount, commentCount] = await Promise.all([
@@ -33,7 +34,7 @@ export default async function AdminDashboard() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-xl font-bold text-gray-800">관리자 대시보드</h1>
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">관리자 대시보드 <HelpButton slug="admin-dashboard" /></h1>
         <CounterRecalcButton />
       </div>
 

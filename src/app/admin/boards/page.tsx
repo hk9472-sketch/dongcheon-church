@@ -1,6 +1,7 @@
 import prisma from "@/lib/db";
 import Link from "next/link";
 import GrantGuestWriteButton from "@/components/admin/GrantGuestWriteButton";
+import HelpButton from "@/components/HelpButton";
 
 export default async function AdminBoardsPage() {
   const boards = await prisma.board.findMany({
@@ -11,7 +12,7 @@ export default async function AdminBoardsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-xl font-bold text-gray-800">게시판 관리</h1>
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">게시판 관리 <HelpButton slug="admin-boards" /></h1>
         <div className="flex items-center gap-2 flex-wrap">
           <GrantGuestWriteButton />
           <Link
