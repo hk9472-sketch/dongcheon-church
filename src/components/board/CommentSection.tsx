@@ -2,17 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
-import { sanitizeHtml } from "@/lib/sanitize";
-
-const TipTapEditor = dynamic(() => import("@/components/board/TipTapEditor"), {
-  ssr: false,
-  loading: () => (
-    <div className="border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-400 min-h-[100px]">
-      에디터 로딩 중...
-    </div>
-  ),
-});
 
 interface Comment {
   id: number;
@@ -54,9 +43,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // TipTap은 빈 내용일 때 <p></p>를 반환하므로 태그 제거 후 확인
-    const stripped = content.replace(/<[^>]*>/g, "").trim();
-    if (!stripped) {
+    if (!content.trim()) {
       alert("내용을 입력하세요.");
       return;
     }
@@ -355,11 +342,12 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                   editingId === comment.id ? (
                     /* 인라인 수정 폼 */
                     <div className="space-y-2">
-                      <TipTapEditor
-                        content={editContent}
-                        onChange={setEditContent}
+                      <textarea
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
                         placeholder="댓글을 입력하세요"
-                        minHeight="60px"
+                        rows={3}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 resize-y"
                       />
                       <div className="flex items-center gap-2">
                         {editRequiresPassword && (
@@ -387,10 +375,9 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                       </div>
                     </div>
                   ) : (
-                    <div
-                      className="prose prose-sm max-w-none text-sm text-gray-700 leading-relaxed"
-                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(comment.content) }}
-                    />
+                    <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
+                      {comment.content}
+                    </div>
                   )
                 ) : (
                   <div className="text-sm text-gray-400 italic">
@@ -434,11 +421,12 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
             )}
           </div>
           <div className="space-y-2">
-            <TipTapEditor
-              content={content}
-              onChange={setContent}
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
               placeholder="댓글을 입력하세요"
-              minHeight="60px"
+              rows={3}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 resize-y"
             />
             <div className="flex justify-end">
               <button
