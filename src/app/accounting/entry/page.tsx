@@ -95,6 +95,28 @@ export default function VoucherEntryPage() {
   // today's vouchers
   const [todayVouchers, setTodayVouchers] = useState<SavedVoucher[]>([]);
 
+  /* ────── 엑셀 업로드 (일괄 등록) ────── */
+  interface ImportRow {
+    rowIndex: number;
+    unitRaw: string;
+    typeRaw: string;
+    dateRaw: string;
+    headerDesc: string;
+    accountRaw: string;
+    amountRaw: string;
+    description: string;
+    unitId: number | null;
+    type: "D" | "C" | null;
+    date: string | null;
+    accountId: number | null;
+    amount: number | null;
+    errors: string[];
+  }
+  const [importRows, setImportRows] = useState<ImportRow[] | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   /* ---- fetch units ---- */
   useEffect(() => {
     fetch("/api/accounting/units")
@@ -380,11 +402,160 @@ export default function VoucherEntryPage() {
     updateItem(key, "amount", n > 0 ? String(n) : "");
   }
 
+  /* ────── 엑셀 템플릿 다운로드 (CSV, UTF-8 BOM — 엑셀에서 바로 열림) ────── */
+  function handleDownloadTemplate() {
+    const headers = [
+      "회계단위",
+      "수입지출구분",
+      "전표일자",
+      "전표적요",
+      "계정과목",
+      "금액",
+      "적요",
+    ];
+    const sample = [
+      units[0]?.code || units[0]?.name || "본회계",
+      "수입",
+      todayKST(),
+      "주일헌금",
+      leafAccounts[0]?.code || "",
+      "100000",
+      "샘플 적요",
+    ];
+    const csv =
+      "\uFEFF" +
+      [headers.join(","), sample.map((s) => `"${String(s).replace(/"/g, '""')}"`).join(",")].join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "voucher-template.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /* ────── 엑셀 파일 선택 → 서버로 전송하여 파싱 미리보기 ────── */
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setImportMsg(null);
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      const res = await fetch("/api/accounting/voucher/import", {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "파싱 실패");
+      setImportRows(data.rows || []);
+      if (data.errorCount > 0) {
+        setImportMsg({
+          type: "err",
+          text: `총 ${data.total}행 중 ${data.errorCount}개 행에 오류가 있습니다. 오류 행은 저장되지 않습니다.`,
+        });
+      } else {
+        setImportMsg({ type: "ok", text: `총 ${data.total}행을 검사했습니다. 확인 후 "일괄 등록" 을 눌러주세요.` });
+      }
+    } catch (err: unknown) {
+      setImportMsg({
+        type: "err",
+        text: err instanceof Error ? err.message : "업로드 실패",
+      });
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  /* ────── 일괄 등록 (미리보기에서 오류 없는 행만 전송) ────── */
+  async function handleBulkCommit() {
+    if (!importRows || importRows.length === 0) return;
+    const valid = importRows.filter((r) => r.errors.length === 0);
+    if (valid.length === 0) {
+      setImportMsg({ type: "err", text: "저장할 유효한 행이 없습니다." });
+      return;
+    }
+    if (!confirm(`${valid.length}개 행을 전표로 등록합니다. 진행할까요?`)) return;
+
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const res = await fetch("/api/accounting/voucher/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirm: true,
+          rows: valid.map((r) => ({
+            unitId: r.unitId,
+            type: r.type,
+            date: r.date,
+            headerDesc: r.headerDesc,
+            accountId: r.accountId,
+            amount: r.amount,
+            description: r.description,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "등록 실패");
+      setImportMsg({
+        type: "ok",
+        text: `${data.count}건의 전표가 등록되었습니다.`,
+      });
+      setImportRows(null);
+      fetchTodayVouchers();
+    } catch (err: unknown) {
+      setImportMsg({
+        type: "err",
+        text: err instanceof Error ? err.message : "등록 실패",
+      });
+    } finally {
+      setImporting(false);
+    }
+  }
+
   /* ======================================== render ======================================== */
   return (
     <div className="space-y-6">
-      {/* title */}
-      <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">전표입력 <HelpButton slug="accounting-entry" /></h1>
+      {/* title + 엑셀 업로드 도구 */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">전표입력 <HelpButton slug="accounting-entry" /></h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadTemplate}
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+            title="엑셀 업로드용 양식을 다운로드합니다 (CSV, 엑셀에서 열림)"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M4 6h16M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6z" />
+            </svg>
+            양식 다운로드
+          </button>
+          <label
+            className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg text-white cursor-pointer transition-colors ${
+              importing ? "bg-emerald-400" : "bg-emerald-600 hover:bg-emerald-700"
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5m0 0l5 5m-5-5v12" />
+            </svg>
+            {importing ? "처리 중..." : "엑셀 업로드"}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleFileChange}
+              disabled={importing}
+              className="hidden"
+            />
+          </label>
+        </div>
+      </div>
 
       {/* tabs */}
       <div className="flex gap-1">
@@ -728,6 +899,113 @@ export default function VoucherEntryPage() {
           </div>
         )}
       </div>
+
+      {/* ─── 엑셀 업로드 미리보기 모달 ─── */}
+      {importRows !== null && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+            <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-base font-bold text-gray-800">
+                엑셀 업로드 미리보기 ({importRows.length}행)
+              </h2>
+              <button
+                onClick={() => {
+                  setImportRows(null);
+                  setImportMsg(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+                title="닫기"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {importMsg && (
+              <div
+                className={`mx-5 mt-3 px-3 py-2 rounded text-sm ${
+                  importMsg.type === "ok"
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                    : "bg-red-50 text-red-700 border border-red-200"
+                }`}
+              >
+                {importMsg.text}
+              </div>
+            )}
+
+            <div className="flex-1 overflow-auto p-5">
+              <table className="w-full text-xs border border-gray-200">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr className="text-gray-600">
+                    <th className="px-2 py-1.5 border-b text-center w-10">행</th>
+                    <th className="px-2 py-1.5 border-b text-left">회계단위</th>
+                    <th className="px-2 py-1.5 border-b text-center w-16">구분</th>
+                    <th className="px-2 py-1.5 border-b text-left w-24">일자</th>
+                    <th className="px-2 py-1.5 border-b text-left">전표적요</th>
+                    <th className="px-2 py-1.5 border-b text-left">계정과목</th>
+                    <th className="px-2 py-1.5 border-b text-right w-24">금액</th>
+                    <th className="px-2 py-1.5 border-b text-left">적요</th>
+                    <th className="px-2 py-1.5 border-b text-left">검증</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importRows.map((r) => (
+                    <tr
+                      key={r.rowIndex}
+                      className={
+                        r.errors.length > 0
+                          ? "bg-red-50"
+                          : "hover:bg-gray-50"
+                      }
+                    >
+                      <td className="px-2 py-1 border-b text-center text-gray-500">{r.rowIndex}</td>
+                      <td className="px-2 py-1 border-b">{r.unitRaw}</td>
+                      <td className="px-2 py-1 border-b text-center">{r.typeRaw}</td>
+                      <td className="px-2 py-1 border-b">{r.dateRaw}</td>
+                      <td className="px-2 py-1 border-b">{r.headerDesc}</td>
+                      <td className="px-2 py-1 border-b">{r.accountRaw}</td>
+                      <td className="px-2 py-1 border-b text-right">{r.amountRaw}</td>
+                      <td className="px-2 py-1 border-b">{r.description}</td>
+                      <td className="px-2 py-1 border-b">
+                        {r.errors.length === 0 ? (
+                          <span className="text-emerald-600">OK</span>
+                        ) : (
+                          <span className="text-red-600">{r.errors.join(", ")}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-end gap-2">
+              <button
+                onClick={() => {
+                  setImportRows(null);
+                  setImportMsg(null);
+                }}
+                className="px-4 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleBulkCommit}
+                disabled={
+                  importing ||
+                  importRows.filter((r) => r.errors.length === 0).length === 0
+                }
+                className="px-4 py-1.5 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 transition-colors font-medium"
+              >
+                {importing
+                  ? "등록 중..."
+                  : `일괄 등록 (${importRows.filter((r) => r.errors.length === 0).length}건)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

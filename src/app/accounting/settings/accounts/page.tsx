@@ -269,6 +269,30 @@ export default function AccAccountsPage() {
     );
   };
 
+  // 인쇄용: 트리 순서대로 평탄화 (레벨 들여쓰기 유지)
+  const flattenForPrint = (nodes: AccAccount[]): AccAccount[] => {
+    const result: AccAccount[] = [];
+    const walk = (list: AccAccount[]) => {
+      list.forEach((n) => {
+        result.push(n);
+        if (n.children && n.children.length > 0) walk(n.children);
+      });
+    };
+    walk(nodes);
+    return result;
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const selectedUnit = units.find((u) => u.id === selectedUnitId);
+  const printToday = new Date().toLocaleDateString("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24 text-gray-400">
@@ -279,29 +303,94 @@ export default function AccAccountsPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">계정과목 관리 <HelpButton slug="accounting-accounts" /></h1>
+      {/* 인쇄 전용 스타일 */}
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 landscape;
+            margin: 12mm;
+          }
+          body {
+            background: #fff !important;
+          }
+          .print-area {
+            display: block !important;
+          }
+          .print-area table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11pt;
+          }
+          .print-area th,
+          .print-area td {
+            border: 1px solid #333;
+            padding: 4px 6px;
+            text-align: left;
+            vertical-align: top;
+          }
+          .print-area th {
+            background: #f1f1f1 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .print-area tr {
+            page-break-inside: avoid;
+          }
+          .print-area .print-header {
+            margin-bottom: 10px;
+          }
+        }
+      `}</style>
 
-      {/* 회계단위 선택 */}
-      <div className="mb-4">
-        <select
-          value={selectedUnitId || ""}
-          onChange={(e) => setSelectedUnitId(Number(e.target.value))}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-        >
-          {units.length === 0 && <option value="">회계단위 없음</option>}
-          {units.map((unit) => (
-            <option key={unit.id} value={unit.id}>
-              {unit.name} ({unit.code})
-            </option>
-          ))}
-        </select>
+      <div className="print:hidden">
+        <h1 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+          계정과목 관리 <HelpButton slug="accounting-accounts" />
+        </h1>
+
+        {/* 회계단위 선택 + 인쇄 버튼 */}
+        <div className="mb-4 flex items-center gap-2">
+          <select
+            value={selectedUnitId || ""}
+            onChange={(e) => setSelectedUnitId(Number(e.target.value))}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+          >
+            {units.length === 0 && <option value="">회계단위 없음</option>}
+            {units.map((unit) => (
+              <option key={unit.id} value={unit.id}>
+                {unit.name} ({unit.code})
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={handlePrint}
+            disabled={!selectedUnitId || flatAccounts.length === 0}
+            className="px-4 py-2 bg-gray-700 text-white text-sm rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-colors inline-flex items-center gap-1.5"
+            title="전체 계정과목 인쇄"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
+              />
+            </svg>
+            인쇄
+          </button>
+        </div>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
+        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm print:hidden">{error}</div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 print:hidden">
         {/* 트리 뷰 */}
         <div className="lg:col-span-3">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -489,6 +578,78 @@ export default function AccAccountsPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* 인쇄 전용 영역 (@media print 에서만 표시) */}
+      <div className="print-area hidden">
+        <div className="print-header">
+          <h1 style={{ fontSize: "18pt", fontWeight: "bold", margin: 0 }}>
+            {selectedUnit ? `${selectedUnit.name} ` : ""}계정과목표
+          </h1>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: "10pt",
+              marginTop: "4px",
+              color: "#333",
+            }}
+          >
+            <span>회계단위: {selectedUnit ? `${selectedUnit.name} (${selectedUnit.code})` : "-"}</span>
+            <span>출력일자: {printToday}</span>
+            <span>총 {flatAccounts.length} 건</span>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style={{ width: "10%" }}>코드</th>
+              <th style={{ width: "26%" }}>계정명</th>
+              <th style={{ width: "7%", textAlign: "center" }}>구분</th>
+              <th style={{ width: "6%", textAlign: "center" }}>레벨</th>
+              <th style={{ width: "14%" }}>상위계정</th>
+              <th style={{ width: "7%", textAlign: "center" }}>정렬</th>
+              <th style={{ width: "7%", textAlign: "center" }}>사용</th>
+              <th>설명</th>
+            </tr>
+          </thead>
+          <tbody>
+            {flattenForPrint(accounts).map((node) => {
+              const indent = "\u00A0\u00A0".repeat(Math.max(0, node.level - 1));
+              const prefix = node.level > 1 ? "\u2514\u2500 " : "";
+              const isParent = !!(node.children && node.children.length > 0);
+              const parent = node.parentId
+                ? flatAccounts.find((a) => a.id === node.parentId)
+                : null;
+              return (
+                <tr key={`print-${node.id}`}>
+                  <td style={{ fontFamily: "monospace" }}>{node.code}</td>
+                  <td style={{ fontWeight: isParent ? "bold" : "normal" }}>
+                    {indent}
+                    {prefix}
+                    {node.name}
+                  </td>
+                  <td style={{ textAlign: "center" }}>
+                    {node.type === "D" ? "수입(D)" : "지출(C)"}
+                  </td>
+                  <td style={{ textAlign: "center" }}>{node.level}</td>
+                  <td>{parent ? `${parent.code} ${parent.name}` : "-"}</td>
+                  <td style={{ textAlign: "center" }}>{node.sortOrder}</td>
+                  <td style={{ textAlign: "center" }}>{node.isActive ? "Y" : "N"}</td>
+                  <td>{node.description || ""}</td>
+                </tr>
+              );
+            })}
+            {flatAccounts.length === 0 && (
+              <tr>
+                <td colSpan={8} style={{ textAlign: "center", color: "#666" }}>
+                  등록된 계정과목이 없습니다.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
