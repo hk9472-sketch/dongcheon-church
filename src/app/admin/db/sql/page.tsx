@@ -89,6 +89,20 @@ export default function SqlManagementPage() {
   const [sqlHistory, setSqlHistory] = useState<string[]>([]);
   const sqlRef = useRef<HTMLTextAreaElement>(null);
 
+  // SQL 덤프 업로드
+  const [dumpFile, setDumpFile] = useState<File | null>(null);
+  const [dumpLoading, setDumpLoading] = useState(false);
+  const [dumpResult, setDumpResult] = useState<{
+    source: string;
+    total: number;
+    succeeded: number;
+    failed: number;
+    errors: { index: number; statement: string; error: string }[];
+    elapsed: number;
+  } | null>(null);
+  const [dumpError, setDumpError] = useState<string | null>(null);
+  const dumpInputRef = useRef<HTMLInputElement>(null);
+
   // 메시지
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
 
@@ -210,6 +224,50 @@ export default function SqlManagementPage() {
       setSqlResult({ type: "select", executionTime: 0, error: String(e) });
     } finally {
       setSqlLoading(false);
+    }
+  };
+
+  // ============================================================
+  // SQL 덤프 업로드 실행
+  // ============================================================
+  const runDumpUpload = async () => {
+    if (!dumpFile) return;
+    const sizeMb = dumpFile.size / 1024 / 1024;
+    const ok = confirm(
+      `${dumpFile.name} (${sizeMb.toFixed(1)}MB) 를 실행합니다.\n\n` +
+      `다중 문장을 순차 실행하며, 첫 오류에서 중단됩니다.\n` +
+      `DROP/CREATE/ALTER 등 DDL 은 자동 커밋되어 되돌릴 수 없습니다.\n\n계속하시겠습니까?`
+    );
+    if (!ok) return;
+
+    setDumpLoading(true);
+    setDumpResult(null);
+    setDumpError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", dumpFile);
+      const res = await fetch("/api/admin/db/sql/import", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) {
+        setDumpError(data.error || `HTTP ${res.status}`);
+        return;
+      }
+      setDumpResult(data);
+      if (data.failed === 0) {
+        showMsg(`덤프 실행 완료: ${data.succeeded}건 성공 (${data.elapsed}ms)`, "success");
+      } else {
+        showMsg(`덤프 일부 실패: ${data.succeeded}건 성공 / ${data.failed}건 실패`, "error");
+      }
+      // DB 구조가 바뀌었을 수 있으니 테이블 목록 새로고침
+      loadTables();
+      if (selectedTable) {
+        loadStructure(selectedTable);
+        loadData(selectedTable, dataPage, dataLimit);
+      }
+    } catch (e) {
+      setDumpError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDumpLoading(false);
     }
   };
 
@@ -724,6 +782,84 @@ export default function SqlManagementPage() {
                 {/* ─── SQL 탭 ─── */}
                 {activeTab === "sql" && (
                   <div className="p-4 space-y-4">
+                    {/* ─── SQL 덤프 업로드 ─── */}
+                    <div className="border border-amber-200 bg-amber-50 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm font-semibold text-amber-900">📥 SQL 덤프 업로드</div>
+                        <span className="text-[10px] text-amber-700">최대 50MB · DELIMITER 미지원</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          ref={dumpInputRef}
+                          type="file"
+                          accept=".sql,.txt"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0] || null;
+                            setDumpFile(f);
+                            setDumpResult(null);
+                            setDumpError(null);
+                          }}
+                        />
+                        <button
+                          onClick={() => dumpInputRef.current?.click()}
+                          className="px-3 py-1.5 text-xs bg-white border border-amber-300 rounded hover:bg-amber-100"
+                        >
+                          파일 선택
+                        </button>
+                        <span className="text-xs text-amber-800 flex-1 truncate">
+                          {dumpFile ? `${dumpFile.name} (${(dumpFile.size / 1024).toFixed(1)} KB)` : "선택된 파일 없음"}
+                        </span>
+                        <button
+                          onClick={runDumpUpload}
+                          disabled={!dumpFile || dumpLoading}
+                          className="px-3 py-1.5 text-xs bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50"
+                        >
+                          {dumpLoading ? "실행 중..." : "실행"}
+                        </button>
+                        {dumpFile && !dumpLoading && (
+                          <button
+                            onClick={() => {
+                              setDumpFile(null);
+                              setDumpResult(null);
+                              setDumpError(null);
+                              if (dumpInputRef.current) dumpInputRef.current.value = "";
+                            }}
+                            className="px-2 py-1.5 text-xs text-amber-700 hover:underline"
+                          >
+                            해제
+                          </button>
+                        )}
+                      </div>
+                      {dumpError && (
+                        <div className="mt-2 px-2 py-1.5 text-xs bg-red-50 border border-red-200 text-red-700 rounded">
+                          {dumpError}
+                        </div>
+                      )}
+                      {dumpResult && (
+                        <div className="mt-2 text-xs space-y-1">
+                          <div className="flex items-center gap-3">
+                            <span className="text-gray-700">총 <b>{dumpResult.total}</b>건</span>
+                            <span className="text-green-700">성공 <b>{dumpResult.succeeded}</b></span>
+                            <span className={dumpResult.failed ? "text-red-700" : "text-gray-400"}>
+                              실패 <b>{dumpResult.failed}</b>
+                            </span>
+                            <span className="text-gray-500">({dumpResult.elapsed}ms)</span>
+                          </div>
+                          {dumpResult.errors.length > 0 && (
+                            <div className="mt-1 border border-red-200 bg-red-50 rounded p-2 max-h-48 overflow-y-auto">
+                              {dumpResult.errors.map((err) => (
+                                <div key={err.index} className="mb-2 last:mb-0">
+                                  <div className="text-red-800 font-mono">#{err.index} — {err.error}</div>
+                                  <div className="text-gray-600 font-mono text-[10px] mt-0.5">{err.statement}</div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     {/* 빠른 삽입 버튼 */}
                     {selectedTable && selectedTable !== "_sql_only" && (
                       <div className="flex flex-wrap gap-1">

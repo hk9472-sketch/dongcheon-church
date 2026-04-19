@@ -186,6 +186,15 @@ const PAGES: HelpSeed[] = [
   <li><strong>SQL 탭</strong> — 쿼리 실행. 빠른 삽입 버튼(SELECT·DESCRIBE·SHOW CREATE·COUNT). <kbd>Ctrl+Enter</kbd> 로 실행. 최근 20개 히스토리 자동 저장.</li>
 </ul>
 
+<h3>SQL 덤프 업로드</h3>
+<p>SQL 탭 상단 노란 박스에서 <code>.sql</code> 파일을 올려 멀티 스테이트먼트를 한 번에 실행할 수 있습니다.</p>
+<ul>
+  <li>최대 <strong>50MB</strong>. mysqldump 출력 파일 지원.</li>
+  <li>문장 단위로 순차 실행하며 <em>첫 오류에서 중단</em>합니다. 성공/실패 건수와 실패 문장의 에러 메시지가 표시됩니다.</li>
+  <li>DDL(CREATE/DROP/ALTER)은 자동 커밋되어 <strong>되돌릴 수 없습니다</strong>. 반드시 백업 후 진행하세요.</li>
+  <li><code>DELIMITER</code> 지시어(저장 프로시저·트리거 덤프)는 미지원 — 필요 시 서버에서 <code>mysql</code> CLI 로 직접 import.</li>
+</ul>
+
 <h3>파괴적 쿼리 경고</h3>
 <p><code>DROP</code>, <code>DELETE</code>, <code>TRUNCATE</code> 는 실행 전 확인 창이 뜹니다. <strong>되돌릴 수 없습니다</strong>. 반드시 백업 후 진행하세요.</p>
 
