@@ -41,10 +41,10 @@ export default function CaptchaField({ onAnswer, compact }: CaptchaFieldProps) {
 
   if (compact) {
     return (
-      <div className="inline-flex items-center gap-1.5" title="왼쪽 숫자를 그대로 입력">
+      <div className="inline-flex items-center gap-2" title="왼쪽 숫자를 그대로 입력">
         <span
-          className={`px-2 py-1 text-sm font-mono font-bold text-gray-800 bg-gray-100 border border-gray-300 rounded min-w-[56px] text-center select-none ${
-            loading ? "text-gray-400" : ""
+          className={`px-3 py-1.5 text-sm font-mono font-bold bg-gray-100 border border-gray-300 rounded min-w-[72px] text-center select-none leading-none ${
+            loading ? "text-gray-400" : "text-gray-800"
           }`}
         >
           {loading ? "..." : question}
@@ -55,14 +55,15 @@ export default function CaptchaField({ onAnswer, compact }: CaptchaFieldProps) {
           value={answer}
           onChange={handleChange}
           placeholder="숫자"
-          className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 text-center"
+          className="w-20 px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 text-center"
           autoComplete="off"
         />
         <button
           type="button"
           onClick={fetchCaptcha}
-          className="px-1.5 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 text-gray-500"
+          className="w-8 h-8 flex items-center justify-center text-sm border border-gray-300 rounded hover:bg-gray-50 text-gray-500"
           title="새 문제"
+          aria-label="CAPTCHA 새로고침"
         >
           ↻
         </button>

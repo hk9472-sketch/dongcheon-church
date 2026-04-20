@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { sanitizeHtml } from "@/lib/sanitize";
@@ -58,7 +58,27 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
   const [replySubmitting, setReplySubmitting] = useState(false);
 
   // 비로그인 CAPTCHA 상태 (쓰기 폼 · 답글 폼 각각)
-  const isGuest = currentUserId == null;
+  // 서버 props 의 currentUserId 는 SSR 시점 값이라 사용자가 다른 탭에서 로그아웃하면
+  // 이 컴포넌트는 감지 못 한다. 탭 포커스 시 /api/auth/me 로 세션 재확인해 덮어쓴다.
+  const [liveUserId, setLiveUserId] = useState<number | null | undefined>(currentUserId);
+  const isGuest = (liveUserId ?? null) == null;
+  useEffect(() => {
+    function checkSession() {
+      fetch("/api/auth/me")
+        .then((r) => r.json())
+        .then((d) => setLiveUserId(d?.user?.id ?? null))
+        .catch(() => {});
+    }
+    function onVisibility() {
+      if (document.visibilityState === "visible") checkSession();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", checkSession);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", checkSession);
+    };
+  }, []);
   const [captchaAnswer, setCaptchaAnswer] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
   const [replyCaptchaAnswer, setReplyCaptchaAnswer] = useState("");
@@ -609,7 +629,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                         onChange={(e) => setReplyPassword(e.target.value)}
                         className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
                       />
-                      {currentUserId != null && (
+                      {!isGuest && (
                         <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer select-none">
                           <input
                             type="checkbox"
@@ -682,7 +702,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
               onChange={(e) => setPassword(e.target.value)}
               className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
             />
-            {currentUserId != null && (
+            {!isGuest && (
               <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer select-none">
                 <input
                   type="checkbox"

@@ -64,21 +64,43 @@ function WriteForm({ boardId }: { boardId: string }) {
 
   const subjectRef = useRef<HTMLInputElement>(null);
 
-  // 로그인 상태 확인
+  // 로그인 상태 확인 — 마운트 시 + 탭이 다시 포커스될 때마다.
+  // 작성 중 다른 탭에서 로그아웃한 사용자가 이 탭으로 돌아왔을 때
+  // 비회원 폼(이름/비번/CAPTCHA) 로 즉시 전환되도록 한다.
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((d) => {
-        const loggedIn = !!d.user;
-        setIsLoggedIn(loggedIn);
-        if (loggedIn) {
-          setLoggedInName(d.user.name || "");
-          // 로그인 사용자는 이름/비밀번호 필드를 사용하지 않으므로 더미 값 세팅
-          setName(d.user.name || "");
-          setPassword("__session__");
-        }
-      })
-      .catch(() => setIsLoggedIn(false));
+    function checkSession() {
+      fetch("/api/auth/me")
+        .then((r) => r.json())
+        .then((d) => {
+          const loggedIn = !!d.user;
+          setIsLoggedIn(loggedIn);
+          if (loggedIn) {
+            setLoggedInName(d.user.name || "");
+            setName(d.user.name || "");
+            setPassword("__session__");
+          } else {
+            // 로그아웃 감지 → 더미 값 클리어해서 실제 이름/비번 입력 받도록
+            setLoggedInName("");
+            setName((prev) => (prev === loggedInName ? "" : prev));
+            setPassword((prev) => (prev === "__session__" ? "" : prev));
+          }
+        })
+        .catch(() => setIsLoggedIn(false));
+    }
+    checkSession();
+    function onVisibility() {
+      if (document.visibilityState === "visible") checkSession();
+    }
+    function onFocus() {
+      checkSession();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 게시판 설정 및 수정 모드 데이터 로드

@@ -4,10 +4,13 @@ import { createHmac, timingSafeEqual } from "crypto";
 // Next.js 의 page data collection 이 실패하므로 실제 호출 시점에 lazy 검증한다.
 function getSecret(): string {
   const secret = process.env.CAPTCHA_SECRET;
-  if (!secret) {
-    throw new Error("CAPTCHA_SECRET environment variable is required");
+  if (secret) return secret;
+  // dev 환경에서 .env 에 CAPTCHA_SECRET 이 없어도 동작하도록 fallback.
+  // 운영 환경에서는 반드시 설정되어야 하며 미설정이면 예외를 던진다.
+  if (process.env.NODE_ENV !== "production") {
+    return "__dev_only_captcha_secret_not_for_production__";
   }
-  return secret;
+  throw new Error("CAPTCHA_SECRET environment variable is required");
 }
 
 const CAPTCHA_EXPIRE_MS = 5 * 60 * 1000; // 5분
