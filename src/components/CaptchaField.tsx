@@ -4,9 +4,11 @@ import { useEffect, useState, useCallback } from "react";
 
 interface CaptchaFieldProps {
   onAnswer: (answer: string, token: string) => void;
+  /** compact: 레이블·안내 문구 제거하고 한 줄로. 폼 inline 배치용. */
+  compact?: boolean;
 }
 
-export default function CaptchaField({ onAnswer }: CaptchaFieldProps) {
+export default function CaptchaField({ onAnswer, compact }: CaptchaFieldProps) {
   const [question, setQuestion] = useState<string>("");
   const [token, setToken] = useState<string>("");
   const [answer, setAnswer] = useState<string>("");
@@ -21,7 +23,7 @@ export default function CaptchaField({ onAnswer }: CaptchaFieldProps) {
       setQuestion(data.question);
       setToken(data.token);
     } catch {
-      setQuestion("오류 - 새로고침 클릭");
+      setQuestion("오류");
     } finally {
       setLoading(false);
     }
@@ -35,6 +37,37 @@ export default function CaptchaField({ onAnswer }: CaptchaFieldProps) {
     const val = e.target.value;
     setAnswer(val);
     onAnswer(val, token);
+  }
+
+  if (compact) {
+    return (
+      <div className="inline-flex items-center gap-1.5" title="왼쪽 숫자를 그대로 입력">
+        <span
+          className={`px-2 py-1 text-sm font-mono font-bold text-gray-800 bg-gray-100 border border-gray-300 rounded min-w-[56px] text-center select-none ${
+            loading ? "text-gray-400" : ""
+          }`}
+        >
+          {loading ? "..." : question}
+        </span>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={answer}
+          onChange={handleChange}
+          placeholder="숫자"
+          className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 text-center"
+          autoComplete="off"
+        />
+        <button
+          type="button"
+          onClick={fetchCaptcha}
+          className="px-1.5 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 text-gray-500"
+          title="새 문제"
+        >
+          ↻
+        </button>
+      </div>
+    );
   }
 
   return (

@@ -510,18 +510,6 @@ function WriteForm({ boardId }: { boardId: string }) {
           )}
         </div>
 
-        {/* ─── CAPTCHA (비로그인 시) ─── */}
-        {mode !== "modify" && (
-          <div className="bg-white rounded-lg shadow-sm overflow-hidden" style={{ border: "1px solid var(--skin-write-border-color)" }}>
-            <div className="px-5 py-3 bg-gray-50" style={{ borderBottom: "1px solid var(--skin-write-border-color)" }}>
-              <h2 className="text-sm font-semibold text-gray-600">보안 문자 확인</h2>
-            </div>
-            <div className="p-5">
-              <CaptchaField onAnswer={(answer, token) => { setCaptchaAnswer(answer); setCaptchaToken(token); }} />
-            </div>
-          </div>
-        )}
-
         {/* ─── 옵션 & 등록 버튼 ─── */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden" style={{ border: "1px solid var(--skin-write-border-color)" }}>
           <div className="px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -596,8 +584,17 @@ function WriteForm({ boardId }: { boardId: string }) {
               </div>
             </div>
 
-            {/* 버튼 그룹 */}
+            {/* 버튼 그룹 — 비로그인 시 CAPTCHA 가 취소 버튼 앞에 인라인 */}
             <div className="flex items-center gap-2 w-full sm:w-auto">
+              {isLoggedIn === false && mode !== "modify" && (
+                <CaptchaField
+                  compact
+                  onAnswer={(answer, token) => {
+                    setCaptchaAnswer(answer);
+                    setCaptchaToken(token);
+                  }}
+                />
+              )}
               <button
                 type="button"
                 onClick={() => router.back()}

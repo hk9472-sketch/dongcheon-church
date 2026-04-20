@@ -594,7 +594,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                     <div className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1">
                       <strong>{comment.authorName}</strong> 님의 댓글에 답글 작성 중
                     </div>
-                    <div className="flex gap-2 items-center">
+                    <div className="flex flex-wrap gap-2 items-center">
                       <input
                         type="text"
                         placeholder="이름"
@@ -620,6 +620,17 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                           🔒 비밀
                         </label>
                       )}
+                      {isGuest && (
+                        <div className="ml-auto">
+                          <CaptchaField
+                            compact
+                            onAnswer={(a, t) => {
+                              setReplyCaptchaAnswer(a);
+                              setReplyCaptchaToken(t);
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
                     <TipTapEditor
                       content={replyContent}
@@ -628,14 +639,6 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                       minHeight="60px"
                       boardSlug={boardSlug}
                     />
-                    {isGuest && (
-                      <CaptchaField
-                        onAnswer={(a, t) => {
-                          setReplyCaptchaAnswer(a);
-                          setReplyCaptchaToken(t);
-                        }}
-                      />
-                    )}
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
@@ -664,7 +667,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
       {/* 댓글 작성 폼 (댓글막음이 아니고 수정 중이 아닐 때만 표시) */}
       {commentPolicy !== "DISABLED" && editingId === null && (
         <form onSubmit={handleSubmit} className="border-t border-gray-200 p-4">
-          <div className="flex gap-2 mb-2 items-center">
+          <div className="flex flex-wrap gap-2 mb-2 items-center">
             <input
               type="text"
               placeholder="이름"
@@ -690,6 +693,17 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                 🔒 비밀댓글
               </label>
             )}
+            {isGuest && (
+              <div className="ml-auto">
+                <CaptchaField
+                  compact
+                  onAnswer={(a, t) => {
+                    setCaptchaAnswer(a);
+                    setCaptchaToken(t);
+                  }}
+                />
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             <TipTapEditor
@@ -699,14 +713,6 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
               minHeight="60px"
               boardSlug={boardSlug}
             />
-            {isGuest && (
-              <CaptchaField
-                onAnswer={(a, t) => {
-                  setCaptchaAnswer(a);
-                  setCaptchaToken(t);
-                }}
-              />
-            )}
             <div className="flex justify-end">
               <button
                 type="submit"
