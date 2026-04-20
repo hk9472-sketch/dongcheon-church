@@ -14,25 +14,49 @@ async function verifyAdmin(request: NextRequest) {
   return user;
 }
 
-function kstNow() {
-  return new Date(Date.now() + 9 * 60 * 60 * 1000);
+// 시스템 TZ 와 무관하게 KST 문자열을 만든다.
+// 이전 구현은 new Date(Date.now()+9h) 로 epoch 를 미리 당겨 놓은 뒤 .getHours() 등을 호출해
+// 시스템이 UTC 일 때만 정상 동작했다. 시스템을 KST 로 바꾸면 표준 메서드가 한 번 더
+// +9h 를 적용해 총 +18h 오차가 생긴다. 아래처럼 toLocaleString 에 timeZone 을
+// 명시하면 시스템 TZ 무관하게 KST 시간을 얻을 수 있다.
+function kstParts() {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(new Date());
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  // hour 가 "24" 로 나올 수 있는 엣지 케이스 방어
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  return {
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour,
+    minute: get("minute"),
+    second: get("second"),
+  };
 }
 
 function kstISOString() {
-  const d = kstNow();
-  return d.toISOString().replace("Z", "+09:00");
+  const p = kstParts();
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}+09:00`;
 }
 
 function kstDateStr() {
-  const d = kstNow();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const p = kstParts();
+  return `${p.year}-${p.month}-${p.day}`;
 }
 
 function kstDateTimeStr() {
-  const d = kstNow();
-  const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  const time = `${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}${String(d.getSeconds()).padStart(2, "0")}`;
-  return `${date}_${time}`;
+  const p = kstParts();
+  return `${p.year}${p.month}${p.day}_${p.hour}${p.minute}${p.second}`;
 }
 
 function parseDatabaseUrl(url: string) {
