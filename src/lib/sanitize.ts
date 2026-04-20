@@ -84,14 +84,22 @@ export function sanitizeHtml(dirty: string | null | undefined): string {
   // iframe(YouTube/Vimeo) 은 플랫폼이 차단하므로 제외.
   // 저장된 HTML 자체에는 링크가 없고 출력 시에만 덧붙이므로, 이후 에디터 편집 시
   // 중복으로 저장되지 않고, 링크를 제거하려면 이 함수만 고치면 된다.
+  //
+  // 브라우저는 외부 도메인 파일에 대해 <a download> 속성을 CORS 정책으로 무시한다.
+  // 따라서 자체 서버의 /api/board/media-download 를 경유해 Content-Disposition:
+  // attachment 헤더로 내려받도록 한다. 자체 경로(/api/board/media?path=...)는
+  // 해당 라우트가 리다이렉트로 처리.
   const withDownload = withEmptyP.replace(
     /<(video|audio)\b([^>]*)>([\s\S]*?)<\/\1>/gi,
-    (full, tag, attrs, inner) => {
+    (full, _tag, attrs, inner) => {
       const srcMatch = (attrs + inner).match(/\bsrc=(?:"([^"]+)"|'([^']+)')/i);
       const src = srcMatch ? srcMatch[1] || srcMatch[2] : "";
       if (!src) return full;
-      const safeSrc = src.replace(/"/g, "&quot;");
-      return `${full}<a class="media-download-link" href="${safeSrc}" download target="_blank" rel="noopener noreferrer">📥 다운로드</a>`;
+      const lastSeg = src.split("?")[0].split("/").filter(Boolean).pop() || "";
+      const proxyHref =
+        `/api/board/media-download?src=${encodeURIComponent(src)}` +
+        (lastSeg ? `&name=${encodeURIComponent(lastSeg)}` : "");
+      return `${full}<a class="media-download-link" href="${proxyHref}" download rel="noopener noreferrer">📥 다운로드</a>`;
     }
   );
   return withDownload;
