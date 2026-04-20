@@ -16,6 +16,7 @@ export default function MediaFtpSetting() {
   const [password, setPassword] = useState("");
   const [hasPassword, setHasPassword] = useState(false);
   const [remoteRoot, setRemoteRoot] = useState("/");
+  const [remoteRootRealtime, setRemoteRootRealtime] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
@@ -32,6 +33,7 @@ export default function MediaFtpSetting() {
         setUser(d.user || "");
         setHasPassword(!!d.hasPassword);
         setRemoteRoot(d.remoteRoot || "/");
+        setRemoteRootRealtime(d.remoteRootRealtime || "");
       }
     } finally {
       setLoading(false);
@@ -46,7 +48,7 @@ export default function MediaFtpSetting() {
       const res = await fetch("/api/settings/media-ftp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled, host, port, user, password, remoteRoot }),
+        body: JSON.stringify({ enabled, host, port, user, password, remoteRoot, remoteRootRealtime }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -69,7 +71,7 @@ export default function MediaFtpSetting() {
     setSaving(true);
     try {
       await fetch("/api/settings/media-ftp", { method: "DELETE" });
-      setHost(""); setPort("21"); setUser(""); setPassword(""); setHasPassword(false); setRemoteRoot("/");
+      setHost(""); setPort("21"); setUser(""); setPassword(""); setHasPassword(false); setRemoteRoot("/"); setRemoteRootRealtime("");
       setMsg({ type: "ok", text: "삭제되었습니다." });
     } finally {
       setSaving(false);
@@ -155,17 +157,31 @@ export default function MediaFtpSetting() {
           />
         </label>
         <label className="block sm:col-span-2">
-          <span className="text-xs font-medium text-gray-500">원격 루트 경로</span>
+          <span className="text-xs font-medium text-gray-500">원격 루트 경로 — 일반 업로드</span>
           <input
             type="text"
             value={remoteRoot}
             onChange={(e) => setRemoteRoot(e.target.value)}
-            placeholder="/uploads"
+            placeholder="/HDD1/realtime/dc-uploads"
             disabled={loading}
             className="w-full mt-0.5 px-3 py-2 text-sm border border-gray-300 rounded font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 disabled:bg-gray-100"
           />
           <span className="text-[10px] text-gray-400">
-            업로드 경로 = 원격 루트 + /{`{boardSlug}`}/{`{YYYYMMDD}`}/{`{파일명}`}
+            일반 업로드 경로 = 원격 루트 + /{`{boardSlug}`}/{`{YYYYMMDD}`}/{`{파일명}`}
+          </span>
+        </label>
+        <label className="block sm:col-span-2">
+          <span className="text-xs font-medium text-gray-500">원격 루트 경로 — 실시간 업로드 (선택)</span>
+          <input
+            type="text"
+            value={remoteRootRealtime}
+            onChange={(e) => setRemoteRootRealtime(e.target.value)}
+            placeholder="/HDD1/realtime  (비우면 일반 루트와 동일)"
+            disabled={loading}
+            className="w-full mt-0.5 px-3 py-2 text-sm border border-gray-300 rounded font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 disabled:bg-gray-100"
+          />
+          <span className="text-[10px] text-gray-400">
+            실시간 업로드 경로 = 실시간 루트 + /{`{YYYY}`}/{`{YYYYMMDD}`}/{`{파일명}`} · 글쓰기에서 🎙️ 버튼으로 선택
           </span>
         </label>
       </div>

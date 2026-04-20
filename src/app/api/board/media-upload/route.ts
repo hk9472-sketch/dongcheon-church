@@ -13,7 +13,9 @@ import { getUploadDir, getRelUploadPath } from "@/lib/uploadPath";
 // 로컬 저장 대신 원격 FTP 로 업로드하고 media_base_url 을 결합한 공개 URL 반환.
 // 없으면 기존 로컬 저장 동작.
 // ────────────────────────────────────────────────────────────
-async function getFtpConfig(): Promise<{
+type UploadMode = "general" | "realtime";
+
+async function getFtpConfig(mode: UploadMode): Promise<{
   host: string;
   port: string;
   user: string;
@@ -28,20 +30,25 @@ async function getFtpConfig(): Promise<{
     "media_ftp_user",
     "media_ftp_password",
     "media_ftp_remote_root",
+    "media_ftp_remote_root_realtime",
     "media_base_url",
   ];
   const rows = await prisma.siteSetting.findMany({ where: { key: { in: keys } } });
   const map: Record<string, string> = {};
   for (const r of rows) map[r.key] = r.value || "";
-  if (map.media_ftp_enabled !== "1") return null; // 사용 안 함 토글
+  if (map.media_ftp_enabled !== "1") return null;
   if (!map.media_ftp_host || !map.media_ftp_user || !map.media_ftp_password) return null;
-  if (!map.media_base_url) return null; // 공개 URL prefix 없으면 FTP 전송 의미 없음
+  if (!map.media_base_url) return null;
+
+  const rootGeneral = map.media_ftp_remote_root || "/";
+  const rootRealtime = map.media_ftp_remote_root_realtime || rootGeneral;
+  const picked = mode === "realtime" ? rootRealtime : rootGeneral;
   return {
     host: map.media_ftp_host,
     port: map.media_ftp_port || "21",
     user: map.media_ftp_user,
     password: map.media_ftp_password,
-    remoteRoot: (map.media_ftp_remote_root || "/").replace(/\/+$/g, "") || "/",
+    remoteRoot: picked.replace(/\/+$/g, "") || "/",
     publicBase: map.media_base_url.replace(/\/+$/g, "") + "/",
   };
 }
@@ -100,6 +107,8 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const boardSlug = ((formData.get("boardSlug") as string) || "").trim();
+    const modeRaw = ((formData.get("mode") as string) || "general").trim();
+    const mode: UploadMode = modeRaw === "realtime" ? "realtime" : "general";
 
     if (!file || !boardSlug) {
       return NextResponse.json({ message: "file, boardSlug 는 필수입니다." }, { status: 400 });
@@ -143,15 +152,22 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date();
+    const yyyy = String(now.getFullYear());
     const yyyymmdd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
     const rand = randomBytes(4).toString("hex");
     const storedName = sanitizeStoredName(`${Date.now()}_${rand}${ext}`);
     const buffer = Buffer.from(await file.arrayBuffer());
 
     // 원격 FTP 설정이 있으면 FTP 업로드 → 공개 URL 반환.
-    const ftp = await getFtpConfig();
+    // 모드별 경로 패턴:
+    //   general  → {remoteRoot}/{boardSlug}/{YYYYMMDD}/{파일명}
+    //   realtime → {remoteRoot}/{YYYY}/{YYYYMMDD}/{파일명}
+    const ftp = await getFtpConfig(mode);
     if (ftp) {
-      const remoteRel = `${boardSlug}/${yyyymmdd}/${storedName}`;
+      const remoteRel =
+        mode === "realtime"
+          ? `${yyyy}/${yyyymmdd}/${storedName}`
+          : `${boardSlug}/${yyyymmdd}/${storedName}`;
       const tmpPath = path.join(os.tmpdir(), `mup_${rand}${ext}`);
       try {
         await writeFile(tmpPath, buffer);

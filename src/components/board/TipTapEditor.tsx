@@ -374,7 +374,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
 
   // 미디어(동영상/오디오) 업로드 — /api/board/media-upload
   const uploadAndInsertMedia = useCallback(
-    async (file: File): Promise<boolean> => {
+    async (file: File, mode: "general" | "realtime" = "general"): Promise<boolean> => {
       if (!editor) return false;
       if (!boardSlug) {
         alert("이 편집기는 현재 파일 업로드를 지원하지 않습니다.");
@@ -387,6 +387,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         const fd = new FormData();
         fd.append("file", file);
         fd.append("boardSlug", boardSlug);
+        fd.append("mode", mode);
         const res = await fetch("/api/board/media-upload", { method: "POST", body: fd });
         const data = await res.json();
         if (!res.ok) {
@@ -422,10 +423,16 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     imageInputRef.current?.click();
   }, []);
 
-  // 툴바 미디어 버튼 — 파일 선택창 열기
+  // 툴바 미디어 버튼 — 파일 선택창 열기 (일반 모드)
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const addMediaFile = useCallback(() => {
     mediaInputRef.current?.click();
+  }, []);
+
+  // 툴바 실시간 미디어 버튼 — 파일 선택창 열기 (realtime 모드 — FTP 설정의 '실시간 루트' 사용)
+  const mediaRealtimeInputRef = useRef<HTMLInputElement>(null);
+  const addMediaFileRealtime = useCallback(() => {
+    mediaRealtimeInputRef.current?.click();
   }, []);
 
   // 툴바 "여러 개 나란히" 버튼 — 이미지+미디어 다중 선택해 MediaRow 한 덩어리로 삽입.
@@ -526,7 +533,17 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
       for (const f of files) {
-        await uploadAndInsertMedia(f);
+        await uploadAndInsertMedia(f, "general");
+      }
+      e.target.value = "";
+    },
+    [uploadAndInsertMedia]
+  );
+  const handleMediaRealtimeInputChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || []);
+      for (const f of files) {
+        await uploadAndInsertMedia(f, "realtime");
       }
       e.target.value = "";
     },
@@ -892,7 +909,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
           hidden
           onChange={handleImageInputChange}
         />
-        <TBtn onClick={addMediaFile} title="동영상/음성 파일 업로드 (드래그앤드롭도 가능)">
+        <TBtn onClick={addMediaFile} title="일반 미디어 업로드 — 원격 루트/{boardSlug}/{YYYYMMDD}/">
           🎬
         </TBtn>
         <input
@@ -902,6 +919,17 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
           multiple
           hidden
           onChange={handleMediaInputChange}
+        />
+        <TBtn onClick={addMediaFileRealtime} title="실시간 미디어 업로드 — 실시간 루트/{YYYY}/{YYYYMMDD}/ (FTP 설정에서 지정)">
+          🎙️
+        </TBtn>
+        <input
+          ref={mediaRealtimeInputRef}
+          type="file"
+          accept="video/*,audio/*"
+          multiple
+          hidden
+          onChange={handleMediaRealtimeInputChange}
         />
         <TBtn onClick={addMediaUrl} title="동영상/음성 URL 삽입 (mp4·mp3 또는 YouTube/Vimeo)">
           📺

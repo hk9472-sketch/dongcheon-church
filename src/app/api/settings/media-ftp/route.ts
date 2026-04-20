@@ -8,7 +8,8 @@ const KEYS = [
   "media_ftp_port",
   "media_ftp_user",
   "media_ftp_password",
-  "media_ftp_remote_root",
+  "media_ftp_remote_root",          // 일반 업로드: {root}/{boardSlug}/{YYYYMMDD}/{파일명}
+  "media_ftp_remote_root_realtime", // 실시간 업로드: {root}/{YYYY}/{YYYYMMDD}/{파일명}
 ] as const;
 
 type Key = (typeof KEYS)[number];
@@ -41,6 +42,7 @@ export async function GET() {
     user: map.media_ftp_user || "",
     hasPassword: !!map.media_ftp_password,
     remoteRoot: map.media_ftp_remote_root || "/",
+    remoteRootRealtime: map.media_ftp_remote_root_realtime || "",
   });
 }
 
@@ -58,6 +60,7 @@ export async function POST(request: NextRequest) {
     media_ftp_port: String(body.port || "21").trim(),
     media_ftp_user: String(body.user || "").trim(),
     media_ftp_remote_root: String(body.remoteRoot || "/").trim(),
+    media_ftp_remote_root_realtime: String(body.remoteRootRealtime || "").trim(),
   };
   // password 는 빈 문자열이면 기존값 유지, 새 값이 오면 덮어쓰기
   const newPw = typeof body.password === "string" ? body.password : "";
