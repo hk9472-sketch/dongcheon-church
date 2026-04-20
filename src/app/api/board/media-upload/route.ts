@@ -1,10 +1,66 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, unlink } from "fs/promises";
 import path from "path";
+import os from "os";
 import { randomBytes } from "crypto";
+import { execFileSync } from "child_process";
 import prisma from "@/lib/db";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import { getUploadDir, getRelUploadPath } from "@/lib/uploadPath";
+
+// ────────────────────────────────────────────────────────────
+// FTP 미디어 서버 지원 — 사이트 설정 media_ftp_* 키가 모두 설정돼 있으면
+// 로컬 저장 대신 원격 FTP 로 업로드하고 media_base_url 을 결합한 공개 URL 반환.
+// 없으면 기존 로컬 저장 동작.
+// ────────────────────────────────────────────────────────────
+async function getFtpConfig(): Promise<{
+  host: string;
+  port: string;
+  user: string;
+  password: string;
+  remoteRoot: string;
+  publicBase: string;
+} | null> {
+  const keys = [
+    "media_ftp_host",
+    "media_ftp_port",
+    "media_ftp_user",
+    "media_ftp_password",
+    "media_ftp_remote_root",
+    "media_base_url",
+  ];
+  const rows = await prisma.siteSetting.findMany({ where: { key: { in: keys } } });
+  const map: Record<string, string> = {};
+  for (const r of rows) map[r.key] = r.value || "";
+  if (!map.media_ftp_host || !map.media_ftp_user || !map.media_ftp_password) return null;
+  if (!map.media_base_url) return null; // 공개 URL prefix 없으면 FTP 전송 의미 없음
+  return {
+    host: map.media_ftp_host,
+    port: map.media_ftp_port || "21",
+    user: map.media_ftp_user,
+    password: map.media_ftp_password,
+    remoteRoot: (map.media_ftp_remote_root || "/").replace(/\/+$/g, "") || "/",
+    publicBase: map.media_base_url.replace(/\/+$/g, "") + "/",
+  };
+}
+
+function uploadViaCurl(
+  localPath: string,
+  remoteRelPath: string,
+  cfg: { host: string; port: string; user: string; password: string; remoteRoot: string }
+) {
+  const remoteUrl = `ftp://${cfg.host}:${cfg.port}${cfg.remoteRoot}/${remoteRelPath}`;
+  const args = [
+    "-T", localPath,
+    remoteUrl,
+    "--user", `${cfg.user}:${cfg.password}`,
+    "--ftp-create-dirs",
+    "--connect-timeout", "30",
+    "--max-time", "600",
+    "-s", "-S",
+  ];
+  execFileSync("curl", args, { maxBuffer: 10 * 1024 * 1024 });
+}
 
 // ────────────────────────────────────────────────────────────
 // POST /api/board/media-upload
@@ -86,15 +142,41 @@ export async function POST(request: NextRequest) {
 
     const now = new Date();
     const yyyymmdd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-    const subPath = `${boardSlug}/inline/${yyyymmdd}`;
-    const dir = getUploadDir(subPath);
-    await mkdir(dir, { recursive: true });
-
     const rand = randomBytes(4).toString("hex");
     const storedName = sanitizeStoredName(`${Date.now()}_${rand}${ext}`);
     const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(path.join(dir, storedName), buffer);
 
+    // 원격 FTP 설정이 있으면 FTP 업로드 → 공개 URL 반환.
+    const ftp = await getFtpConfig();
+    if (ftp) {
+      const remoteRel = `${boardSlug}/${yyyymmdd}/${storedName}`;
+      const tmpPath = path.join(os.tmpdir(), `mup_${rand}${ext}`);
+      try {
+        await writeFile(tmpPath, buffer);
+        uploadViaCurl(tmpPath, remoteRel, ftp);
+      } catch (e) {
+        return NextResponse.json(
+          { message: `FTP 업로드 실패: ${e instanceof Error ? e.message : String(e)}` },
+          { status: 500 }
+        );
+      } finally {
+        await unlink(tmpPath).catch(() => {});
+      }
+      const publicUrl = `${ftp.publicBase}${remoteRel}`;
+      return NextResponse.json({
+        url: publicUrl,
+        kind: isVideo ? "video" : "audio",
+        size: file.size,
+        name: storedName,
+        remote: true,
+      });
+    }
+
+    // 로컬 저장 (기존 동작)
+    const subPath = `${boardSlug}/inline/${yyyymmdd}`;
+    const dir = getUploadDir(subPath);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, storedName), buffer);
     const rel = getRelUploadPath(subPath, storedName);
     const url = `/api/board/media?path=${encodeURIComponent(rel)}`;
     return NextResponse.json({ url, kind: isVideo ? "video" : "audio", size: file.size, name: storedName });

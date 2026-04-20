@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import HelpButton from "@/components/HelpButton";
 import MediaBaseUrlSetting from "@/components/admin/MediaBaseUrlSetting";
+import MediaFtpSetting from "@/components/admin/MediaFtpSetting";
 
 // ==================== 테마 (색상) ====================
 const THEME_FIELDS = [
@@ -787,9 +788,10 @@ export default function AdminSettingsPage() {
       </div>
 
       {/* 기타 설정 — 탭 무관하게 항상 표시 */}
-      <div className="pt-6 border-t border-gray-200">
-        <h2 className="text-sm font-bold text-gray-700 mb-3">기타 설정</h2>
+      <div className="pt-6 border-t border-gray-200 space-y-4">
+        <h2 className="text-sm font-bold text-gray-700">기타 설정</h2>
         <MediaBaseUrlSetting />
+        <MediaFtpSetting />
       </div>
     </div>
   );
