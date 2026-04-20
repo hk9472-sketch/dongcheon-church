@@ -368,9 +368,15 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
 
       {/* 댓글 목록 */}
       {comments.length > 0 && (
-        <ul className="divide-y divide-gray-100">
-          {sortedComments.map((comment) => {
+        <ul>
+          {sortedComments.map((comment, rowIdx) => {
             const isReply = !!comment.parentId;
+            // 이 댓글이 '새로운 그룹의 시작' 인지 판정
+            //   - 현재 댓글이 최상위(root) 이고 이전 댓글이 없거나 아니면 그룹 시작
+            //   - 답글이면 그룹의 중간/끝이므로 위쪽 구분선 없이 부모에 붙여 표시
+            const prev = rowIdx > 0 ? sortedComments[rowIdx - 1] : null;
+            const startsNewGroup = !isReply && (!prev || true);
+            const rowBorder = startsNewGroup && rowIdx > 0 ? "border-t border-gray-200" : "";
             // 비밀댓글 열람 권한: 관리자, 글 작성자, 댓글 작성자
             const canViewSecret = !comment.isSecret ||
               isAdmin ||
@@ -415,8 +421,11 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
             return (
               <li
                 key={comment.id}
-                className={`px-4 py-3 ${
-                  isReply ? "pl-10 bg-gray-50/50 border-l-2 border-blue-200" : ""
+                className={`py-3 ${rowBorder} ${
+                  isReply
+                    ? // 답글: 왼쪽 두꺼운 파란 막대 + 연한 파란 배경 + 깊은 들여쓰기 로 트리 느낌
+                      "ml-6 pl-4 pr-4 border-l-[3px] border-blue-300 bg-blue-50/40"
+                    : "px-4"
                 }`}
               >
                 {/* 부모 댓글 정보 배지 — 어느 댓글의 답글인지 한눈에 */}
@@ -433,7 +442,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                 )}
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2 text-sm">
-                    {isReply && <span className="text-blue-500 text-xs">↳</span>}
+                    {isReply && <span className="text-blue-500 text-xs">└</span>}
                     {manageMode && (
                       <input
                         type="checkbox"
