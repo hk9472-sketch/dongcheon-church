@@ -15,7 +15,7 @@ async function getSessionUser(request: NextRequest) {
 // POST /api/board/comment - 댓글 작성
 export async function POST(request: NextRequest) {
   try {
-    const { postId, name, password, content, isSecret } = await request.json();
+    const { postId, parentId, name, password, content, isSecret } = await request.json();
 
     if (!postId || !content?.trim()) {
       return NextResponse.json({ message: "필수 항목을 입력하세요." }, { status: 400 });
@@ -29,6 +29,17 @@ export async function POST(request: NextRequest) {
     // 댓글 정책 확인
     if (post.commentPolicy === "DISABLED") {
       return NextResponse.json({ message: "이 게시글은 댓글이 허용되지 않습니다." }, { status: 403 });
+    }
+
+    // 대댓글: parentId 검증 — 존재 확인 + 같은 게시글 소속 확인 + 루트만 허용(2단계 평탄화)
+    let normalizedParentId: number | null = null;
+    if (parentId != null && parentId !== 0) {
+      const parent = await prisma.comment.findUnique({ where: { id: Number(parentId) } });
+      if (!parent || parent.postId !== postId) {
+        return NextResponse.json({ message: "원본 댓글을 찾을 수 없습니다." }, { status: 400 });
+      }
+      // 2단계 구조 유지: 답글의 답글은 같은 루트의 답글로 평탄화
+      normalizedParentId = parent.parentId ?? parent.id;
     }
 
     // 세션 확인
@@ -73,6 +84,7 @@ export async function POST(request: NextRequest) {
     const comment = await prisma.comment.create({
       data: {
         postId,
+        parentId: normalizedParentId,
         authorId,
         authorName,
         password: hashedPw,

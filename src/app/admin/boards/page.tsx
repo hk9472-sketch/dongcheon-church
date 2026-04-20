@@ -1,6 +1,7 @@
 import prisma from "@/lib/db";
 import Link from "next/link";
 import GrantGuestWriteButton from "@/components/admin/GrantGuestWriteButton";
+import GrantGuestCommentButton from "@/components/admin/GrantGuestCommentButton";
 import HelpButton from "@/components/HelpButton";
 
 export default async function AdminBoardsPage() {
@@ -15,6 +16,7 @@ export default async function AdminBoardsPage() {
         <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">게시판 관리 <HelpButton slug="admin-boards" /></h1>
         <div className="flex items-center gap-2 flex-wrap">
           <GrantGuestWriteButton />
+          <GrantGuestCommentButton />
           <Link
             href="/admin/boards/create"
             className="px-4 py-2 text-sm bg-blue-700 text-white rounded hover:bg-blue-800 transition-colors"

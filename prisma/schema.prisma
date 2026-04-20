@@ -315,6 +315,11 @@ model Comment {
   postId        Int
   post          Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
 
+  // 대댓글: parentId 가 있으면 해당 댓글의 답글. null 이면 최상위.
+  parentId      Int?
+  parent        Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies       Comment[] @relation("CommentReplies")
+
   authorId      Int?                                   // ismember
   author        User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
   authorName    String    @db.VarChar(20)
@@ -328,6 +333,7 @@ model Comment {
   updatedAt     DateTime  @default(now()) @updatedAt
 
   @@index([postId])
+  @@index([parentId])
   @@map("comments")
 }
 

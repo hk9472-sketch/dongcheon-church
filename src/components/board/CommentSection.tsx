@@ -21,6 +21,7 @@ interface Comment {
   isSecret: boolean;
   createdAt: string;
   authorId: number | null;
+  parentId?: number | null;
 }
 
 interface CommentSectionProps {
@@ -46,6 +47,84 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
   const [editContent, setEditContent] = useState("");
   const [editPassword, setEditPassword] = useState("");
   const [editing, setEditing] = useState(false);
+
+  // 답글 작성 상태 (parentId 별 인라인 폼)
+  const [replyParentId, setReplyParentId] = useState<number | null>(null);
+  const [replyName, setReplyName] = useState("");
+  const [replyPassword, setReplyPassword] = useState("");
+  const [replyContent, setReplyContent] = useState("");
+  const [replyIsSecret, setReplyIsSecret] = useState(false);
+  const [replySubmitting, setReplySubmitting] = useState(false);
+
+  // 댓글을 부모-답글 트리 순서로 정렬 — 최상위는 createdAt asc, 답글은 부모 바로 뒤에 createdAt asc.
+  const sortedComments: Comment[] = (() => {
+    const roots = comments.filter((c) => !c.parentId);
+    const childMap = new Map<number, Comment[]>();
+    for (const c of comments) {
+      if (c.parentId) {
+        if (!childMap.has(c.parentId)) childMap.set(c.parentId, []);
+        childMap.get(c.parentId)!.push(c);
+      }
+    }
+    const out: Comment[] = [];
+    for (const r of roots) {
+      out.push(r);
+      const children = childMap.get(r.id) || [];
+      for (const ch of children) out.push(ch);
+    }
+    // 트리에 연결되지 않은 고아(부모 삭제 등) 는 뒤에 붙임
+    const included = new Set(out.map((c) => c.id));
+    for (const c of comments) if (!included.has(c.id)) out.push(c);
+    return out;
+  })();
+
+  function openReply(commentId: number) {
+    setReplyParentId(commentId);
+    setReplyContent("");
+    setReplyName("");
+    setReplyPassword("");
+    setReplyIsSecret(false);
+  }
+
+  function cancelReply() {
+    setReplyParentId(null);
+    setReplyContent("");
+  }
+
+  async function handleReplySubmit(parentId: number) {
+    const stripped = replyContent.replace(/<[^>]*>/g, "").trim();
+    if (!stripped) {
+      alert("내용을 입력하세요.");
+      return;
+    }
+    setReplySubmitting(true);
+    try {
+      const res = await fetch("/api/board/comment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          boardSlug,
+          postId,
+          parentId,
+          name: replyName || "익명",
+          password: replyPassword,
+          content: replyContent,
+          isSecret: replyIsSecret,
+        }),
+      });
+      if (res.ok) {
+        cancelReply();
+        router.refresh();
+      } else {
+        const err = await res.json();
+        alert(err.message || "답글 등록에 실패했습니다.");
+      }
+    } catch {
+      alert("답글 등록에 실패했습니다.");
+    } finally {
+      setReplySubmitting(false);
+    }
+  }
 
   // 관리자 일괄 삭제 상태
   const [manageMode, setManageMode] = useState(false);
@@ -280,7 +359,8 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
       {/* 댓글 목록 */}
       {comments.length > 0 && (
         <ul className="divide-y divide-gray-100">
-          {comments.map((comment) => {
+          {sortedComments.map((comment) => {
+            const isReply = !!comment.parentId;
             // 비밀댓글 열람 권한: 관리자, 글 작성자, 댓글 작성자
             const canViewSecret = !comment.isSecret ||
               isAdmin ||
@@ -312,9 +392,15 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
             const editRequiresPassword = isGuestComment;
 
             return (
-              <li key={comment.id} className="px-4 py-3">
+              <li
+                key={comment.id}
+                className={`px-4 py-3 ${
+                  isReply ? "pl-10 bg-gray-50/50 border-l-2 border-blue-200" : ""
+                }`}
+              >
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2 text-sm">
+                    {isReply && <span className="text-blue-500 text-xs">↳</span>}
                     {manageMode && (
                       <input
                         type="checkbox"
@@ -330,6 +416,18 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                     <span className="text-gray-400 text-xs">{formatTime(comment.createdAt)}</span>
                   </div>
                   <div className="flex items-center gap-2">
+                    {/* 답글: 최상위 댓글에만, 비밀댓글 볼 권한 있을 때만, 댓글 미허용 아닐 때 */}
+                    {canViewSecret && !isReply && commentPolicy !== "DISABLED" && editingId !== comment.id && (
+                      <button
+                        onClick={() =>
+                          replyParentId === comment.id ? cancelReply() : openReply(comment.id)
+                        }
+                        className="text-xs text-gray-400 hover:text-teal-600 transition-colors"
+                        title="답글"
+                      >
+                        {replyParentId === comment.id ? "답글취소" : "답글"}
+                      </button>
+                    )}
                     {canShowEdit && (
                       <button
                         onClick={() => startEdit(comment)}
@@ -360,6 +458,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                         onChange={setEditContent}
                         placeholder="댓글을 입력하세요"
                         minHeight="60px"
+                        boardSlug={boardSlug}
                       />
                       <div className="flex items-center gap-2">
                         {editRequiresPassword && (
@@ -397,6 +496,63 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                 ) : (
                   <div className="text-sm text-gray-400 italic">
                     비밀댓글입니다.
+                  </div>
+                )}
+
+                {/* 인라인 답글 폼 */}
+                {replyParentId === comment.id && (
+                  <div className="mt-3 pl-4 border-l-2 border-blue-200 space-y-2">
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        placeholder="이름"
+                        value={replyName}
+                        onChange={(e) => setReplyName(e.target.value)}
+                        className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                      />
+                      <input
+                        type="password"
+                        placeholder="비밀번호"
+                        value={replyPassword}
+                        onChange={(e) => setReplyPassword(e.target.value)}
+                        className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                      />
+                      {currentUserId != null && (
+                        <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={replyIsSecret}
+                            onChange={(e) => setReplyIsSecret(e.target.checked)}
+                            className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600"
+                          />
+                          🔒 비밀
+                        </label>
+                      )}
+                    </div>
+                    <TipTapEditor
+                      content={replyContent}
+                      onChange={setReplyContent}
+                      placeholder="답글을 입력하세요"
+                      minHeight="60px"
+                      boardSlug={boardSlug}
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={cancelReply}
+                        className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                      >
+                        취소
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleReplySubmit(comment.id)}
+                        disabled={replySubmitting}
+                        className="px-4 py-1.5 text-sm bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors disabled:opacity-50"
+                      >
+                        {replySubmitting ? "등록 중..." : "답글 등록"}
+                      </button>
+                    </div>
                   </div>
                 )}
               </li>
@@ -441,6 +597,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
               onChange={setContent}
               placeholder="댓글을 입력하세요"
               minHeight="60px"
+              boardSlug={boardSlug}
             />
             <div className="flex justify-end">
               <button
