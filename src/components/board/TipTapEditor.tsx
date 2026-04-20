@@ -350,7 +350,16 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
           alert(`이미지 업로드 실패: ${data.message || res.status}`);
           return false;
         }
-        editor.chain().focus().setImage({ src: data.url, alt: file.name }).run();
+        // 이미지 뒤에 zero-width space(U+200B) 를 삽입해 IME 버퍼 확보.
+        // ProseMirror + 한글 IME 는 atomic inline 노드(이미지) 바로 뒤에서 조합 중인
+        // 문자가 깨지는 알려진 이슈가 있어, 보이지 않는 텍스트 노드를 하나 두면 예방된다.
+        // 사용자가 공백을 수동으로 치지 않아도 곧바로 한글 입력이 정상 작동.
+        editor
+          .chain()
+          .focus()
+          .setImage({ src: data.url, alt: file.name })
+          .insertContent("\u200B")
+          .run();
         return true;
       } catch (e) {
         alert(`이미지 업로드 실패: ${e instanceof Error ? e.message : String(e)}`);
