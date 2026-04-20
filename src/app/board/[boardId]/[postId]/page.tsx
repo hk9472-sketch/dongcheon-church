@@ -478,6 +478,7 @@ export default async function PostDetailPage({ params }: PageProps) {
             isSecret: c.isSecret,
             createdAt: c.createdAt.toISOString(),
             authorId: c.authorId,
+            parentId: c.parentId,
           }))}
         />
       )}
