@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth";
 import { sanitizeHtml, stripAllHtml } from "@/lib/sanitize";
+import { verifyCaptcha } from "@/lib/captcha";
 
 /** 세션 쿠키에서 사용자 정보를 가져오는 헬퍼 */
 async function getSessionUser(request: NextRequest) {
@@ -15,7 +16,7 @@ async function getSessionUser(request: NextRequest) {
 // POST /api/board/comment - 댓글 작성
 export async function POST(request: NextRequest) {
   try {
-    const { postId, parentId, name, password, content, isSecret } = await request.json();
+    const { postId, parentId, name, password, content, isSecret, captchaAnswer, captchaToken } = await request.json();
 
     if (!postId || !content?.trim()) {
       return NextResponse.json({ message: "필수 항목을 입력하세요." }, { status: 400 });
@@ -66,9 +67,12 @@ export async function POST(request: NextRequest) {
       authorId = sessionUser.id;
       authorName = sessionUser.name;
     } else {
-      // 비로그인: 이름과 비밀번호 필수
+      // 비로그인: 이름·비밀번호 + CAPTCHA 필수
       if (!name?.trim() || !password) {
         return NextResponse.json({ message: "이름과 비밀번호를 입력하세요." }, { status: 400 });
+      }
+      if (!captchaAnswer || !captchaToken || !verifyCaptcha(String(captchaAnswer), String(captchaToken))) {
+        return NextResponse.json({ message: "자동 입력 방지 숫자가 올바르지 않습니다." }, { status: 400 });
       }
       hashedPw = await hashPassword(password);
     }

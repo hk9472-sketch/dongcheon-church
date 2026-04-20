@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { sanitizeHtml } from "@/lib/sanitize";
+import CaptchaField from "@/components/CaptchaField";
 
 const TipTapEditor = dynamic(() => import("@/components/board/TipTapEditor"), {
   ssr: false,
@@ -55,6 +56,13 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
   const [replyContent, setReplyContent] = useState("");
   const [replyIsSecret, setReplyIsSecret] = useState(false);
   const [replySubmitting, setReplySubmitting] = useState(false);
+
+  // 비로그인 CAPTCHA 상태 (쓰기 폼 · 답글 폼 각각)
+  const isGuest = currentUserId == null;
+  const [captchaAnswer, setCaptchaAnswer] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [replyCaptchaAnswer, setReplyCaptchaAnswer] = useState("");
+  const [replyCaptchaToken, setReplyCaptchaToken] = useState("");
 
   // 댓글을 부모-답글 트리 순서로 정렬 — 최상위는 createdAt asc, 답글은 부모 바로 뒤에 createdAt asc.
   // id → comment 매핑 (답글의 부모 조회용)
@@ -124,6 +132,10 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
       alert("내용을 입력하세요.");
       return;
     }
+    if (isGuest && (!replyCaptchaAnswer.trim() || !replyCaptchaToken)) {
+      alert("자동 입력 방지 숫자를 입력하세요.");
+      return;
+    }
     setReplySubmitting(true);
     try {
       const res = await fetch("/api/board/comment", {
@@ -137,10 +149,14 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
           password: replyPassword,
           content: replyContent,
           isSecret: replyIsSecret,
+          captchaAnswer: isGuest ? replyCaptchaAnswer : undefined,
+          captchaToken: isGuest ? replyCaptchaToken : undefined,
         }),
       });
       if (res.ok) {
         cancelReply();
+        setReplyCaptchaAnswer("");
+        setReplyCaptchaToken("");
         router.refresh();
       } else {
         const err = await res.json();
@@ -166,6 +182,10 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
       alert("내용을 입력하세요.");
       return;
     }
+    if (isGuest && (!captchaAnswer.trim() || !captchaToken)) {
+      alert("자동 입력 방지 숫자를 입력하세요.");
+      return;
+    }
     setSubmitting(true);
 
     try {
@@ -179,12 +199,16 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
           password,
           content,
           isSecret,
+          captchaAnswer: isGuest ? captchaAnswer : undefined,
+          captchaToken: isGuest ? captchaToken : undefined,
         }),
       });
 
       if (res.ok) {
         setContent("");
         setIsSecret(false);
+        setCaptchaAnswer("");
+        setCaptchaToken("");
         router.refresh();
       } else {
         const err = await res.json();
@@ -604,6 +628,14 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                       minHeight="60px"
                       boardSlug={boardSlug}
                     />
+                    {isGuest && (
+                      <CaptchaField
+                        onAnswer={(a, t) => {
+                          setReplyCaptchaAnswer(a);
+                          setReplyCaptchaToken(t);
+                        }}
+                      />
+                    )}
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
@@ -667,6 +699,14 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
               minHeight="60px"
               boardSlug={boardSlug}
             />
+            {isGuest && (
+              <CaptchaField
+                onAnswer={(a, t) => {
+                  setCaptchaAnswer(a);
+                  setCaptchaToken(t);
+                }}
+              />
+            )}
             <div className="flex justify-end">
               <button
                 type="submit"

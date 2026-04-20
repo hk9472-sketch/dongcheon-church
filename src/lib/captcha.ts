@@ -12,8 +12,6 @@ function getSecret(): string {
 
 const CAPTCHA_EXPIRE_MS = 5 * 60 * 1000; // 5분
 
-type Operator = "+" | "-" | "*";
-
 function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -25,30 +23,11 @@ function computeHmac(answer: string, timestamp: string): string {
 }
 
 export function generateCaptcha(): { question: string; token: string } {
-  // 1~9 범위의 두 정수와 연산자(+ - *) 중 하나로 간단한 수식 생성
-  const operators: Operator[] = ["+", "-", "*"];
-  const op: Operator = operators[randInt(0, operators.length - 1)];
-
-  const a = randInt(1, 9);
-  const b = randInt(1, 9);
-
-  let answer: number;
-  switch (op) {
-    case "+":
-      answer = a + b;
-      break;
-    case "-":
-      // 음수 방지를 위해 큰 값을 앞에 배치
-      answer = Math.abs(a - b);
-      break;
-    case "*":
-      answer = a * b;
-      break;
-  }
-
-  // 뺄셈의 경우 표시 순서도 조정 (음수 결과 회피)
-  const [left, right] = op === "-" ? [Math.max(a, b), Math.min(a, b)] : [a, b];
-  const question = `${left} ${op} ${right} = ?`;
+  // 4자리 무작위 숫자를 그대로 보여주고 사용자는 그 숫자를 다시 입력한다.
+  // 기존은 '3 + 5 = ?' 식의 연산이었으나, 연산을 피곤해하는 사용자 요청으로
+  // '제시된 숫자를 그대로 입력' 방식으로 변경.
+  const answer = randInt(1000, 9999);
+  const question = `${answer}`;
 
   const timestamp = Date.now().toString();
   const hash = computeHmac(String(answer), timestamp);
