@@ -442,10 +442,11 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
             return (
               <li
                 key={comment.id}
-                className={`py-3 ${rowBorder} ${
+                // display: flow-root (flow-root Tailwind 클래스) 로 각 댓글을 BFC(block formatting context) 로
+                // 만들어 내부 이미지의 float 가 다음 댓글로 흘러나가지 않도록 고정.
+                className={`flow-root py-3 ${rowBorder} ${
                   isReply
-                    ? // 답글: depth 별 들여쓰기 + 왼쪽 파란 막대 + 연한 파란 배경
-                      "pl-4 pr-4 border-l-[3px] border-blue-300 bg-blue-50/40"
+                    ? "pl-4 pr-4 border-l-[3px] border-blue-300 bg-blue-50/40"
                     : "px-4"
                 }`}
                 style={isReply ? { marginLeft: `${indentPx}px` } : undefined}
