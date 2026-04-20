@@ -328,6 +328,39 @@ html {
   margin: 0.5em 0;
 }
 
+/* MediaRow — 이미지·미디어 가로 나란히 배치 (에디터 + 조회 페이지 공통) */
+.tiptap-editor .ProseMirror .media-row,
+.prose .media-row {
+  display: flex;
+  gap: 4px;
+  align-items: flex-start;
+  margin: 0.5em 0;
+  flex-wrap: wrap;
+}
+.tiptap-editor .ProseMirror .media-row > *,
+.prose .media-row > * {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;          /* float 개별 정렬 간섭 방지 */
+  float: none !important;
+}
+.tiptap-editor .ProseMirror .media-row img,
+.prose .media-row img {
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+  display: block;
+}
+.tiptap-editor .ProseMirror .media-row video,
+.prose .media-row video,
+.tiptap-editor .ProseMirror .media-row iframe,
+.prose .media-row iframe {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
+}
+
 /* 조회 페이지(prose) 에서도 에디터에서 조절한 컬럼 폭이 그대로 적용되도록 */
 .prose table {
   table-layout: fixed;

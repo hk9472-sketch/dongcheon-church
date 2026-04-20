@@ -9,6 +9,8 @@ import Color from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
 import ResizableImage from "./ResizableImage";
 import MediaNode, { detectMediaKind, youtubeEmbedUrl } from "./MediaExtension";
+import MediaRow from "./MediaRow";
+import MediaUrlDialog from "./MediaUrlDialog";
 import Link from "@tiptap/extension-link";
 import { Table } from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
@@ -291,6 +293,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         HTMLAttributes: { class: "max-w-full" },
       }),
       MediaNode,
+      MediaRow,
       Link.configure({
         openOnClick: false,
         HTMLAttributes: { class: "text-blue-600 underline" },
@@ -424,6 +427,101 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
   const addMediaFile = useCallback(() => {
     mediaInputRef.current?.click();
   }, []);
+
+  // 툴바 "여러 개 나란히" 버튼 — 이미지+미디어 다중 선택해 MediaRow 한 덩어리로 삽입.
+  const rowInputRef = useRef<HTMLInputElement>(null);
+  const addMediaRow = useCallback(() => {
+    rowInputRef.current?.click();
+  }, []);
+
+  // 파일을 업로드만 하고 URL 을 돌려주는 헬퍼 (에디터에 삽입은 호출자가 담당)
+  const uploadImageOnly = useCallback(
+    async (file: File): Promise<string | null> => {
+      if (!boardSlug) {
+        alert("이 편집기는 현재 파일 업로드를 지원하지 않습니다.");
+        return null;
+      }
+      if (!file.type.startsWith("image/")) return null;
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("boardSlug", boardSlug);
+        const res = await fetch("/api/board/image-upload", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(`이미지 업로드 실패: ${data.message || res.status}`);
+          return null;
+        }
+        return data.url as string;
+      } catch (e) {
+        alert(`이미지 업로드 실패: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [boardSlug]
+  );
+
+  const uploadMediaOnly = useCallback(
+    async (file: File): Promise<{ url: string; kind: "video" | "audio" } | null> => {
+      if (!boardSlug) {
+        alert("이 편집기는 현재 파일 업로드를 지원하지 않습니다.");
+        return null;
+      }
+      const isVideo = file.type.startsWith("video/");
+      const isAudio = file.type.startsWith("audio/");
+      if (!isVideo && !isAudio) return null;
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("boardSlug", boardSlug);
+        const res = await fetch("/api/board/media-upload", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(`미디어 업로드 실패: ${data.message || res.status}`);
+          return null;
+        }
+        return { url: data.url as string, kind: isVideo ? "video" : "audio" };
+      } catch (e) {
+        alert(`미디어 업로드 실패: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [boardSlug]
+  );
+
+  // 이미지+미디어 파일 여러 개를 업로드 후 MediaRow 한 덩어리로 삽입.
+  const handleRowInputChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || []);
+      e.target.value = "";
+      if (!editor || files.length === 0) return;
+
+      // 업로드 순서대로 자식 노드 구성 (선택 순서 유지)
+      const children: Array<Record<string, unknown>> = [];
+      for (const f of files) {
+        if (f.type.startsWith("image/")) {
+          const url = await uploadImageOnly(f);
+          if (url) children.push({ type: "image", attrs: { src: url, alt: f.name } });
+        } else if (f.type.startsWith("video/") || f.type.startsWith("audio/")) {
+          const r = await uploadMediaOnly(f);
+          if (r) {
+            children.push({
+              type: "media",
+              attrs: { src: r.url, kind: r.kind, title: f.name, width: null, align: "left" },
+            });
+          }
+        }
+      }
+      if (children.length === 0) return;
+      editor
+        .chain()
+        .focus()
+        .insertContent({ type: "mediaRow", content: children })
+        .insertContent("\u200B")
+        .run();
+    },
+    [editor, uploadImageOnly, uploadMediaOnly]
+  );
   const handleMediaInputChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
@@ -436,49 +534,51 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
   );
 
   // 툴바 미디어 URL 버튼 — 외부 mp3/mp4 또는 YouTube 링크 삽입.
-  // 같은 위치에 연속 삽입해도 이전 노드가 덮어써지지 않도록, 삽입 후 캐럿을
-  // 노드 다음 빈 단락으로 이동(미디어 + 단락 함께 삽입).
-  const addMediaUrl = useCallback(() => {
-    if (!editor) return;
-    const url = prompt("동영상/음성 URL을 입력하세요\n(mp4·mp3 직접 링크 또는 YouTube/Vimeo URL)", "https://");
-    if (!url || url === "https://") return;
-    const kind = detectMediaKind(url);
-
-    if (kind === "video" || kind === "audio") {
-      editor
-        .chain()
-        .focus()
-        .insertContent({
-          type: "media",
-          attrs: { src: url, kind, width: kind === "audio" ? "400px" : "60%", align: "left" },
-        })
-        .run();
-      return;
-    }
-    if (kind === "iframe") {
-      const embed = youtubeEmbedUrl(url) || url;
-      editor
-        .chain()
-        .focus()
-        .insertContent({
-          type: "media",
-          attrs: { src: embed, kind: "iframe", width: "60%", align: "left" },
-        })
-        .run();
-      return;
-    }
-    if (confirm("미디어로 인식할 수 없습니다. 일반 텍스트 링크로 삽입할까요?")) {
-      editor
-        .chain()
-        .focus()
-        .insertContent({
-          type: "text",
-          text: url,
-          marks: [{ type: "link", attrs: { href: url, target: "_blank", rel: "noopener noreferrer" } }],
-        })
-        .run();
-    }
-  }, [editor]);
+  // 미디어 URL 삽입 — React 모달(MediaUrlDialog)로 대체.
+  // 기본 URL(사이트 설정) prefix + 경로/파일명 입력 패턴을 지원.
+  const [mediaUrlOpen, setMediaUrlOpen] = useState(false);
+  const addMediaUrl = useCallback(() => setMediaUrlOpen(true), []);
+  const handleMediaUrlSubmit = useCallback(
+    (url: string) => {
+      if (!editor || !url) return;
+      const kind = detectMediaKind(url);
+      if (kind === "video" || kind === "audio") {
+        editor
+          .chain()
+          .focus()
+          .insertContent({
+            type: "media",
+            attrs: { src: url, kind, width: kind === "audio" ? "400px" : "60%", align: "left" },
+          })
+          .run();
+        return;
+      }
+      if (kind === "iframe") {
+        const embed = youtubeEmbedUrl(url) || url;
+        editor
+          .chain()
+          .focus()
+          .insertContent({
+            type: "media",
+            attrs: { src: embed, kind: "iframe", width: "60%", align: "left" },
+          })
+          .run();
+        return;
+      }
+      if (confirm("미디어로 인식할 수 없습니다. 일반 텍스트 링크로 삽입할까요?")) {
+        editor
+          .chain()
+          .focus()
+          .insertContent({
+            type: "text",
+            text: url,
+            marks: [{ type: "link", attrs: { href: url, target: "_blank", rel: "noopener noreferrer" } }],
+          })
+          .run();
+      }
+    },
+    [editor]
+  );
   const handleImageInputChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
@@ -580,6 +680,11 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
 
   return (
     <div className="tiptap-editor border border-gray-400 rounded-lg overflow-hidden bg-white">
+      <MediaUrlDialog
+        open={mediaUrlOpen}
+        onClose={() => setMediaUrlOpen(false)}
+        onSubmit={handleMediaUrlSubmit}
+      />
       {/* ── 툴바 ── */}
       <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 bg-gray-50 border-b border-gray-300">
         {/* 실행취소/재실행 */}
@@ -801,6 +906,17 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         <TBtn onClick={addMediaUrl} title="동영상/음성 URL 삽입 (mp4·mp3 또는 YouTube/Vimeo)">
           📺
         </TBtn>
+        <TBtn onClick={addMediaRow} title="이미지·미디어 여러 개 나란히 — 다중 선택 후 한 줄에 자동 배치">
+          🔳
+        </TBtn>
+        <input
+          ref={rowInputRef}
+          type="file"
+          accept="image/*,video/*,audio/*"
+          multiple
+          hidden
+          onChange={handleRowInputChange}
+        />
         <TBtn
           onClick={addLink}
           active={editor.isActive("link")}
