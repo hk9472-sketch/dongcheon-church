@@ -61,7 +61,7 @@ export function sanitizeHtml(dirty: string | null | undefined): string {
       "video", "audio", "source", "iframe",
     ],
     ALLOWED_ATTR: [
-      "href", "target", "rel", "src", "alt", "title",
+      "href", "target", "rel", "src", "alt", "title", "download",
       "class", "style", "width", "height", "colspan", "rowspan", "colwidth",
       "data-align",
       // <video>/<audio>
@@ -78,7 +78,23 @@ export function sanitizeHtml(dirty: string | null | undefined): string {
   // TipTap 등 리치 에디터는 연속 Enter 를 <p></p><p></p>... 로 출력하는데,
   // 브라우저는 내용이 없는 <p></p> 를 0 높이로 렌더하고 인접 margin 도 collapse 되어
   // 입력한 공백 줄이 화면에서 사라진다. 빈 단락 안에 <br> 을 넣어 한 줄 높이를 확보.
-  return clean.replace(/<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, "<p><br></p>");
+  const withEmptyP = clean.replace(/<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, "<p><br></p>");
+
+  // 렌더 시점에 <video>/<audio> 뒤에 '📥 다운로드' 링크 자동 삽입.
+  // iframe(YouTube/Vimeo) 은 플랫폼이 차단하므로 제외.
+  // 저장된 HTML 자체에는 링크가 없고 출력 시에만 덧붙이므로, 이후 에디터 편집 시
+  // 중복으로 저장되지 않고, 링크를 제거하려면 이 함수만 고치면 된다.
+  const withDownload = withEmptyP.replace(
+    /<(video|audio)\b([^>]*)>([\s\S]*?)<\/\1>/gi,
+    (full, tag, attrs, inner) => {
+      const srcMatch = (attrs + inner).match(/\bsrc=(?:"([^"]+)"|'([^']+)')/i);
+      const src = srcMatch ? srcMatch[1] || srcMatch[2] : "";
+      if (!src) return full;
+      const safeSrc = src.replace(/"/g, "&quot;");
+      return `${full}<a class="media-download-link" href="${safeSrc}" download target="_blank" rel="noopener noreferrer">📥 다운로드</a>`;
+    }
+  );
+  return withDownload;
 }
 
 /**

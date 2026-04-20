@@ -328,6 +328,32 @@ html {
   margin: 0.5em 0;
 }
 
+/* 미디어 다운로드 링크 — 조회 페이지의 video/audio 뒤에 자동 삽입됨 */
+.prose .media-download-link,
+.tiptap-editor .ProseMirror .media-download-link {
+  display: inline-block;
+  margin: 4px 0 8px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: #4338ca;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 6px;
+  text-decoration: none;
+  line-height: 1.4;
+}
+.prose .media-download-link:hover,
+.tiptap-editor .ProseMirror .media-download-link:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+  color: #3730a3;
+}
+/* MediaRow 안의 다운로드 링크는 flex 자식으로 차지하지 않도록 */
+.prose .media-row .media-download-link,
+.tiptap-editor .ProseMirror .media-row .media-download-link {
+  display: none;
+}
+
 /* MediaRow — 이미지·미디어 가로 나란히 배치 (에디터 + 조회 페이지 공통) */
 .tiptap-editor .ProseMirror .media-row,
 .prose .media-row {
