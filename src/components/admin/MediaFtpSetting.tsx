@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
  * 설정 해제 시 로컬 저장 모드로 복귀.
  */
 export default function MediaFtpSetting() {
+  const [enabled, setEnabled] = useState(false);
   const [host, setHost] = useState("");
   const [port, setPort] = useState("21");
   const [user, setUser] = useState("");
@@ -25,6 +26,7 @@ export default function MediaFtpSetting() {
       const res = await fetch("/api/settings/media-ftp");
       if (res.ok) {
         const d = await res.json();
+        setEnabled(!!d.enabled);
         setHost(d.host || "");
         setPort(d.port || "21");
         setUser(d.user || "");
@@ -44,7 +46,7 @@ export default function MediaFtpSetting() {
       const res = await fetch("/api/settings/media-ftp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ host, port, user, password, remoteRoot }),
+        body: JSON.stringify({ enabled, host, port, user, password, remoteRoot }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -79,10 +81,26 @@ export default function MediaFtpSetting() {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-3">
       <div>
-        <h3 className="text-base font-bold text-gray-800">미디어 FTP 서버 (선택)</h3>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h3 className="text-base font-bold text-gray-800">미디어 FTP 서버 (선택)</h3>
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+              disabled={loading}
+              className="w-4 h-4 rounded border-gray-300 text-blue-600"
+            />
+            <span className={enabled ? "font-semibold text-emerald-700" : "text-gray-500"}>
+              {enabled ? "사용 중" : "사용 안 함"}
+            </span>
+          </label>
+        </div>
         <p className="text-xs text-gray-500 mt-1">
-          설정하면 동영상/음성 업로드가 로컬 디스크 대신 외부 FTP 서버로 전송되고, 사용자는 외부
-          공개 URL 로 재생합니다. 로컬 서버 디스크·대역폭 절약에 유리.
+          설정하고 <strong>사용</strong> 을 켜면 동영상/음성 업로드가 로컬 디스크 대신 외부 FTP
+          서버로 전송되고, 사용자는 외부 공개 URL 로 재생합니다. 로컬 서버 디스크·대역폭 절약에 유리.
+          <br />
+          끄면 자격증명은 보존되고 업로드만 로컬 저장 모드로 복귀. 필요할 때 다시 켜세요.
           <br />
           <strong>필수 조건</strong>: 위의 "미디어 기본 URL" 이 FTP 업로드 파일이 웹에서 보이는
           공개 경로로 설정돼 있어야 합니다.

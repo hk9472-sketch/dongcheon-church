@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import prisma from "@/lib/db";
 
 const KEYS = [
+  "media_ftp_enabled",
   "media_ftp_host",
   "media_ftp_port",
   "media_ftp_user",
@@ -34,6 +35,7 @@ export async function GET() {
   const map: Record<string, string> = {};
   for (const r of rows) map[r.key] = r.value || "";
   return NextResponse.json({
+    enabled: map.media_ftp_enabled === "1",
     host: map.media_ftp_host || "",
     port: map.media_ftp_port || "21",
     user: map.media_ftp_user || "",
@@ -51,6 +53,7 @@ export async function POST(request: NextRequest) {
   }
   const body = await request.json().catch(() => ({}));
   const updates: Partial<Record<Key, string>> = {
+    media_ftp_enabled: body.enabled ? "1" : "0",
     media_ftp_host: String(body.host || "").trim(),
     media_ftp_port: String(body.port || "21").trim(),
     media_ftp_user: String(body.user || "").trim(),

@@ -22,6 +22,7 @@ async function getFtpConfig(): Promise<{
   publicBase: string;
 } | null> {
   const keys = [
+    "media_ftp_enabled",
     "media_ftp_host",
     "media_ftp_port",
     "media_ftp_user",
@@ -32,6 +33,7 @@ async function getFtpConfig(): Promise<{
   const rows = await prisma.siteSetting.findMany({ where: { key: { in: keys } } });
   const map: Record<string, string> = {};
   for (const r of rows) map[r.key] = r.value || "";
+  if (map.media_ftp_enabled !== "1") return null; // 사용 안 함 토글
   if (!map.media_ftp_host || !map.media_ftp_user || !map.media_ftp_password) return null;
   if (!map.media_base_url) return null; // 공개 URL prefix 없으면 FTP 전송 의미 없음
   return {
