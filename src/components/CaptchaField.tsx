@@ -63,7 +63,7 @@ export default function CaptchaField({ onAnswer, compact }: CaptchaFieldProps) {
         <button
           type="button"
           onClick={fetchCaptcha}
-          className="w-8 h-8 flex items-center justify-center text-sm border border-gray-300 rounded hover:bg-gray-50 text-gray-500"
+          className="px-3 h-9 flex items-center justify-center text-base border border-gray-300 rounded hover:bg-gray-50 text-gray-500"
           title="새 문제"
           aria-label="CAPTCHA 새로고침"
         >
