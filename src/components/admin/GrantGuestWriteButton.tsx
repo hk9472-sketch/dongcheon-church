@@ -11,8 +11,8 @@ export default function GrantGuestWriteButton() {
   async function run() {
     if (
       !confirm(
-        "전체 게시판의 비회원 목록/열람/글쓰기/답글 권한을 활성화합니다.\n\n" +
-        "- 비회원도 목록과 게시글을 열람 가능\n" +
+        "전체 게시판의 비회원 열람·글쓰기·답글 권한을 활성화합니다.\n\n" +
+        "- 비회원도 목록·게시글 열람 가능\n" +
         "- 비회원도 이름·비밀번호로 글쓰기·답글 작성 가능\n" +
         "- 작성 시 입력한 비밀번호로 본인 글 수정·삭제 가능\n\n" +
         "계속할까요?"
@@ -47,7 +47,7 @@ export default function GrantGuestWriteButton() {
         disabled={busy}
         className="px-3 py-2 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50"
       >
-        {busy ? "처리 중…" : "비회원 열람·글쓰기 일괄 허용"}
+        {busy ? "처리 중…" : "비회원 글쓰기 일괄 허용"}
       </button>
       {msg && <span className="text-xs text-gray-600">{msg}</span>}
     </div>

@@ -40,8 +40,10 @@ export default function CaptchaField({ onAnswer, compact }: CaptchaFieldProps) {
   }
 
   if (compact) {
+    // 새로고침 버튼 뒤에 mr-4(16px) 여백을 둬 인접한 '취소'·'등록하기' 등 버튼과의
+    // 실수 클릭을 방지. 숫자박스-입력칸 간격은 적당히 조밀하게 유지.
     return (
-      <div className="inline-flex items-center gap-2" title="왼쪽 숫자를 그대로 입력">
+      <div className="inline-flex items-center gap-2 mr-4" title="왼쪽 숫자를 그대로 입력">
         <span
           className={`px-3 py-1.5 text-sm font-mono font-bold bg-gray-100 border border-gray-300 rounded min-w-[72px] text-center select-none leading-none ${
             loading ? "text-gray-400" : "text-gray-800"

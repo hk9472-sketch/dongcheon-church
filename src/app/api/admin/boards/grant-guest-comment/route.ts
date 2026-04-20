@@ -5,6 +5,8 @@ import prisma from "@/lib/db";
 // POST /api/admin/boards/grant-guest-comment
 // body: { action: "on" | "off" }
 // 모든 게시판의 grantComment 를 일괄 ON(99, 비회원 허용) 또는 OFF(10, 회원만) 로 변경.
+// ON 시 목록·열람(grantList/grantView) 도 함께 99 로 설정 — 댓글을 쓰려면 당연히 봐야 하므로.
+// OFF 는 댓글 권한만 내리고 열람 권한은 건드리지 않는다 (다른 버튼이 이미 99 로 설정했을 수 있어서).
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get("dc_session")?.value;
@@ -31,10 +33,18 @@ export async function POST(request: NextRequest) {
       : { grantComment: { gt: 10 } },
   });
 
-  await prisma.board.updateMany({
-    where: {},
-    data: { grantComment: targetLevel },
-  });
+  if (action === "on") {
+    // 열람이 막혀 있으면 댓글 작성 자체가 불가능하므로 함께 99 로 개방
+    await prisma.board.updateMany({
+      where: {},
+      data: { grantComment: 99, grantList: 99, grantView: 99 },
+    });
+  } else {
+    await prisma.board.updateMany({
+      where: {},
+      data: { grantComment: 10 },
+    });
+  }
 
   return NextResponse.json({
     success: true,
