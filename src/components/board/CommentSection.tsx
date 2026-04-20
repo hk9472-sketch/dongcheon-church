@@ -413,16 +413,16 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
               (isAdmin || isOwnComment || isGuestComment);
 
             // 수정 버튼:
+            //   - 관리자: 정책 무관 항상 허용 (Legacy 게시글의 ALLOW 정책에도 관리자 편집 가능)
             //   - 본인 회원 댓글: DISABLED 아니면 허용 (ALLOW/ALLOW_EDIT 모두)
             //   - 비회원 댓글: ALLOW_EDIT 에서만 (비번 확인)
-            //   - 관리자: 정책 준수 (ALLOW_EDIT 에서만 표시)
             const canShowEdit =
               canViewSecret &&
               editingId !== comment.id &&
               (
+                isAdmin ||
                 (isOwnComment && commentPolicy !== "DISABLED") ||
-                (isGuestComment && commentPolicy === "ALLOW_EDIT") ||
-                (isAdmin && commentPolicy === "ALLOW_EDIT")
+                (isGuestComment && commentPolicy === "ALLOW_EDIT")
               );
 
             // 수정 시 비밀번호가 필요한 경우: 비회원 댓글만
