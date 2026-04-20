@@ -120,8 +120,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "필수 항목을 입력하세요." }, { status: 400 });
     }
 
-    // 비로그인 글쓰기/답글 시 CAPTCHA 검증
-    if (!isSessionValid && mode !== "modify") {
+    // 비로그인 글쓰기/답글/수정 시 CAPTCHA 검증 — 비회원의 모든 쓰기 경로에서 봇 방어
+    if (!isSessionValid) {
       if (!captchaAnswer || !captchaToken || !verifyCaptcha(captchaAnswer, captchaToken)) {
         return NextResponse.json({ message: "보안 문자가 올바르지 않습니다." }, { status: 400 });
       }

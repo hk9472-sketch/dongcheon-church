@@ -197,8 +197,8 @@ function WriteForm({ boardId }: { boardId: string }) {
     if (!subject.trim()) { alert("제목을 입력하세요."); return; }
     if (!content.trim()) { alert("내용을 입력하세요."); return; }
 
-    // 비로그인 시 CAPTCHA 필수
-    if (isLoggedIn !== true && mode !== "modify" && !captchaAnswer) {
+    // 비로그인 시 CAPTCHA 필수 — 쓰기·답글·수정 모두 해당
+    if (isLoggedIn !== true && !captchaAnswer) {
       alert("보안 문자를 입력하세요.");
       return;
     }
@@ -225,8 +225,8 @@ function WriteForm({ boardId }: { boardId: string }) {
       if (parentNo) formData.append("parentNo", parentNo);
       if (file1) formData.append("file1", file1);
       if (file2) formData.append("file2", file2);
-      // 비로그인 시 CAPTCHA 토큰 포함
-      if (isLoggedIn !== true && mode !== "modify") {
+      // 비로그인 시 CAPTCHA 토큰 포함 — 수정 모드에서도 필수
+      if (isLoggedIn !== true) {
         formData.append("captchaAnswer", captchaAnswer);
         formData.append("captchaToken", captchaToken);
       }
@@ -608,7 +608,7 @@ function WriteForm({ boardId }: { boardId: string }) {
 
             {/* 버튼 그룹 — 비로그인 시 CAPTCHA 가 취소 버튼 앞에 인라인 */}
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              {isLoggedIn === false && mode !== "modify" && (
+              {isLoggedIn === false && (
                 <CaptchaField
                   compact
                   onAnswer={(answer, token) => {
