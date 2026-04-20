@@ -45,9 +45,9 @@ const MediaNode = Node.create({
         renderHTML: (attrs: Record<string, unknown>) => (attrs.width ? { width: attrs.width as string } : {}),
       },
       align: {
-        default: "left" as Align,
-        parseHTML: (el: HTMLElement) => (el.getAttribute("data-align") as Align) || "left",
-        renderHTML: (attrs: Record<string, unknown>) => ({ "data-align": ((attrs.align as Align) || "left") }),
+        default: "center" as Align,
+        parseHTML: (el: HTMLElement) => (el.getAttribute("data-align") as Align) || "center",
+        renderHTML: (attrs: Record<string, unknown>) => ({ "data-align": ((attrs.align as Align) || "center") }),
       },
       title: {
         default: null,
@@ -158,16 +158,29 @@ const MediaNode = Node.create({
   },
 });
 
-function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode }: ReactNodeViewProps) {
+function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode, getPos }: ReactNodeViewProps) {
   const wrapRef = useRef<HTMLSpanElement>(null);
   const [drag, setDrag] = useState<{ startX: number; startW: number } | null>(null);
+  const [hover, setHover] = useState(false);
 
   const kind = (node.attrs.kind as Kind) || "video";
   const src = (node.attrs.src as string) || "";
   const widthAttr = (node.attrs.width as string | null) || null;
-  const align = ((node.attrs.align as Align) || "left") as Align;
+  const align = ((node.attrs.align as Align) || "center") as Align;
   const title = (node.attrs.title as string | undefined) || undefined;
-  const show = selected && editor.isEditable;
+  // 선택 OR 호버 시 툴바·핸들 표시 — 호버로 발견성 향상
+  const show = (selected || hover) && editor.isEditable;
+
+  // 노드를 명시적으로 선택 — 클릭 영역(컨트롤바 제외)에서 호출해 video 재생 가로채기 방지
+  const selectSelf = () => {
+    try {
+      const pos = typeof getPos === "function" ? getPos() : null;
+      if (pos == null) return;
+      editor.commands.setNodeSelection(pos);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const effectiveWidth = widthAttr || (kind === "audio" ? "400px" : "60%");
 
@@ -220,15 +233,60 @@ function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode }:
   const setPercent = (pct: number) => updateAttributes({ width: `${pct}%` });
 
   return (
-    <NodeViewWrapper as="span" ref={wrapRef} className="resizable-media-wrap" style={wrapStyle}>
+    <NodeViewWrapper
+      as="span"
+      ref={wrapRef}
+      className="resizable-media-wrap"
+      style={wrapStyle}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      {/* 선택 핸들 — 좌상단의 "⊙" 점을 눌러 명시적 선택 + 드래그-이동 시작점.
+         video/audio 가 클릭을 가로채는 상황 대비. */}
+      {show && (
+        <button
+          type="button"
+          draggable
+          contentEditable={false}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            selectSelf();
+          }}
+          title="선택 · 드래그로 이동"
+          style={{
+            position: "absolute",
+            top: -14,
+            left: -14,
+            width: 26,
+            height: 26,
+            borderRadius: "50%",
+            background: selected ? "#2563eb" : "#475569",
+            color: "#fff",
+            border: "2px solid #fff",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.35)",
+            cursor: "grab",
+            fontSize: 14,
+            zIndex: 12,
+            padding: 0,
+            lineHeight: "22px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          ⊙
+        </button>
+      )}
       {/* 컨트롤 바 */}
       {show && (
         <div
           contentEditable={false}
+          onMouseDown={(e) => e.preventDefault()}
           style={{
             position: "absolute",
             top: -34,
-            left: align === "center" ? "50%" : align === "right" ? "auto" : 0,
+            left: align === "center" ? "50%" : align === "right" ? "auto" : 16,
             right: align === "right" ? 0 : "auto",
             transform: align === "center" ? "translateX(-50%)" : undefined,
             display: "flex",
@@ -236,10 +294,10 @@ function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode }:
             padding: "3px 6px",
             background: "#1f2937",
             borderRadius: 6,
-            boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
             fontSize: 11,
             color: "#fff",
-            zIndex: 10,
+            zIndex: 11,
             whiteSpace: "nowrap",
             lineHeight: 1,
           }}
@@ -251,7 +309,7 @@ function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode }:
             <button
               key={p}
               type="button"
-              onClick={() => setPercent(p)}
+              onClick={() => { selectSelf(); setPercent(p); }}
               title={`${p}% 크기`}
               style={btnStyle(widthAttr === `${p}%`)}
             >
@@ -259,14 +317,14 @@ function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode }:
             </button>
           ))}
           <span style={{ opacity: 0.5, padding: "0 2px" }}>|</span>
-          <button type="button" onClick={() => updateAttributes({ align: "left" })} title="왼쪽(텍스트 오른쪽)" style={btnStyle(align === "left")}>
-            ⬅
+          <button type="button" onClick={() => { selectSelf(); updateAttributes({ align: "left" }); }} title="왼쪽 배치 — 텍스트가 오른쪽으로 흐름" style={btnStyle(align === "left")}>
+            왼쪽
           </button>
-          <button type="button" onClick={() => updateAttributes({ align: "center" })} title="가운데" style={btnStyle(align === "center")}>
-            ↔
+          <button type="button" onClick={() => { selectSelf(); updateAttributes({ align: "center" }); }} title="가운데 배치" style={btnStyle(align === "center")}>
+            가운데
           </button>
-          <button type="button" onClick={() => updateAttributes({ align: "right" })} title="오른쪽(텍스트 왼쪽)" style={btnStyle(align === "right")}>
-            ➡
+          <button type="button" onClick={() => { selectSelf(); updateAttributes({ align: "right" }); }} title="오른쪽 배치 — 텍스트가 왼쪽으로 흐름" style={btnStyle(align === "right")}>
+            오른쪽
           </button>
           <span style={{ opacity: 0.5, padding: "0 2px" }}>|</span>
           <button type="button" onClick={() => deleteNode()} title="삭제" style={{ ...btnStyle(false), color: "#fca5a5" }}>
