@@ -457,14 +457,14 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                     )}
                     <span className="text-gray-400 text-xs">{formatTime(comment.createdAt)}</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     {/* 답글: 최상위 댓글에만, 비밀댓글 볼 권한 있을 때만, 댓글 미허용 아닐 때 */}
                     {canViewSecret && !isReply && commentPolicy !== "DISABLED" && editingId !== comment.id && (
                       <button
                         onClick={() =>
                           replyParentId === comment.id ? cancelReply() : openReply(comment.id)
                         }
-                        className="text-xs text-gray-400 hover:text-teal-600 transition-colors"
+                        className="px-2.5 py-1 text-sm border border-gray-300 text-gray-600 rounded hover:bg-teal-50 hover:border-teal-400 hover:text-teal-700 transition-colors"
                         title="답글"
                       >
                         {replyParentId === comment.id ? "답글취소" : "답글"}
@@ -473,7 +473,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                     {canShowEdit && (
                       <button
                         onClick={() => startEdit(comment)}
-                        className="text-xs text-gray-400 hover:text-blue-500 transition-colors"
+                        className="px-2.5 py-1 text-sm border border-gray-300 text-gray-600 rounded hover:bg-blue-50 hover:border-blue-400 hover:text-blue-700 transition-colors"
                         title="수정"
                       >
                         수정
@@ -482,7 +482,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                     {canShowDelete && (
                       <button
                         onClick={() => handleDelete(comment.id, isGuestComment)}
-                        className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                        className="px-2.5 py-1 text-sm border border-gray-300 text-gray-600 rounded hover:bg-red-50 hover:border-red-400 hover:text-red-700 transition-colors"
                         title="삭제"
                       >
                         삭제
