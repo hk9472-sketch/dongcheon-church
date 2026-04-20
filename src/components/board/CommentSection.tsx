@@ -61,25 +61,42 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
   const commentById = new Map<number, Comment>();
   for (const c of comments) commentById.set(c.id, c);
 
-  const sortedComments: Comment[] = (() => {
-    const roots = comments.filter((c) => !c.parentId);
+  // 부모-자식 트리를 DFS 로 평탄화 + 각 댓글의 depth(0=최상위) 계산.
+  // 깊이 제한 없음(손자·증손자 가능). 시각적 들여쓰기는 렌더에서 5단계까지만 적용.
+  const { sortedComments, depthMap } = (() => {
     const childMap = new Map<number, Comment[]>();
+    const orphans: Comment[] = [];
     for (const c of comments) {
-      if (c.parentId) {
-        if (!childMap.has(c.parentId)) childMap.set(c.parentId, []);
-        childMap.get(c.parentId)!.push(c);
+      if (!c.parentId) continue;
+      if (!commentById.has(c.parentId)) {
+        orphans.push(c);
+        continue;
+      }
+      if (!childMap.has(c.parentId)) childMap.set(c.parentId, []);
+      childMap.get(c.parentId)!.push(c);
+    }
+    for (const arr of childMap.values()) {
+      arr.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    }
+    const roots = comments
+      .filter((c) => !c.parentId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const out: Comment[] = [];
+    const depth = new Map<number, number>();
+    function dfs(c: Comment, d: number) {
+      depth.set(c.id, d);
+      out.push(c);
+      const kids = childMap.get(c.id) || [];
+      for (const k of kids) dfs(k, d + 1);
+    }
+    for (const r of roots) dfs(r, 0);
+    for (const o of orphans) {
+      if (!depth.has(o.id)) {
+        depth.set(o.id, 0);
+        out.push(o);
       }
     }
-    const out: Comment[] = [];
-    for (const r of roots) {
-      out.push(r);
-      const children = childMap.get(r.id) || [];
-      for (const ch of children) out.push(ch);
-    }
-    // 트리에 연결되지 않은 고아(부모 삭제 등) 는 뒤에 붙임
-    const included = new Set(out.map((c) => c.id));
-    for (const c of comments) if (!included.has(c.id)) out.push(c);
-    return out;
+    return { sortedComments: out, depthMap: depth };
   })();
 
   // 부모 댓글 본문을 짧은 한 줄 프리뷰로 축약 (HTML 태그 제거 + 공백 정리 + 40자 컷).
@@ -371,6 +388,10 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
         <ul>
           {sortedComments.map((comment, rowIdx) => {
             const isReply = !!comment.parentId;
+            const depth = depthMap.get(comment.id) ?? 0;
+            // 시각적 들여쓰기는 5단계까지만 — 그 이상 깊어도 같은 위치에서 스택
+            const visualDepth = Math.min(depth, 5);
+            const indentPx = visualDepth * 24;
             // 이 댓글이 '새로운 그룹의 시작' 인지 판정
             //   - 현재 댓글이 최상위(root) 이고 이전 댓글이 없거나 아니면 그룹 시작
             //   - 답글이면 그룹의 중간/끝이므로 위쪽 구분선 없이 부모에 붙여 표시
@@ -423,10 +444,11 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                 key={comment.id}
                 className={`py-3 ${rowBorder} ${
                   isReply
-                    ? // 답글: 왼쪽 두꺼운 파란 막대 + 연한 파란 배경 + 깊은 들여쓰기 로 트리 느낌
-                      "ml-6 pl-4 pr-4 border-l-[3px] border-blue-300 bg-blue-50/40"
+                    ? // 답글: depth 별 들여쓰기 + 왼쪽 파란 막대 + 연한 파란 배경
+                      "pl-4 pr-4 border-l-[3px] border-blue-300 bg-blue-50/40"
                     : "px-4"
                 }`}
+                style={isReply ? { marginLeft: `${indentPx}px` } : undefined}
               >
                 {/* 부모 댓글 정보 배지 — 어느 댓글의 답글인지 한눈에 */}
                 {isReply && parent && (
@@ -458,8 +480,8 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                     <span className="text-gray-400 text-xs">{formatTime(comment.createdAt)}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    {/* 답글: 최상위 댓글에만, 비밀댓글 볼 권한 있을 때만, 댓글 미허용 아닐 때 */}
-                    {canViewSecret && !isReply && commentPolicy !== "DISABLED" && editingId !== comment.id && (
+                    {/* 답글: 모든 깊이에 허용 (손자·증손자 가능). 비밀댓글 볼 권한 있을 때만, 댓글 미허용 아닐 때 */}
+                    {canViewSecret && commentPolicy !== "DISABLED" && editingId !== comment.id && (
                       <button
                         onClick={() =>
                           replyParentId === comment.id ? cancelReply() : openReply(comment.id)
