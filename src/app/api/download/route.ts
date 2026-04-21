@@ -69,9 +69,25 @@ export async function GET(request: NextRequest) {
           "Content-Length": String(fileBuffer.length),
         },
       });
-    } catch {
-      console.warn(`[download 404] postId=${postId} fileNo=${fileNo} fileName=${fileName}`);
-      return NextResponse.json({ message: "파일을 찾을 수 없습니다." }, { status: 404 });
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException;
+      console.warn(
+        `[download 404] postId=${postId} fileNo=${fileNo} boardId=${boardId} ` +
+          `dbFileName=${JSON.stringify(fileName)} basename=${JSON.stringify(baseName)} ` +
+          `resolved=${JSON.stringify(resolved)} code=${err?.code} message=${err?.message}`
+      );
+      return NextResponse.json(
+        {
+          message: "파일을 찾을 수 없습니다.",
+          debug: {
+            boardId,
+            basename: baseName,
+            resolved,
+            code: err?.code,
+          },
+        },
+        { status: 404 }
+      );
     }
   } catch (error) {
     console.error("Download error:", error);
