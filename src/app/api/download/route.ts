@@ -45,27 +45,52 @@ export async function GET(request: NextRequest) {
     const cwd = process.cwd();
     const dataRoot = path.resolve(cwd, "data");
 
-    // 후보 경로 — boardId 는 URL 기준. DB 의 경로와 다를 수 있으므로 양쪽 모두 시도.
-    const dbSlugMatch = fileName.match(/^data\/([^/]+)\//);
-    const dbSlug = dbSlugMatch ? dbSlugMatch[1] : null;
-    const basename = fileName.split("/").pop() || fileName;
+    // 경로 분석 기반 후보 생성:
+    // DB 값 예: "data/DcElement/1775430398/제15공과_부활의_권능_제안.hwp"
+    // 이관 시 중간에 타임스탬프/ID 성격의 '숫자' 세그먼트가 끼어있는데
+    // 실제 디스크는 flat 인 케이스가 많음. 숫자 세그먼트를 선별적으로 빼보며 시도.
+    //
+    // 규칙:
+    //  1) 경로 분해 → data / <slug> / <중간...> / <basename>
+    //  2) 원본 그대로 시도
+    //  3) 중간 세그먼트 중 '숫자만' 으로 된 것들을 하나 이상 제거한 버전 시도
+    //  4) 슬러그가 URL 의 boardId 와 다르면 boardId 로 치환한 버전도 시도
+    //  5) 절대 상위(data/) 이탈 불가 — 최종 resolved 가 dataRoot 내부인지 검증
+    const segments = fileName.split("/").filter(Boolean);
+    const basename = segments[segments.length - 1] || fileName;
+    // "data" 가 첫 세그먼트가 아니면 앞에 붙여서 상대경로로 정상화
+    const normSegments = segments[0] === "data" ? segments : ["data", ...segments];
+    const slug = normSegments[1] || boardId;
+    const middle = normSegments.slice(2, -1); // data · slug 와 basename 사이
+    // 중간 세그먼트 각각이 '숫자만' 인지 표시
+    const middleIsNumeric = middle.map((s) => /^\d+$/.test(s));
+
+    // 숫자 세그먼트들의 포함/제외 조합 (2^N 가지, 보통 1~2개라 비용 무시)
+    const numericIndexes = middleIsNumeric
+      .map((isNum, i) => (isNum ? i : -1))
+      .filter((i) => i >= 0);
+    const subsets: number[][] = [[]];
+    for (const idx of numericIndexes) {
+      const prev = subsets.map((s) => s.slice());
+      subsets.push(...prev.map((s) => [...s, idx]));
+    }
 
     const candidates: string[] = [];
-    const push = (rel: string) => {
+    const tryPush = (segs: string[]) => {
+      const rel = segs.join("/");
       const abs = path.resolve(cwd, rel);
       if (!abs.startsWith(dataRoot + path.sep) && abs !== dataRoot) return;
       if (!candidates.includes(abs)) candidates.push(abs);
     };
-    // 1) 저장된 그대로
-    if (fileName.startsWith("data/")) push(fileName);
-    // 2) boardId 슬러그 기준 data/<boardId>/<basename>
-    push(`data/${boardId}/${basename}`);
-    // 3) DB 에 박힌 슬러그 기준 (있으면)
-    if (dbSlug && dbSlug !== boardId) push(`data/${dbSlug}/${basename}`);
-    // 4) data/<basename> (단일 폴더 저장 케이스)
-    push(`data/${basename}`);
-    // 5) 제로보드 원본 구조 file/<slug>/<basename>
-    push(`data/file/${boardId}/${basename}`);
+
+    // 각 부분집합: 해당 인덱스의 숫자 세그먼트를 '제외' 하고 경로 구성
+    for (const skipIdxs of subsets) {
+      const kept = middle.filter((_, i) => !skipIdxs.includes(i));
+      // 원본 슬러그
+      tryPush(["data", slug, ...kept, basename]);
+      // URL boardId 로 치환한 버전 (DB slug 가 다를 때)
+      if (slug !== boardId) tryPush(["data", boardId, ...kept, basename]);
+    }
 
     let found: string | null = null;
     for (const abs of candidates) {
