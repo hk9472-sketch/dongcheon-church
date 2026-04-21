@@ -321,6 +321,50 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     };
   }, []);
 
+  // 현재 브라우저(=사용자 PC) 에 실제로 설치된 폰트만 감지.
+  // Canvas 측정 기법: 대상 폰트로 렌더한 텍스트 폭 vs 대체 폰트로 렌더한 폭이 다르면 설치됨.
+  // 3가지 대체 폰트(serif/sans-serif/monospace) 모두와 폭이 같으면 "없음" 으로 판정.
+  // 330개 내외는 100ms 미만에 측정 완료.
+  const [fontAvailability, setFontAvailability] = useState<Map<string, boolean>>(new Map());
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const testText = "mmmmmmmmmmlliWWWWWWW가나다라";
+    const fallbacks = ["serif", "sans-serif", "monospace"];
+    const baseWidths = fallbacks.map((fb) => {
+      ctx.font = `72px ${fb}`;
+      return ctx.measureText(testText).width;
+    });
+    const map = new Map<string, boolean>();
+    fonts.forEach((f) => {
+      if (!f.value) {
+        map.set(f.value, true); // "기본" 은 항상 사용 가능
+        return;
+      }
+      const installed = fallbacks.some((fb, i) => {
+        ctx.font = `72px "${f.value}", ${fb}`;
+        return ctx.measureText(testText).width !== baseWidths[i];
+      });
+      map.set(f.value, installed);
+    });
+    setFontAvailability(map);
+  }, [fonts]);
+
+  // 설치된 폰트 먼저, 설치 안 된 폰트는 뒤로 (라벨 가나다/abc 순 유지).
+  // 판정 전엔 원본 순서 그대로.
+  const sortedFonts = (() => {
+    if (fontAvailability.size === 0) return fonts;
+    const installed: typeof fonts = [];
+    const missing: typeof fonts = [];
+    fonts.forEach((f) => {
+      if (fontAvailability.get(f.value) === false) missing.push(f);
+      else installed.push(f);
+    });
+    return [...installed, ...missing];
+  })();
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -774,26 +818,30 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
               label={<span className="text-xs w-20 truncate text-left">{currentLabel}</span>}
               title="글꼴"
             >
-              <div className="w-48 max-h-72 overflow-y-auto">
-                {fonts.map((f) => (
-                  <button
-                    key={f.value || "default"}
-                    type="button"
-                    onClick={() => {
-                      if (f.value) {
-                        editor.chain().focus().setFontFamily(f.value).run();
-                      } else {
-                        editor.chain().focus().unsetFontFamily().run();
-                      }
-                    }}
-                    className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-blue-50 ${
-                      currentFont === f.value ? "bg-blue-50 font-semibold" : ""
-                    }`}
-                    style={{ fontFamily: f.value || "inherit" }}
-                  >
-                    {f.label}
-                  </button>
-                ))}
+              <div className="w-56 max-h-72 overflow-y-auto">
+                {sortedFonts.map((f) => {
+                  const installed = fontAvailability.get(f.value) !== false;
+                  return (
+                    <button
+                      key={f.value || "default"}
+                      type="button"
+                      onClick={() => {
+                        if (f.value) {
+                          editor.chain().focus().setFontFamily(f.value).run();
+                        } else {
+                          editor.chain().focus().unsetFontFamily().run();
+                        }
+                      }}
+                      title={installed ? undefined : "이 PC 에 설치되지 않은 폰트 — 적용해도 대체 폰트로 표시됩니다"}
+                      className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-blue-50 ${
+                        currentFont === f.value ? "bg-blue-50 font-semibold" : ""
+                      } ${installed ? "" : "text-gray-400 italic"}`}
+                      style={{ fontFamily: f.value || "inherit" }}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
                 <button
                   type="button"
                   onClick={() => {
