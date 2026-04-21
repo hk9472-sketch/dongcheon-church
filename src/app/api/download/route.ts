@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
 import prisma from "@/lib/db";
+import { getUploadDir, getUploadRoot } from "@/lib/uploadPath";
 
 // GET /api/download?boardId=DcPds&postId=123&fileNo=1
 //
@@ -43,8 +44,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: "잘못된 경로" }, { status: 400 });
     }
 
-    const allowedRoot = path.resolve(process.cwd(), "data");
-    const resolved = path.resolve(allowedRoot, boardId, baseName);
+    // Turbopack 이 path.resolve/join(multi-arg) 을 정적 추적해 "data/ 아래 16,000+ 파일"
+    // 경고를 내지 않도록 uploadPath 헬퍼 (단일 인수 path.normalize 기반) 만 사용.
+    const allowedRoot = getUploadRoot();
+    const resolved = getUploadDir(`${boardId}${path.sep}${baseName}`);
     if (!resolved.startsWith(allowedRoot + path.sep)) {
       return NextResponse.json({ message: "잘못된 경로" }, { status: 400 });
     }
