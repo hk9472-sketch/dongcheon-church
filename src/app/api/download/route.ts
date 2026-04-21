@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
 import prisma from "@/lib/db";
-import { getUploadDir, getUploadRoot } from "@/lib/uploadPath";
 
 // GET /api/download?boardId=DcPds&postId=123&fileNo=1
 //
@@ -44,10 +43,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: "잘못된 경로" }, { status: 400 });
     }
 
-    // Turbopack 이 path.resolve/join(multi-arg) 을 정적 추적해 "data/ 아래 16,000+ 파일"
-    // 경고를 내지 않도록 uploadPath 헬퍼 (단일 인수 path.normalize 기반) 만 사용.
-    const allowedRoot = getUploadRoot();
-    const resolved = getUploadDir(`${boardId}${path.sep}${baseName}`);
+    // 다운로드는 레거시 이관 파일(`data/<slug>/<파일>`) 을 읽는 역할이므로
+    // 새 업로드용 UPLOAD_DIR (예: public/uploads) 를 따르면 안 된다. `data` 는 고정.
+    // Turbopack 이 path.resolve/join(multi-arg) 을 추적해 16,000+ 파일 경고를 내지 않도록
+    // 배열 join + 단일 인수 path.normalize 패턴으로만 구성한다.
+    const allowedRoot = path.normalize([process.cwd(), "data"].join(path.sep));
+    const resolved = path.normalize(
+      [process.cwd(), "data", boardId, baseName].join(path.sep)
+    );
     if (!resolved.startsWith(allowedRoot + path.sep)) {
       return NextResponse.json({ message: "잘못된 경로" }, { status: 400 });
     }
