@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
 import prisma from "@/lib/db";
+import { getUploadDir, getUploadRoot } from "@/lib/uploadPath";
 
 // GET /api/download?boardId=DcPds&postId=123&fileNo=1
 //
@@ -43,14 +44,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: "잘못된 경로" }, { status: 400 });
     }
 
-    // 다운로드는 레거시 이관 파일(`data/<slug>/<파일>`) 을 읽는 역할이므로
-    // 새 업로드용 UPLOAD_DIR (예: public/uploads) 를 따르면 안 된다. `data` 는 고정.
-    // Turbopack 이 path.resolve/join(multi-arg) 을 추적해 16,000+ 파일 경고를 내지 않도록
-    // 배열 join + 단일 인수 path.normalize 패턴으로만 구성한다.
-    const allowedRoot = path.normalize([process.cwd(), "data"].join(path.sep));
-    const resolved = path.normalize(
-      [process.cwd(), "data", boardId, baseName].join(path.sep)
-    );
+    // 업로드 루트는 UPLOAD_DIR 환경변수(기본 "data") 로 일원화.
+    // Turbopack 의 multi-arg path.resolve/join 추적을 피하려고 uploadPath 헬퍼
+    // (단일 인수 path.normalize 기반) 만 사용.
+    const allowedRoot = getUploadRoot();
+    const resolved = getUploadDir(`${boardId}${path.sep}${baseName}`);
     if (!resolved.startsWith(allowedRoot + path.sep)) {
       return NextResponse.json({ message: "잘못된 경로" }, { status: 400 });
     }
@@ -79,18 +77,7 @@ export async function GET(request: NextRequest) {
           `dbFileName=${JSON.stringify(fileName)} basename=${JSON.stringify(baseName)} ` +
           `resolved=${JSON.stringify(resolved)} code=${err?.code} message=${err?.message}`
       );
-      return NextResponse.json(
-        {
-          message: "파일을 찾을 수 없습니다.",
-          debug: {
-            boardId,
-            basename: baseName,
-            resolved,
-            code: err?.code,
-          },
-        },
-        { status: 404 }
-      );
+      return NextResponse.json({ message: "파일을 찾을 수 없습니다." }, { status: 404 });
     }
   } catch (error) {
     console.error("Download error:", error);
