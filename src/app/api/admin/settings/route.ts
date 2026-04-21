@@ -55,7 +55,10 @@ const SKIN_KEYS = [
   "skin_write_font_color",
 ] as const;
 
-const ALL_KEYS = [...THEME_KEYS, ...SKIN_KEYS];
+// 에디터 키 — JSON 배열 문자열로 저장 ([{label, value}, ...])
+const EDITOR_KEYS = ["editor_fonts"] as const;
+
+const ALL_KEYS = [...THEME_KEYS, ...SKIN_KEYS, ...EDITOR_KEYS];
 
 const THEME_DEFAULTS: Record<string, string> = {
   theme_nav_from: "#1d4ed8",
@@ -111,7 +114,12 @@ const SKIN_DEFAULTS: Record<string, string> = {
   skin_write_font_color: "#374151",
 };
 
-const ALL_DEFAULTS: Record<string, string> = { ...THEME_DEFAULTS, ...SKIN_DEFAULTS };
+const EDITOR_DEFAULTS: Record<string, string> = {
+  // 빈 배열 = 클라이언트가 TipTapEditor 의 DEFAULT_FONTS 를 사용
+  editor_fonts: "[]",
+};
+
+const ALL_DEFAULTS: Record<string, string> = { ...THEME_DEFAULTS, ...SKIN_DEFAULTS, ...EDITOR_DEFAULTS };
 
 // 관리자 권한 확인
 async function requireAdmin(request: NextRequest) {

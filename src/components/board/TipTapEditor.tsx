@@ -60,7 +60,10 @@ const FONT_SIZES = [
 // (Local Font Access API 는 Chrome 전용 + 사용자 권한 프롬프트 필요).
 // 따라서 한국에서 널리 깔려 있는 한글 폰트 + 일반 웹 폰트를 수동으로 정리.
 // 사용자가 목록에 없는 폰트를 쓰려면 "직접 입력" 항목으로 이름을 타이핑한다.
-const FONTS = [
+//
+// 이 DEFAULT_FONTS 는 DB(SiteSetting.editorFonts) 가 비어 있거나 불러오기 실패 시
+// 사용되는 폴백. 런타임에 관리자가 /admin/settings 에서 편집한 목록이 우선.
+const DEFAULT_FONTS = [
   { label: "기본", value: "" },
   // ─ 한글 고딕
   { label: "맑은 고딕", value: "Malgun Gothic" },
@@ -297,6 +300,26 @@ function TablePicker({ onInsert, title }: { onInsert: (rows: number, cols: numbe
 export default function TipTapEditor({ content, onChange, placeholder, minHeight, boardSlug }: TipTapEditorProps) {
   // minHeight: CSS 픽셀값 (예: "60px", "400px")
   const minH = minHeight || "400px";
+
+  // 글꼴 목록 — 관리자가 /admin/settings 에서 편집한 DB 값을 우선 사용하고,
+  // 비어 있거나 fetch 실패 시 DEFAULT_FONTS 로 폴백.
+  const [fonts, setFonts] = useState<typeof DEFAULT_FONTS>(DEFAULT_FONTS);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/editor-fonts")
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const dbFonts = Array.isArray(data?.fonts) ? data.fonts : [];
+        if (dbFonts.length > 0) {
+          setFonts([{ label: "기본", value: "" }, ...dbFonts]);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const editor = useEditor({
     extensions: [
@@ -744,7 +767,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
             목록에 없는 폰트는 "직접 입력" 으로 타이핑 가능. */}
         {(() => {
           const currentFont: string = editor.getAttributes("textStyle").fontFamily || "";
-          const currentLabel = FONTS.find((f) => f.value === currentFont)?.label
+          const currentLabel = fonts.find((f) => f.value === currentFont)?.label
             || (currentFont ? currentFont.split(",")[0].replace(/["']/g, "").trim() : "글꼴");
           return (
             <Dropdown
@@ -752,7 +775,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
               title="글꼴"
             >
               <div className="w-48 max-h-72 overflow-y-auto">
-                {FONTS.map((f) => (
+                {fonts.map((f) => (
                   <button
                     key={f.value || "default"}
                     type="button"

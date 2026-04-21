@@ -200,7 +200,7 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<"theme" | "skin">("theme");
+  const [activeTab, setActiveTab] = useState<"theme" | "skin" | "editor">("theme");
 
   useEffect(() => {
     fetch("/api/admin/settings")
@@ -213,6 +213,8 @@ export default function AdminSettingsPage() {
   function applyPreview(vals: SettingValues) {
     const root = document.documentElement;
     Object.entries(vals).forEach(([key, val]) => {
+      // 에디터 관련 키(editor_*)는 JSON 문자열이라 CSS var 대상 아님
+      if (!key.startsWith("theme_") && !key.startsWith("skin_")) return;
       const cssVar = `--${key.replace(/_/g, "-")}`;
       // border width에는 px 단위 추가
       if (key.endsWith("_width") && val && !val.endsWith("px")) {
@@ -322,6 +324,17 @@ export default function AdminSettingsPage() {
           }`}
         >
           위젯/글쓰기 스킨
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("editor")}
+          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "editor"
+              ? "border-blue-600 text-blue-700"
+              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          }`}
+        >
+          에디터
         </button>
       </div>
 
@@ -765,6 +778,14 @@ export default function AdminSettingsPage() {
         </>
       )}
 
+      {/* ==================== 에디터 탭 ==================== */}
+      {activeTab === "editor" && (
+        <EditorFontsSection
+          value={values.editor_fonts ?? "[]"}
+          onChange={(v) => handleChange("editor_fonts", v)}
+        />
+      )}
+
       {/* 공통: 메시지 + 저장/초기화 버튼 */}
       {message && (
         <div className={`px-4 py-3 rounded-lg text-sm ${
@@ -792,6 +813,169 @@ export default function AdminSettingsPage() {
         <h2 className="text-sm font-bold text-gray-700">기타 설정</h2>
         <MediaBaseUrlSetting />
         <MediaFtpSetting />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// 에디터 글꼴 목록 편집 섹션
+// ============================================================
+// SiteSetting.editor_fonts 는 JSON 배열 문자열 (`[{label,value}, ...]`) 로 저장.
+// 이 컴포넌트는 내부적으로 { label, value }[] 로 다루다가 변경 시 stringify 하여
+// 부모(handleChange("editor_fonts", ...))로 올린다. 저장 버튼은 상위 페이지가
+// 이미 가지고 있으므로 여기선 목록 편집 UI 만 담당.
+//
+// 목록이 비어 있으면(= 저장값이 "[]") 에디터는 클라이언트의 DEFAULT_FONTS 폴백을 사용한다.
+function EditorFontsSection({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  type Font = { label: string; value: string };
+  const parseFonts = (raw: string): Font[] => {
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter(
+          (f) => f && typeof f.label === "string" && typeof f.value === "string"
+        )
+        .map((f) => ({ label: String(f.label), value: String(f.value) }));
+    } catch {
+      return [];
+    }
+  };
+
+  const fonts = parseFonts(value);
+
+  function commit(next: Font[]) {
+    onChange(JSON.stringify(next));
+  }
+
+  function updateField(idx: number, field: "label" | "value", v: string) {
+    const next = fonts.map((f, i) => (i === idx ? { ...f, [field]: v } : f));
+    commit(next);
+  }
+
+  function removeRow(idx: number) {
+    commit(fonts.filter((_, i) => i !== idx));
+  }
+
+  function addRow() {
+    commit([...fonts, { label: "", value: "" }]);
+  }
+
+  function move(idx: number, dir: -1 | 1) {
+    const j = idx + dir;
+    if (j < 0 || j >= fonts.length) return;
+    const next = [...fonts];
+    [next[idx], next[j]] = [next[j], next[idx]];
+    commit(next);
+  }
+
+  function resetToBuiltin() {
+    // 내장 기본값으로 되돌릴 땐 DB 를 비워(`"[]"`) 클라이언트 DEFAULT_FONTS 가 그대로 쓰이도록.
+    commit([]);
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-700">에디터 글꼴 목록</h2>
+        <button
+          type="button"
+          onClick={resetToBuiltin}
+          className="px-3 py-1 text-xs border border-gray-300 text-gray-600 rounded hover:bg-gray-100"
+          title="DB 값을 비워 내장 기본 27종이 표시되도록"
+        >
+          내장 기본으로 되돌리기
+        </button>
+      </div>
+
+      <div className="p-5 space-y-3">
+        <p className="text-xs text-gray-500 leading-relaxed">
+          게시글/댓글 에디터의 글꼴 드롭다운에 표시될 항목. <strong>라벨</strong> 은 목록에 보일 이름,
+          <strong> 폰트명</strong> 은 실제 CSS font-family 값입니다 (PC 에 설치돼 있어야 렌더됨).
+          목록이 비어 있으면 내장 기본 27종이 사용됩니다.
+        </p>
+
+        {fonts.length === 0 ? (
+          <div className="py-8 text-center text-sm text-gray-400 bg-gray-50 border border-dashed border-gray-300 rounded">
+            저장된 목록이 없어 <strong>내장 기본 27종</strong> 이 에디터에 표시됩니다.
+            <br />
+            아래 "항목 추가" 로 커스텀 목록을 시작하세요.
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 px-1 text-[11px] text-gray-500 font-medium">
+              <span className="w-6" />
+              <span className="flex-1">라벨</span>
+              <span className="flex-1">폰트명 (font-family)</span>
+              <span className="w-24" />
+            </div>
+            {fonts.map((f, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <span className="w-6 text-xs text-gray-400 text-right select-none">
+                  {idx + 1}
+                </span>
+                <input
+                  type="text"
+                  value={f.label}
+                  onChange={(e) => updateField(idx, "label", e.target.value)}
+                  placeholder="예: 나눔고딕"
+                  className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                />
+                <input
+                  type="text"
+                  value={f.value}
+                  onChange={(e) => updateField(idx, "value", e.target.value)}
+                  placeholder="예: Nanum Gothic"
+                  className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                  style={{ fontFamily: f.value || "inherit" }}
+                />
+                <div className="w-24 flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => move(idx, -1)}
+                    disabled={idx === 0}
+                    className="w-7 h-7 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="위로"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => move(idx, 1)}
+                    disabled={idx === fonts.length - 1}
+                    className="w-7 h-7 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="아래로"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeRow(idx)}
+                    className="w-7 h-7 text-xs border border-gray-300 text-red-600 rounded hover:bg-red-50 hover:border-red-400"
+                    title="삭제"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={addRow}
+          className="w-full px-3 py-2 text-sm text-blue-600 border border-dashed border-blue-300 rounded hover:bg-blue-50"
+        >
+          + 항목 추가
+        </button>
       </div>
     </div>
   );
