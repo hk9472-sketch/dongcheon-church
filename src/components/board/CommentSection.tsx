@@ -486,21 +486,26 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
             return (
               <li
                 key={comment.id}
-                // display: flow-root (flow-root Tailwind 클래스) 로 각 댓글을 BFC(block formatting context) 로
-                // 만들어 내부 이미지의 float 가 다음 댓글로 흘러나가지 않도록 고정.
-                className={`flow-root py-3 ${rowBorder} ${
-                  isReply
-                    ? "pl-4 pr-4 border-l-[3px] border-blue-300 bg-blue-50/40"
-                    : "px-4"
-                }`}
+                // 대댓글은 파란 border-l 을 li 가 아닌 안쪽 wrapper 에 두고, 바깥 li 는 py 만 부여.
+                // 이러면 border 가 content 영역만큼만 그려져 답글 사이에 시각적 간격이 생긴다.
+                className={`${rowBorder} ${isReply ? "py-1.5" : "flow-root py-3 px-4"}`}
                 style={isReply ? { marginLeft: `${indentPx}px` } : undefined}
               >
-                {/* 부모 댓글 정보 배지 — 어느 댓글의 답글인지 한눈에 */}
+                {/* isReply 일 때만 border·bg 를 가진 안쪽 wrapper. 일반 댓글은 div 래핑 없이 바로 content. */}
+                <div
+                  className={
+                    isReply
+                      ? "flow-root py-2.5 pl-4 pr-4 border-l-[3px] border-blue-300 bg-blue-50/40 rounded-r"
+                      : "contents"
+                  }
+                >
+                {/* 부모 댓글 정보 배지 — 어느 댓글의 답글인지 한눈에. font-light 로 전체를 가늘게 해서
+                    작성자 이름 <strong> 의 대비가 살아나게. */}
                 {isReply && parent && (
-                  <div className="mb-1.5 flex items-start gap-1 text-[11px] text-gray-500 bg-white border border-gray-200 rounded px-2 py-1">
+                  <div className="mb-1.5 flex items-start gap-1 text-[11px] text-gray-500 bg-white border border-gray-200 rounded px-2 py-1 font-light">
                     <span className="text-blue-500">↪</span>
                     <span className="shrink-0">
-                      <strong className="text-gray-700">{parent.authorName}</strong> 님의 댓글:
+                      <strong className="text-gray-700 font-semibold">{parent.authorName}</strong> 님의 댓글:
                     </span>
                     <span className="truncate text-gray-500 italic">
                       {canSeeParentContent ? previewFromHtml(parent.content) : "(비밀댓글)"}
@@ -597,8 +602,10 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                   ) : (
                     // whitespace-pre-wrap 는 legacy 제로보드 댓글(평문 + \n) 과
                     // 새 TipTap 댓글(<p>/<br>) 모두에서 줄바꿈이 보이도록 보장.
+                    // prose 를 빼서 TipTap 의 inline font-size/font-family style 이
+                    // Tailwind Typography 의 :where() 규칙에 덮이지 않도록.
                     <div
-                      className="prose prose-sm max-w-none text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words"
+                      className="comment-content text-[15px] text-gray-700 leading-relaxed whitespace-pre-wrap break-words"
                       dangerouslySetInnerHTML={{ __html: sanitizeHtml(comment.content) }}
                     />
                   )
@@ -678,6 +685,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                     </div>
                   </div>
                 )}
+                </div>
               </li>
             );
           })}
