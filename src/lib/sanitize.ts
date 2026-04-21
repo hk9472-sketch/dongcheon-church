@@ -56,7 +56,7 @@ export function sanitizeHtml(dirty: string | null | undefined): string {
     ALLOWED_TAGS: [
       "p", "br", "strong", "em", "u", "s", "a", "ul", "ol", "li",
       "blockquote", "pre", "code", "h1", "h2", "h3", "h4",
-      "img", "span", "div", "table", "thead", "tbody", "tr", "td", "th", "hr",
+      "img", "span", "div", "mark", "table", "thead", "tbody", "tr", "td", "th", "hr",
       // 멀티미디어
       "video", "audio", "source", "iframe",
     ],

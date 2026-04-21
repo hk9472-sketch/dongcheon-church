@@ -56,19 +56,42 @@ const FONT_SIZES = [
 ];
 
 // ─── 글꼴 목록 ───
+// 브라우저 보안상 사용자 PC 에 설치된 폰트를 에디터가 자동으로 열람할 수 없다
+// (Local Font Access API 는 Chrome 전용 + 사용자 권한 프롬프트 필요).
+// 따라서 한국에서 널리 깔려 있는 한글 폰트 + 일반 웹 폰트를 수동으로 정리.
+// 사용자가 목록에 없는 폰트를 쓰려면 "직접 입력" 항목으로 이름을 타이핑한다.
 const FONTS = [
   { label: "기본", value: "" },
+  // ─ 한글 고딕
   { label: "맑은 고딕", value: "Malgun Gothic" },
   { label: "돋움", value: "Dotum" },
   { label: "굴림", value: "Gulim" },
+  { label: "나눔고딕", value: "Nanum Gothic" },
+  { label: "나눔스퀘어", value: "NanumSquare" },
+  { label: "나눔바른고딕", value: "NanumBarunGothic" },
+  { label: "Noto Sans KR", value: "Noto Sans KR" },
+  { label: "Pretendard", value: "Pretendard" },
+  { label: "Spoqa Han Sans", value: "Spoqa Han Sans Neo" },
+  // ─ 한글 명조/바탕
   { label: "바탕", value: "Batang" },
   { label: "궁서", value: "Gungsuh" },
-  { label: "나눔고딕", value: "Nanum Gothic" },
   { label: "나눔명조", value: "Nanum Myeongjo" },
+  { label: "Noto Serif KR", value: "Noto Serif KR" },
+  // ─ 손글씨
+  { label: "나눔손글씨 펜", value: "Nanum Pen Script" },
+  { label: "나눔손글씨 붓", value: "Nanum Brush Script" },
+  // ─ 영문
   { label: "Arial", value: "Arial" },
+  { label: "Helvetica", value: "Helvetica" },
+  { label: "Tahoma", value: "Tahoma" },
+  { label: "Verdana", value: "Verdana" },
   { label: "Times New Roman", value: "Times New Roman" },
-  { label: "Courier New", value: "Courier New" },
   { label: "Georgia", value: "Georgia" },
+  { label: "Courier New", value: "Courier New" },
+  { label: "Consolas", value: "Consolas" },
+  { label: "Comic Sans MS", value: "Comic Sans MS" },
+  { label: "Trebuchet MS", value: "Trebuchet MS" },
+  { label: "Impact", value: "Impact" },
 ];
 
 // ─── 드롭다운 ───
@@ -696,14 +719,17 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
   if (!editor) return null;
 
   return (
-    <div className="tiptap-editor border border-gray-400 rounded-lg overflow-hidden bg-white">
+    // overflow-hidden 제거 — 이게 있으면 툴바 드롭다운이 에디터 하단에서 잘린다
+    // (특히 댓글처럼 에디터 높이가 작은 곳). 둥근 모서리는 toolbar 의 rounded-t-lg
+    // 과 ProseMirror 영역의 .tiptap-editor CSS 로 처리.
+    <div className="tiptap-editor border border-gray-400 rounded-lg bg-white">
       <MediaUrlDialog
         open={mediaUrlOpen}
         onClose={() => setMediaUrlOpen(false)}
         onSubmit={handleMediaUrlSubmit}
       />
       {/* ── 툴바 ── */}
-      <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 bg-gray-50 border-b border-gray-300">
+      <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 bg-gray-50 border-b border-gray-300 rounded-t-lg">
         {/* 실행취소/재실행 */}
         <TBtn onClick={() => editor.chain().focus().undo().run()} title="실행취소">
           ↩
@@ -714,31 +740,60 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
 
         <Sep />
 
-        {/* 글꼴 */}
-        <Dropdown
-          label={<span className="text-xs w-16 truncate text-left">글꼴</span>}
-          title="글꼴"
-        >
-          <div className="w-40">
-            {FONTS.map((f) => (
-              <button
-                key={f.value || "default"}
-                type="button"
-                onClick={() => {
-                  if (f.value) {
-                    editor.chain().focus().setFontFamily(f.value).run();
-                  } else {
-                    editor.chain().focus().unsetFontFamily().run();
-                  }
-                }}
-                className="block w-full px-3 py-1.5 text-left text-sm hover:bg-blue-50"
-                style={{ fontFamily: f.value || "inherit" }}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </Dropdown>
+        {/* 글꼴 — 현재 커서 위치의 fontFamily 를 감지해 버튼 라벨로 반영.
+            목록에 없는 폰트는 "직접 입력" 으로 타이핑 가능. */}
+        {(() => {
+          const currentFont: string = editor.getAttributes("textStyle").fontFamily || "";
+          const currentLabel = FONTS.find((f) => f.value === currentFont)?.label
+            || (currentFont ? currentFont.split(",")[0].replace(/["']/g, "").trim() : "글꼴");
+          return (
+            <Dropdown
+              label={<span className="text-xs w-20 truncate text-left">{currentLabel}</span>}
+              title="글꼴"
+            >
+              <div className="w-48 max-h-72 overflow-y-auto">
+                {FONTS.map((f) => (
+                  <button
+                    key={f.value || "default"}
+                    type="button"
+                    onClick={() => {
+                      if (f.value) {
+                        editor.chain().focus().setFontFamily(f.value).run();
+                      } else {
+                        editor.chain().focus().unsetFontFamily().run();
+                      }
+                    }}
+                    className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-blue-50 ${
+                      currentFont === f.value ? "bg-blue-50 font-semibold" : ""
+                    }`}
+                    style={{ fontFamily: f.value || "inherit" }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const name = window.prompt(
+                      "사용할 글꼴 이름을 입력하세요. PC 에 설치된 폰트면 적용됩니다.\n예) 나눔스퀘어, Pretendard, Times New Roman",
+                      currentFont
+                    );
+                    if (name === null) return;
+                    const trimmed = name.trim();
+                    if (trimmed) {
+                      editor.chain().focus().setFontFamily(trimmed).run();
+                    } else {
+                      editor.chain().focus().unsetFontFamily().run();
+                    }
+                  }}
+                  className="block w-full px-3 py-1.5 text-left text-xs text-blue-600 border-t border-gray-200 hover:bg-blue-50"
+                >
+                  ✎ 직접 입력…
+                </button>
+              </div>
+            </Dropdown>
+          );
+        })()}
 
         {/* 글자 크기 */}
         <Dropdown
