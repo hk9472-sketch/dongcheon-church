@@ -5,8 +5,10 @@ import prisma from "@/lib/db";
 
 // GET /api/download?boardId=DcPds&postId=123&fileNo=1
 //
-// posts.fileName1/fileName2 는 "data/<slug>/<파일>" 형식의 프로젝트 루트 기준 상대경로.
-// 레거시 이관 중 끼어있던 '타임스탬프 서브폴더' 는 별도 SQL 일괄 정리로 제거돼 있다고 전제.
+// 기준 규약: 실제 파일은 항상 `data/<slug>/<파일명>` 에 존재한다.
+// DB 의 posts.fileName1/fileName2 는 레거시 이관으로 접두사가 제각각이라
+// (`1/foo.hwp`, `data/<다른slug>/foo.hwp`, `data/<slug>/<숫자>/foo.hwp` 등) 신뢰하지 않는다.
+// 저장된 값에서 basename 만 뽑고, boardId(slug) 를 조합해 물리 경로를 재구성한다.
 export async function GET(request: NextRequest) {
   try {
     const boardId = request.nextUrl.searchParams.get("boardId");
@@ -14,6 +16,11 @@ export async function GET(request: NextRequest) {
     const fileNo = parseInt(request.nextUrl.searchParams.get("fileNo") || "1", 10);
 
     if (!boardId || isNaN(postId)) {
+      return NextResponse.json({ message: "잘못된 요청" }, { status: 400 });
+    }
+
+    // slug 도 path traversal 방지 — 영문/숫자/언더스코어/하이픈만 허용
+    if (!/^[A-Za-z0-9_-]+$/.test(boardId)) {
       return NextResponse.json({ message: "잘못된 요청" }, { status: 400 });
     }
 
@@ -29,20 +36,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: "첨부파일 없음" }, { status: 404 });
     }
 
-    // 경로 순회(path traversal) 방지
-    if (
-      fileName.includes("..") ||
-      path.isAbsolute(fileName) ||
-      /^[a-zA-Z]:[\\/]/.test(fileName) ||
-      fileName.startsWith("\\\\")
-    ) {
+    // 저장값의 접두사(`1/`, `data/<slug>/`, 타임스탬프 서브폴더 등) 는 모두 무시하고 basename 만 사용.
+    // Windows 경로(`\`) 도 대비해 슬래시로 통일 후 마지막 세그먼트 추출.
+    const baseName = fileName.replace(/\\/g, "/").split("/").filter(Boolean).pop() || "";
+    if (!baseName || baseName.includes("..")) {
       return NextResponse.json({ message: "잘못된 경로" }, { status: 400 });
     }
 
-    const filePath = path.join(process.cwd(), fileName);
-    const resolved = path.resolve(filePath);
     const allowedRoot = path.resolve(process.cwd(), "data");
-    if (!resolved.startsWith(allowedRoot + path.sep) && resolved !== allowedRoot) {
+    const resolved = path.resolve(allowedRoot, boardId, baseName);
+    if (!resolved.startsWith(allowedRoot + path.sep)) {
       return NextResponse.json({ message: "잘못된 경로" }, { status: 400 });
     }
 
@@ -55,7 +58,7 @@ export async function GET(request: NextRequest) {
         await prisma.$executeRaw`UPDATE posts SET download1 = download1 + 1 WHERE id = ${postId}`;
       }
 
-      const displayName = origName || path.basename(fileName);
+      const displayName = origName || baseName;
       return new NextResponse(fileBuffer, {
         headers: {
           "Content-Type": "application/octet-stream",
