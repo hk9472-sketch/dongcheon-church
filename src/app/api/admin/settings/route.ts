@@ -99,7 +99,7 @@ const SKIN_DEFAULTS: Record<string, string> = {
   skin_widget_post_font: "",
   skin_widget_post_size: "14px",
   skin_widget_post_color: "#111827",
-  skin_widget_post_weight: "normal",
+  skin_widget_post_weight: "300",
   skin_widget_post_decoration: "none",
   skin_widget_post_style: "normal",
   skin_widget_author_font: "",

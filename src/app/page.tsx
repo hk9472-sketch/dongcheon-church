@@ -421,7 +421,7 @@ function BoardWidget({ board }: {
         style={{
           backgroundColor: "var(--skin-widget-header-bg)",
           borderBottom: "var(--skin-widget-divider-width) solid var(--skin-widget-divider-color)",
-          padding: "var(--skin-widget-header-padding, 4px 0)",
+          padding: "var(--skin-widget-header-padding, 2px 0)",
           paddingLeft: "0.625rem",
           paddingRight: "0.75rem",
         }}
@@ -535,7 +535,7 @@ function RecentPostsWidget({ posts }: { posts: RecentPost[] }) {
         style={{
           backgroundColor: "var(--skin-widget-header-bg)",
           borderBottom: "var(--skin-widget-divider-width) solid var(--skin-widget-divider-color)",
-          padding: "var(--skin-widget-header-padding, 4px 0)",
+          padding: "var(--skin-widget-header-padding, 2px 0)",
           paddingLeft: "0.625rem",
           paddingRight: "0.75rem",
         }}
@@ -604,7 +604,7 @@ function RecentCommentsWidget({ comments }: { comments: RecentComment[] }) {
         style={{
           backgroundColor: "var(--skin-widget-header-bg)",
           borderBottom: "var(--skin-widget-divider-width) solid var(--skin-widget-divider-color)",
-          padding: "var(--skin-widget-header-padding, 4px 0)",
+          padding: "var(--skin-widget-header-padding, 2px 0)",
           paddingLeft: "0.625rem",
           paddingRight: "0.75rem",
         }}
