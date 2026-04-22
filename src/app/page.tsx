@@ -87,7 +87,8 @@ function stripHtml(html: string): string {
 // 현재: Promise.all 로 (전체 보드 × 2) 쿼리를 전부 병렬 발행 → 네트워크 지연은 1회분만 노출
 // (일반글 정렬이 headnum/arrangenum 이라 단일 findMany 로 묶기 어려워 병렬화만 적용)
 async function getRecentPostsBatch(
-  boardIds: number[]
+  boardIds: number[],
+  rows: number
 ): Promise<Map<number, RecentPost[]>> {
   const fiveDaysAgoW = new Date(Date.now() - FIVE_DAYS_MS);
   const postSelect = {
@@ -117,14 +118,14 @@ async function getRecentPostsBatch(
           prisma.post.findMany({
             where: { boardId, isNotice: false },
             orderBy: [{ headnum: "asc" }, { arrangenum: "asc" }],
-            take: 5,
+            take: rows,
             select: postSelect,
           }),
         ]);
-        // 공지가 2개 미만이면 일반글을 더 채워 총 5개 유지 (기존 take: 5 - notices.length 동작과 동일)
+        // 공지가 2개 미만이면 일반글을 더 채워 총 rows 개 유지.
         const combined: RecentPost[] = [
-          ...notices,
-          ...posts.slice(0, 5 - notices.length),
+          ...notices.slice(0, Math.min(notices.length, rows)),
+          ...posts.slice(0, Math.max(0, rows - notices.length)),
         ].map(({ comments, ...rest }) => ({
           ...rest,
           hasRecentComment: comments.length > 0,
@@ -191,7 +192,7 @@ async function getLatestMotto(): Promise<string | null> {
   }
 }
 
-async function getRecentNewPosts(): Promise<RecentPost[]> {
+async function getRecentNewPosts(rows: number): Promise<RecentPost[]> {
   try {
     const fiveDaysAgo = new Date(Date.now() - FIVE_DAYS_MS);
     const posts = await prisma.post.findMany({
@@ -203,7 +204,7 @@ async function getRecentNewPosts(): Promise<RecentPost[]> {
         ],
       },
       orderBy: { updatedAt: "desc" },
-      take: 5,
+      take: rows,
       select: {
         id: true, subject: true, createdAt: true, updatedAt: true,
         isNotice: true, isSecret: true, totalComment: true, authorName: true, depth: true,
@@ -226,7 +227,7 @@ async function getRecentNewPosts(): Promise<RecentPost[]> {
   }
 }
 
-async function getRecentComments(): Promise<RecentComment[]> {
+async function getRecentComments(rows: number): Promise<RecentComment[]> {
   try {
     const fiveDaysAgo = new Date(Date.now() - FIVE_DAYS_MS);
     return await prisma.comment.findMany({
@@ -237,7 +238,7 @@ async function getRecentComments(): Promise<RecentComment[]> {
         ],
       },
       orderBy: { updatedAt: "desc" },
-      take: 5,
+      take: rows,
       select: {
         id: true, content: true, authorName: true, createdAt: true, updatedAt: true, postId: true,
         post: { select: { subject: true, board: { select: { slug: true, title: true } } } },
@@ -278,6 +279,13 @@ export default async function HomePage() {
     isLoggedIn = !!session && session.expires > new Date();
   }
 
+  // 위젯 레이아웃 설정 (관리자가 /admin/settings 에서 변경 가능)
+  const rowsRow = await prisma.siteSetting.findUnique({ where: { key: "skin_widget_rows" } });
+  const widgetRows = (() => {
+    const n = parseInt(rowsRow?.value || "5", 10);
+    return Number.isFinite(n) && n >= 3 && n <= 10 ? n : 5;
+  })();
+
   // DB에서 메인 노출 게시판 조회
   const mainBoards = await prisma.board.findMany({
     where: { showOnMain: true },
@@ -303,10 +311,10 @@ export default async function HomePage() {
   //   - 정렬(headnum/arrangenum) 때문에 단일 findMany 통합은 불가.
   const visibleBoardIds = visibleSlugs.map((slug) => boardMap.get(slug)!.id);
   const [postsByBoard, latestNotice, recentNewPosts, recentComments] = await Promise.all([
-    getRecentPostsBatch(visibleBoardIds),
+    getRecentPostsBatch(visibleBoardIds, widgetRows),
     getLatestNotice(),
-    getRecentNewPosts(),
-    getRecentComments(),
+    getRecentNewPosts(widgetRows),
+    getRecentComments(widgetRows),
   ]);
 
   const boardPostsArr = visibleSlugs.map((slug) => {
@@ -338,48 +346,57 @@ export default async function HomePage() {
         <NoticeWidget latestNotice={latestNotice} noticeContentHtml={noticeContentHtml} />
       </div>
 
-      {/* ===== 데스크톱: 3열 균등 × 4행 CSS Grid (뷰포트 맞춤) ===== */}
-      <div className="hidden lg:grid grid-cols-3 grid-rows-4 gap-2" style={{ height: "calc(100dvh - 140px)" }}>
+      {/* ===== 데스크톱: 3열 균등 Grid (위젯 높이는 rows × row-height 로 자연 결정) ===== */}
+      <div
+        className="hidden lg:grid grid-cols-3 auto-rows-min"
+        style={{ gap: "var(--skin-widget-gap, 8px)" }}
+      >
         {/* Row 1: 행정실, 공지사항, 주교/중간반 */}
-        {boardDataMap.has("DcOffice") && <BoardWidget board={boardDataMap.get("DcOffice")!} />}
+        {boardDataMap.has("DcOffice") && <BoardWidget board={boardDataMap.get("DcOffice")!} rows={widgetRows} />}
         <NoticeWidget latestNotice={latestNotice} noticeContentHtml={noticeContentHtml} />
-        {boardDataMap.has("DcElement") && <BoardWidget board={boardDataMap.get("DcElement")!} />}
+        {boardDataMap.has("DcElement") && <BoardWidget board={boardDataMap.get("DcElement")!} rows={widgetRows} />}
 
         {/* Row 2: 심방, 자료실(설교재독), 문답방 */}
-        {boardDataMap.has("DcPredictor") && <BoardWidget board={boardDataMap.get("DcPredictor")!} />}
-        {boardDataMap.has("DcPds") && <BoardWidget board={boardDataMap.get("DcPds")!} />}
-        {boardDataMap.has("DcQuestion") && <BoardWidget board={boardDataMap.get("DcQuestion")!} />}
+        {boardDataMap.has("DcPredictor") && <BoardWidget board={boardDataMap.get("DcPredictor")!} rows={widgetRows} />}
+        {boardDataMap.has("DcPds") && <BoardWidget board={boardDataMap.get("DcPds")!} rows={widgetRows} />}
+        {boardDataMap.has("DcQuestion") && <BoardWidget board={boardDataMap.get("DcQuestion")!} rows={widgetRows} />}
 
         {/* Row 3: 연경실, 연구실, 새글/수정글 */}
-        {boardDataMap.has("DcBibleStudyX") && <BoardWidget board={boardDataMap.get("DcBibleStudyX")!} />}
-        {boardDataMap.has("DcStudy") && <BoardWidget board={boardDataMap.get("DcStudy")!} />}
-        <RecentPostsWidget posts={recentNewPosts} />
+        {boardDataMap.has("DcBibleStudyX") && <BoardWidget board={boardDataMap.get("DcBibleStudyX")!} rows={widgetRows} />}
+        {boardDataMap.has("DcStudy") && <BoardWidget board={boardDataMap.get("DcStudy")!} rows={widgetRows} />}
+        <RecentPostsWidget posts={recentNewPosts} rows={widgetRows} />
 
         {/* Row 4: 권찰회(성경읽기), 사진자료실, 새댓글 */}
-        {boardDataMap.has("DcCouncil") && <BoardWidget board={boardDataMap.get("DcCouncil")!} />}
-        {boardDataMap.has("PkGallery") && <BoardWidget board={boardDataMap.get("PkGallery")!} />}
-        <RecentCommentsWidget comments={recentComments} />
+        {boardDataMap.has("DcCouncil") && <BoardWidget board={boardDataMap.get("DcCouncil")!} rows={widgetRows} />}
+        {boardDataMap.has("PkGallery") && <BoardWidget board={boardDataMap.get("PkGallery")!} rows={widgetRows} />}
+        <RecentCommentsWidget comments={recentComments} rows={widgetRows} />
       </div>
 
       {/* ===== 모바일/태블릿: 공지사항 → 게시판 → 새글/새댓글 ===== */}
-      <div className="lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
+      <div
+        className="lg:hidden grid grid-cols-1 sm:grid-cols-2"
+        style={{ gap: "var(--skin-widget-gap, 8px)" }}
+      >
         {GRID_LAYOUT.flat()
           .filter((s) => !specialSlugs.includes(s) && boardDataMap.has(s))
-          .map((slug) => <BoardWidget key={slug} board={boardDataMap.get(slug)!} />)
+          .map((slug) => <BoardWidget key={slug} board={boardDataMap.get(slug)!} rows={widgetRows} />)
         }
-        <RecentPostsWidget posts={recentNewPosts} />
-        <RecentCommentsWidget comments={recentComments} />
+        <RecentPostsWidget posts={recentNewPosts} rows={widgetRows} />
+        <RecentCommentsWidget comments={recentComments} rows={widgetRows} />
       </div>
     </div>
   );
 }
 
-/* 공지사항 위젯 */
+/* 공지사항 위젯 — 인접 위젯과 높이 맞추려 row-height × rows + 헤더분 만큼 min-height */
 function NoticeWidget({ latestNotice, noticeContentHtml }: { latestNotice: NoticeDetail | null; noticeContentHtml: string }) {
   return (
     <div
-      className="bg-white overflow-hidden rounded-lg shadow-sm h-full flex flex-col"
-      style={{ border: "var(--skin-widget-border-width) solid var(--skin-widget-border-color)" }}
+      className="bg-white overflow-hidden rounded-lg shadow-sm flex flex-col"
+      style={{
+        border: "var(--skin-widget-border-width) solid var(--skin-widget-border-color)",
+        minHeight: "calc(var(--skin-widget-row-height, 1.75rem) * var(--skin-widget-rows, 5) + 2rem)",
+      }}
     >
       {latestNotice ? (
         <div className="p-2 sm:p-3 flex flex-col flex-1">
@@ -399,21 +416,21 @@ function NoticeWidget({ latestNotice, noticeContentHtml }: { latestNotice: Notic
   );
 }
 
-/* 게시판 위젯 컴포넌트 - 5줄 고정 높이 */
-function BoardWidget({ board }: {
+/* 게시판 위젯 컴포넌트 — rows 수만큼 줄 확보, 각 줄은 --skin-widget-row-height 고정 */
+function BoardWidget({ board, rows }: {
   board: {
     slug: string;
     title: string;
     icon: string;
     posts: RecentPost[];
   };
+  rows: number;
 }) {
-  // 항상 5줄 슬롯 확보 (부족하면 빈 줄)
-  const slots = Array.from({ length: 5 }, (_, i) => board.posts[i] ?? null);
+  const slots = Array.from({ length: rows }, (_, i) => board.posts[i] ?? null);
 
   return (
     <div
-      className="bg-white rounded-lg shadow-sm overflow-hidden h-full flex flex-col"
+      className="bg-white rounded-lg shadow-sm overflow-hidden flex flex-col"
       style={{ border: "var(--skin-widget-border-width) solid var(--skin-widget-border-color)" }}
     >
       <div
@@ -442,9 +459,13 @@ function BoardWidget({ board }: {
           더보기 &rsaquo;
         </Link>
       </div>
-      <ul className="flex-1 flex flex-col">
+      <ul className="flex flex-col">
         {slots.map((post, i) => (
-          <li key={post?.id ?? `empty-${i}`} className="border-b border-gray-100 last:border-b-0 flex-1 flex items-center">
+          <li
+            key={post?.id ?? `empty-${i}`}
+            className="border-b border-gray-100 last:border-b-0 flex items-center"
+            style={{ height: "var(--skin-widget-row-height, 1.75rem)" }}
+          >
             {post ? (
               <Link
                 href={`/board/${board.slug}/${post.id}`}
@@ -523,11 +544,11 @@ function PostBadge({ createdAt, updatedAt }: { createdAt: Date; updatedAt: Date 
   return null;
 }
 
-/* 새글/수정글 위젯 (h-full로 그리드 높이에 맞춤) */
-function RecentPostsWidget({ posts }: { posts: RecentPost[] }) {
+/* 새글/수정글 위젯 */
+function RecentPostsWidget({ posts, rows }: { posts: RecentPost[]; rows: number }) {
   return (
     <div
-      className="bg-white rounded-lg shadow-sm overflow-hidden h-full flex flex-col"
+      className="bg-white rounded-lg shadow-sm overflow-hidden flex flex-col"
       style={{ border: "var(--skin-widget-border-width) solid var(--skin-widget-border-color)" }}
     >
       <div
@@ -549,9 +570,13 @@ function RecentPostsWidget({ posts }: { posts: RecentPost[] }) {
           <span>새글/수정글</span>
         </Link>
       </div>
-      <ul className="flex-1 flex flex-col">
-        {Array.from({ length: 5 }, (_, i) => posts[i] ?? null).map((post, i) => (
-          <li key={post?.id ?? `empty-post-${i}`} className="border-b border-gray-100 last:border-b-0 flex-1 flex items-center">
+      <ul className="flex flex-col">
+        {Array.from({ length: rows }, (_, i) => posts[i] ?? null).map((post, i) => (
+          <li
+            key={post?.id ?? `empty-post-${i}`}
+            className="border-b border-gray-100 last:border-b-0 flex items-center"
+            style={{ height: "var(--skin-widget-row-height, 1.75rem)" }}
+          >
             {post ? (
               <Link
                 href={`/board/${post.boardSlug}/${post.id}`}
@@ -592,11 +617,11 @@ function RecentPostsWidget({ posts }: { posts: RecentPost[] }) {
   );
 }
 
-/* 새댓글 위젯 (h-full로 그리드 높이에 맞춤) */
-function RecentCommentsWidget({ comments }: { comments: RecentComment[] }) {
+/* 새댓글 위젯 */
+function RecentCommentsWidget({ comments, rows }: { comments: RecentComment[]; rows: number }) {
   return (
     <div
-      className="bg-white rounded-lg shadow-sm overflow-hidden h-full flex flex-col"
+      className="bg-white rounded-lg shadow-sm overflow-hidden flex flex-col"
       style={{ border: "var(--skin-widget-border-width) solid var(--skin-widget-border-color)" }}
     >
       <div
@@ -618,9 +643,13 @@ function RecentCommentsWidget({ comments }: { comments: RecentComment[] }) {
           <span>새댓글</span>
         </Link>
       </div>
-      <ul className="flex-1 flex flex-col">
-        {Array.from({ length: 5 }, (_, i) => comments[i] ?? null).map((comment, i) => (
-          <li key={comment?.id ?? `empty-comment-${i}`} className="border-b border-gray-100 last:border-b-0 flex-1 flex items-center">
+      <ul className="flex flex-col">
+        {Array.from({ length: rows }, (_, i) => comments[i] ?? null).map((comment, i) => (
+          <li
+            key={comment?.id ?? `empty-comment-${i}`}
+            className="border-b border-gray-100 last:border-b-0 flex items-center"
+            style={{ height: "var(--skin-widget-row-height, 1.75rem)" }}
+          >
             {comment ? (
               <Link
                 href={`/board/${comment.post.board.slug}/${comment.postId}`}

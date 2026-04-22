@@ -55,6 +55,9 @@ const SKIN_DEFAULTS: Record<string, string> = {
   skin_widget_header_bg: "#eff6ff",
   skin_widget_height: "12rem",
   skin_widget_header_padding: "2px 0",
+  skin_widget_rows: "5",
+  skin_widget_row_height: "1.75rem",
+  skin_widget_gap: "8px",
   skin_widget_name_font: "",
   skin_widget_name_size: "14px",
   skin_widget_name_color: "#1f2937",
@@ -105,72 +108,26 @@ const FONT_OPTIONS = [
   { value: "monospace", label: "Monospace" },
 ];
 
+// 위젯 레이아웃 · 외관 관련 설정을 하나의 섹션으로 묶어 상단 배치.
+// 폰트 스타일은 SKIN_SECTIONS 가 아닌 별도의 compact 표(아래 FONT_ROLES/FONT_ATTRS)로 그린다.
 const SKIN_SECTIONS = [
   {
-    title: "위젯 테두리/배경",
+    title: "위젯 레이아웃",
+    fields: [
+      { key: "skin_widget_rows", label: "줄 수", type: "number" as const },
+      { key: "skin_widget_row_height", label: "줄 높이", type: "size" as const },
+      { key: "skin_widget_gap", label: "위젯 간격", type: "size" as const },
+      { key: "skin_widget_header_padding", label: "헤더 패딩", type: "size" as const },
+    ],
+  },
+  {
+    title: "위젯 외관",
     fields: [
       { key: "skin_widget_border_color", label: "테두리 색상", type: "color" as const },
       { key: "skin_widget_border_width", label: "테두리 두께 (px)", type: "number" as const },
       { key: "skin_widget_divider_color", label: "구분선 색상", type: "color" as const },
       { key: "skin_widget_divider_width", label: "구분선 두께 (px)", type: "number" as const },
       { key: "skin_widget_header_bg", label: "헤더 배경색", type: "color" as const },
-      { key: "skin_widget_height", label: "위젯 높이", type: "size" as const },
-      { key: "skin_widget_header_padding", label: "헤더 패딩", type: "size" as const },
-    ],
-  },
-  {
-    title: "게시판명 폰트",
-    fields: [
-      { key: "skin_widget_name_font", label: "글꼴", type: "font" as const },
-      { key: "skin_widget_name_size", label: "글자 크기", type: "size" as const },
-      { key: "skin_widget_name_color", label: "글자 색상", type: "color" as const },
-      { key: "skin_widget_name_weight", label: "글자 굵기", type: "weight" as const },
-      { key: "skin_widget_name_decoration", label: "밑줄", type: "decoration" as const },
-      { key: "skin_widget_name_style", label: "이탤릭", type: "fontstyle" as const },
-    ],
-  },
-  {
-    title: "더보기 폰트",
-    fields: [
-      { key: "skin_widget_more_font", label: "글꼴", type: "font" as const },
-      { key: "skin_widget_more_size", label: "글자 크기", type: "size" as const },
-      { key: "skin_widget_more_color", label: "글자 색상", type: "color" as const },
-      { key: "skin_widget_more_weight", label: "글자 굵기", type: "weight" as const },
-      { key: "skin_widget_more_decoration", label: "밑줄", type: "decoration" as const },
-      { key: "skin_widget_more_style", label: "이탤릭", type: "fontstyle" as const },
-    ],
-  },
-  {
-    title: "게시글 일자 폰트",
-    fields: [
-      { key: "skin_widget_date_font", label: "글꼴", type: "font" as const },
-      { key: "skin_widget_date_size", label: "글자 크기", type: "size" as const },
-      { key: "skin_widget_date_color", label: "글자 색상", type: "color" as const },
-      { key: "skin_widget_date_weight", label: "글자 굵기", type: "weight" as const },
-      { key: "skin_widget_date_decoration", label: "밑줄", type: "decoration" as const },
-      { key: "skin_widget_date_style", label: "이탤릭", type: "fontstyle" as const },
-    ],
-  },
-  {
-    title: "게시글 제목 폰트",
-    fields: [
-      { key: "skin_widget_post_font", label: "글꼴", type: "font" as const },
-      { key: "skin_widget_post_size", label: "글자 크기", type: "size" as const },
-      { key: "skin_widget_post_color", label: "글자 색상", type: "color" as const },
-      { key: "skin_widget_post_weight", label: "글자 굵기", type: "weight" as const },
-      { key: "skin_widget_post_decoration", label: "밑줄", type: "decoration" as const },
-      { key: "skin_widget_post_style", label: "이탤릭", type: "fontstyle" as const },
-    ],
-  },
-  {
-    title: "게시글 작성자 폰트",
-    fields: [
-      { key: "skin_widget_author_font", label: "글꼴", type: "font" as const },
-      { key: "skin_widget_author_size", label: "글자 크기", type: "size" as const },
-      { key: "skin_widget_author_color", label: "글자 색상", type: "color" as const },
-      { key: "skin_widget_author_weight", label: "글자 굵기", type: "weight" as const },
-      { key: "skin_widget_author_decoration", label: "밑줄", type: "decoration" as const },
-      { key: "skin_widget_author_style", label: "이탤릭", type: "fontstyle" as const },
     ],
   },
   {
@@ -183,6 +140,25 @@ const SKIN_SECTIONS = [
     ],
   },
 ];
+
+// 위젯 텍스트 스타일을 행(역할) × 열(속성) 표로 표시하기 위한 정의.
+// 30개 폰트 필드가 한 화면에 깔끔하게 들어감.
+const FONT_ROLES = [
+  { prefix: "skin_widget_name", label: "게시판명" },
+  { prefix: "skin_widget_more", label: "더보기" },
+  { prefix: "skin_widget_date", label: "일자" },
+  { prefix: "skin_widget_post", label: "게시글 제목" },
+  { prefix: "skin_widget_author", label: "작성자" },
+] as const;
+
+const FONT_ATTRS = [
+  { suffix: "font", label: "글꼴", type: "font" as const },
+  { suffix: "size", label: "크기", type: "size" as const },
+  { suffix: "color", label: "색상", type: "color" as const },
+  { suffix: "weight", label: "굵기", type: "weight" as const },
+  { suffix: "decoration", label: "밑줄", type: "decoration" as const },
+  { suffix: "style", label: "이탤릭", type: "fontstyle" as const },
+] as const;
 
 // 모든 키의 기본값 통합 맵
 const ALL_DEFAULTS: Record<string, string> = {
@@ -587,52 +563,119 @@ export default function AdminSettingsPage() {
                       </div>
                     )}
 
-                    {field.type === "weight" && (
-                      <div className="flex items-center gap-3">
-                        <select
-                          value={sv(field.key)}
-                          onChange={(e) => handleChange(field.key, e.target.value)}
-                          className="w-32 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                        >
-                          <option value="normal">보통</option>
-                          <option value="bold">굵게</option>
-                        </select>
-                        <ResetBtn fieldKey={field.key} />
-                      </div>
-                    )}
-
-                    {field.type === "decoration" && (
-                      <div className="flex items-center gap-3">
-                        <select
-                          value={sv(field.key)}
-                          onChange={(e) => handleChange(field.key, e.target.value)}
-                          className="w-32 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                        >
-                          <option value="none">없음</option>
-                          <option value="underline">밑줄</option>
-                        </select>
-                        <ResetBtn fieldKey={field.key} />
-                      </div>
-                    )}
-
-                    {field.type === "fontstyle" && (
-                      <div className="flex items-center gap-3">
-                        <select
-                          value={sv(field.key)}
-                          onChange={(e) => handleChange(field.key, e.target.value)}
-                          className="w-32 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                        >
-                          <option value="normal">보통</option>
-                          <option value="italic">이탤릭</option>
-                        </select>
-                        <ResetBtn fieldKey={field.key} />
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
             </div>
           ))}
+
+          {/* ==================== 위젯 텍스트 스타일 (compact 표) ==================== */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+              <h2 className="text-sm font-semibold text-gray-700">위젯 텍스트 스타일</h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                위젯 내 각 텍스트 역할별 글꼴·크기·색상·굵기 등을 한눈에.
+              </p>
+            </div>
+            <div className="p-3 overflow-x-auto">
+              <table className="w-full text-xs border-collapse min-w-[720px]">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-600">
+                    <th className="border border-gray-200 px-2 py-1.5 text-left w-20">역할</th>
+                    {FONT_ATTRS.map((a) => (
+                      <th key={a.suffix} className="border border-gray-200 px-2 py-1.5 text-left font-medium">
+                        {a.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {FONT_ROLES.map((role) => (
+                    <tr key={role.prefix}>
+                      <td className="border border-gray-200 px-2 py-1.5 font-medium text-gray-700 bg-gray-50/50">
+                        {role.label}
+                      </td>
+                      {FONT_ATTRS.map((attr) => {
+                        const key = `${role.prefix}_${attr.suffix}`;
+                        const val = sv(key);
+                        return (
+                          <td key={attr.suffix} className="border border-gray-200 px-1 py-1">
+                            {attr.type === "font" && (
+                              <select
+                                value={val}
+                                onChange={(e) => handleChange(key, e.target.value)}
+                                className="w-full text-xs px-1 py-1 border border-gray-200 rounded focus:outline-none focus:border-blue-400"
+                              >
+                                {FONT_OPTIONS.map((f) => (
+                                  <option key={f.value} value={f.value}>{f.label}</option>
+                                ))}
+                              </select>
+                            )}
+                            {attr.type === "size" && (
+                              <input
+                                type="text"
+                                value={val}
+                                onChange={(e) => handleChange(key, e.target.value)}
+                                className="w-16 text-xs px-1 py-1 border border-gray-200 rounded font-mono focus:outline-none focus:border-blue-400"
+                                placeholder={SKIN_DEFAULTS[key] || "14px"}
+                              />
+                            )}
+                            {attr.type === "color" && (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="color"
+                                  value={val || "#000000"}
+                                  onChange={(e) => handleChange(key, e.target.value)}
+                                  className="w-7 h-7 rounded cursor-pointer border border-gray-300 p-0"
+                                />
+                                <input
+                                  type="text"
+                                  value={val}
+                                  onChange={(e) => handleChange(key, e.target.value)}
+                                  className="w-20 text-xs px-1 py-1 border border-gray-200 rounded font-mono focus:outline-none focus:border-blue-400"
+                                />
+                              </div>
+                            )}
+                            {attr.type === "weight" && (
+                              <select
+                                value={val}
+                                onChange={(e) => handleChange(key, e.target.value)}
+                                className="w-full text-xs px-1 py-1 border border-gray-200 rounded focus:outline-none focus:border-blue-400"
+                              >
+                                <option value="300">가늘게</option>
+                                <option value="normal">보통</option>
+                                <option value="bold">굵게</option>
+                              </select>
+                            )}
+                            {attr.type === "decoration" && (
+                              <select
+                                value={val}
+                                onChange={(e) => handleChange(key, e.target.value)}
+                                className="w-full text-xs px-1 py-1 border border-gray-200 rounded focus:outline-none focus:border-blue-400"
+                              >
+                                <option value="none">없음</option>
+                                <option value="underline">밑줄</option>
+                              </select>
+                            )}
+                            {attr.type === "fontstyle" && (
+                              <select
+                                value={val}
+                                onChange={(e) => handleChange(key, e.target.value)}
+                                className="w-full text-xs px-1 py-1 border border-gray-200 rounded focus:outline-none focus:border-blue-400"
+                              >
+                                <option value="normal">보통</option>
+                                <option value="italic">이탤릭</option>
+                              </select>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           {/* 위젯 미리보기 */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
