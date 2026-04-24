@@ -47,8 +47,12 @@ function WriteForm({ boardId }: { boardId: string }) {
   const [commentPolicy, setCommentPolicy] = useState("ALLOW_EDIT");
   const [sitelink1, setSitelink1] = useState("");
   const [sitelink2, setSitelink2] = useState("");
-  const [file1, setFile1] = useState<File | null>(null);
-  const [file2, setFile2] = useState<File | null>(null);
+  // 기존 첨부 (수정 모드에서만 채워짐) — 유지할지 삭제할지 UI 에서 토글
+  const [existingAttachments, setExistingAttachments] = useState<
+    { id: number; origName: string; fileName: string; sortOrder: number }[]
+  >([]);
+  // 새로 추가할 파일들
+  const [newFiles, setNewFiles] = useState<File[]>([]);
   const [categoryId, setCategoryId] = useState("");
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
   const [useCategory, setUseCategory] = useState(false);
@@ -155,8 +159,22 @@ function WriteForm({ boardId }: { boardId: string }) {
             setSitelink1(post.sitelink1 || "");
             setSitelink2(post.sitelink2 || "");
             if (post.categoryId) setCategoryId(String(post.categoryId));
+            // 기존 첨부 로드
+            if (Array.isArray(post.attachments) && post.attachments.length > 0) {
+              setExistingAttachments(
+                post.attachments.map((a: { id: number; fileName: string; origName: string; sortOrder: number }) => ({
+                  id: a.id,
+                  fileName: a.fileName,
+                  origName: a.origName,
+                  sortOrder: a.sortOrder,
+                }))
+              );
+            }
             // 수정 모드에서 기존 링크/파일 있으면 확장 섹션 열기
-            if (post.sitelink1 || post.sitelink2 || post.email || post.homepage) {
+            if (
+              post.sitelink1 || post.sitelink2 || post.email || post.homepage ||
+              (Array.isArray(post.attachments) && post.attachments.length > 0)
+            ) {
               setShowExtra(true);
             }
           }
@@ -223,8 +241,11 @@ function WriteForm({ boardId }: { boardId: string }) {
       formData.append("sitelink2", sitelink2);
       if (categoryId) formData.append("categoryId", categoryId);
       if (parentNo) formData.append("parentNo", parentNo);
-      if (file1) formData.append("file1", file1);
-      if (file2) formData.append("file2", file2);
+      // 다중 첨부 — 유지할 기존 파일 id 배열
+      formData.append("keepIds", JSON.stringify(existingAttachments.map((a) => a.id)));
+      for (const f of newFiles) {
+        formData.append("files", f);
+      }
       // 비로그인 시 CAPTCHA 토큰 포함 — 수정 모드에서도 필수
       if (isLoggedIn !== true) {
         formData.append("captchaAnswer", captchaAnswer);
@@ -419,41 +440,94 @@ function WriteForm({ boardId }: { boardId: string }) {
               첨부파일
             </h2>
           </div>
-          <div className="p-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">파일 1</label>
-                <label className="group flex items-center gap-3 px-3.5 py-2.5 border border-gray-400 border-dashed rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors">
-                  <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                  </svg>
-                  <span className="text-sm text-gray-500 group-hover:text-blue-600 truncate transition-colors">
-                    {file1 ? file1.name : "파일을 선택하세요"}
-                  </span>
-                  <input
-                    type="file"
-                    onChange={(e) => setFile1(e.target.files?.[0] || null)}
-                    className="hidden"
-                  />
-                </label>
+          <div className="p-5 space-y-3">
+            {/* 기존 첨부 목록 (수정 모드) */}
+            {existingAttachments.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-xs text-gray-500">기존 첨부 — 삭제하려면 ✕ 클릭</div>
+                {existingAttachments.map((a) => (
+                  <div
+                    key={a.id}
+                    className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded bg-gray-50"
+                  >
+                    <span className="text-gray-400">📎</span>
+                    <span className="flex-1 truncate">{a.origName}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExistingAttachments((prev) => prev.filter((x) => x.id !== a.id))
+                      }
+                      className="w-7 h-7 flex items-center justify-center text-red-500 border border-gray-300 rounded hover:bg-red-50 hover:border-red-400"
+                      title="삭제"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">파일 2</label>
-                <label className="group flex items-center gap-3 px-3.5 py-2.5 border border-gray-400 border-dashed rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors">
-                  <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                  </svg>
-                  <span className="text-sm text-gray-500 group-hover:text-blue-600 truncate transition-colors">
-                    {file2 ? file2.name : "파일을 선택하세요"}
-                  </span>
-                  <input
-                    type="file"
-                    onChange={(e) => setFile2(e.target.files?.[0] || null)}
-                    className="hidden"
-                  />
-                </label>
+            )}
+
+            {/* 새로 추가 — 드래그앤드롭 + 다중 선택 */}
+            <label
+              className="group flex flex-col items-center gap-2 px-4 py-6 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.currentTarget.classList.add("border-blue-500", "bg-blue-50/50");
+              }}
+              onDragLeave={(e) => {
+                e.currentTarget.classList.remove("border-blue-500", "bg-blue-50/50");
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.currentTarget.classList.remove("border-blue-500", "bg-blue-50/50");
+                const dropped = Array.from(e.dataTransfer.files);
+                if (dropped.length > 0) {
+                  setNewFiles((prev) => [...prev, ...dropped]);
+                }
+              }}
+            >
+              <svg className="w-8 h-8 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+              <span className="text-sm text-gray-500 group-hover:text-blue-600 transition-colors">
+                클릭 또는 드래그해서 파일 추가 (여러 개 가능)
+              </span>
+              <input
+                type="file"
+                multiple
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files || []);
+                  if (picked.length > 0) setNewFiles((prev) => [...prev, ...picked]);
+                  e.target.value = "";
+                }}
+                className="hidden"
+              />
+            </label>
+
+            {/* 새로 추가된 파일 목록 */}
+            {newFiles.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-xs text-gray-500">새 첨부</div>
+                {newFiles.map((f, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-2 px-3 py-2 text-sm border border-blue-200 rounded bg-blue-50/40"
+                  >
+                    <span className="text-blue-500">📎</span>
+                    <span className="flex-1 truncate">{f.name}</span>
+                    <span className="text-xs text-gray-400">{(f.size / 1024).toFixed(1)}KB</span>
+                    <button
+                      type="button"
+                      onClick={() => setNewFiles((prev) => prev.filter((_, i) => i !== idx))}
+                      className="w-7 h-7 flex items-center justify-center text-red-500 border border-gray-300 rounded hover:bg-red-50 hover:border-red-400"
+                      title="제거"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
               </div>
-            </div>
+            )}
           </div>
         </div>
 

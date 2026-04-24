@@ -8,7 +8,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "유효하지 않은 ID" }, { status: 400 });
   }
 
-  const post = await prisma.post.findUnique({ where: { id } });
+  const post = await prisma.post.findUnique({
+    where: { id },
+    include: {
+      attachments: {
+        orderBy: { sortOrder: "asc" },
+      },
+    },
+  });
   if (!post) {
     return NextResponse.json({ message: "게시글 없음" }, { status: 404 });
   }
@@ -53,10 +60,17 @@ export async function GET(request: NextRequest) {
     sitelink1: post.sitelink1,
     sitelink2: post.sitelink2,
     categoryId: post.categoryId,
-    fileName1: post.fileName1,
-    origName1: post.origName1,
-    fileName2: post.fileName2,
-    origName2: post.origName2,
+    attachments: post.attachments.map((a) => ({
+      id: a.id,
+      fileName: a.fileName,
+      origName: a.origName,
+      sortOrder: a.sortOrder,
+      downloadCount: a.downloadCount,
+      size: a.size,
+      mimeType: a.mimeType,
+      width: a.width,
+      height: a.height,
+    })),
     isGuestPost,
     canEdit,
   });

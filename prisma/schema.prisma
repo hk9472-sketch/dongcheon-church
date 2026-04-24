@@ -291,6 +291,7 @@ model Post {
   // Relations
   comments      Comment[]
   postVotes     PostVote[]
+  attachments   PostAttachment[]
 
   @@index([boardId, headnum, arrangenum])
   @@index([boardId, division, headnum, arrangenum])
@@ -305,6 +306,30 @@ model Post {
   @@index([download1])
   @@index([categoryId])
   @@map("posts")
+}
+
+// ============================================================
+// 게시글 첨부파일 (다중) — 기존 Post.fileName1/2 를 대체
+// fileName: 서버 상대경로 (예: "data/DcPds/xxx.pdf"), origName: 사용자가 올린 원본 파일명
+// sortOrder 는 목록·갤러리 표시 순서. 0부터 시작.
+// ============================================================
+model PostAttachment {
+  id             Int      @id @default(autoincrement())
+  postId         Int
+  fileName       String   @db.VarChar(255)
+  origName       String   @db.VarChar(255)
+  sortOrder      Int      @default(0)
+  downloadCount  Int      @default(0)
+  size           Int?                                       // bytes
+  mimeType       String?  @db.VarChar(100)
+  width          Int?                                       // 이미지인 경우
+  height         Int?
+  createdAt      DateTime @default(now())
+
+  post           Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, sortOrder])
+  @@map("post_attachments")
 }
 
 // ============================================================

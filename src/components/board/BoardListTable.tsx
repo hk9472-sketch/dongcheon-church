@@ -15,8 +15,7 @@ interface PostItem {
   isSecret: boolean;
   isNotice: boolean;
   depth: number;
-  fileName1: string | null;
-  fileName2: string | null;
+  hasAttachment: boolean;
   categoryName?: string | null;
   hasRecentComment?: boolean;
 }
@@ -301,7 +300,7 @@ export default function BoardListTable({
                         {post.isSecret && (
                           <span className="ml-1 text-xs text-gray-400" title="비밀글">🔒</span>
                         )}
-                        {(post.fileName1 || post.fileName2) && (
+                        {post.hasAttachment && (
                           <span className="ml-1 text-xs text-gray-400" title="첨부파일">📎</span>
                         )}
                       </Link>

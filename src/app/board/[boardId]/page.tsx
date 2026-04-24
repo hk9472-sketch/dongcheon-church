@@ -109,6 +109,7 @@ export default async function BoardListPage({ params, searchParams }: PageProps)
     include: {
       ...(board.useCategory ? { category: { select: { name: true } } } : {}),
       comments: { where: { createdAt: { gte: fiveDaysAgo } }, select: { id: true }, take: 1 },
+      _count: { select: { attachments: true } },
     },
   });
 
@@ -121,6 +122,7 @@ export default async function BoardListPage({ params, searchParams }: PageProps)
     include: {
       ...(board.useCategory ? { category: { select: { name: true } } } : {}),
       comments: { where: { createdAt: { gte: fiveDaysAgo } }, select: { id: true }, take: 1 },
+      _count: { select: { attachments: true } },
     },
   });
 
@@ -154,8 +156,7 @@ export default async function BoardListPage({ params, searchParams }: PageProps)
       isSecret: p.isSecret,
       isNotice: p.isNotice,
       depth: p.depth,
-      fileName1: p.fileName1,
-      fileName2: p.fileName2,
+      hasAttachment: "_count" in p && p._count.attachments > 0,
       categoryName: board.useCategory && "category" in p && p.category
         ? (p.category as { name: string }).name
         : null,

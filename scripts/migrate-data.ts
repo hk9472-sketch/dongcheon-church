@@ -160,12 +160,6 @@ async function migrateBoard(
           categoryId: Number(p.category) > 0 ? Number(p.category) : null,
           sitelink1: p.sitelink1 ? String(p.sitelink1) : null,
           sitelink2: p.sitelink2 ? String(p.sitelink2) : null,
-          fileName1: p.file_name1 ? String(p.file_name1) : null,
-          origName1: p.s_file_name1 ? String(p.s_file_name1) : null,
-          fileName2: p.file_name2 ? String(p.file_name2) : null,
-          origName2: p.s_file_name2 ? String(p.s_file_name2) : null,
-          download1: Number(p.download1) || 0,
-          download2: Number(p.download2) || 0,
           hit: Number(p.hit) || 0,
           vote: Number(p.vote) || 0,
           totalComment: Number(p.total_comment) || 0,
@@ -180,6 +174,30 @@ async function migrateBoard(
 
       postIdMap.set(Number(p.no), newPost.id);
       postCount++;
+
+      // 첨부 이관 (file_name1 → sortOrder=0, file_name2 → sortOrder=1)
+      const attachments: { fileName: string; origName: string; sortOrder: number; downloadCount: number }[] = [];
+      if (p.file_name1) {
+        attachments.push({
+          fileName: String(p.file_name1),
+          origName: p.s_file_name1 ? String(p.s_file_name1) : String(p.file_name1),
+          sortOrder: 0,
+          downloadCount: Number(p.download1) || 0,
+        });
+      }
+      if (p.file_name2) {
+        attachments.push({
+          fileName: String(p.file_name2),
+          origName: p.s_file_name2 ? String(p.s_file_name2) : String(p.file_name2),
+          sortOrder: 1,
+          downloadCount: Number(p.download2) || 0,
+        });
+      }
+      if (attachments.length > 0) {
+        await prisma.postAttachment.createMany({
+          data: attachments.map((a) => ({ postId: newPost.id, ...a })),
+        });
+      }
     } catch (err) {
       console.warn(`  ⚠️ 게시글 건너뜀: no=${p.no} - ${err}`);
     }

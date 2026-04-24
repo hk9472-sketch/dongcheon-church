@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, unlink } from "fs/promises";
 import path from "path";
 import prisma from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth";
 import { verifyCaptcha } from "@/lib/captcha";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
-import { getUploadDir, getRelUploadPath } from "@/lib/uploadPath";
+import { getUploadDir, getRelUploadPath, getUploadRoot } from "@/lib/uploadPath";
 
 // ───── 파일 업로드 검증 상수 ─────
 const ALLOWED_EXTENSIONS = new Set([
@@ -161,46 +161,50 @@ export async function POST(request: NextRequest) {
     // 비밀번호 해시: 로그인 사용자는 해시 과정 생략 (DoS 완화)
     const hashedPassword = isSessionValid ? null : await hashPassword(passwordRaw);
 
-    // 파일 업로드 처리
-    const file1 = formData.get("file1") as File | null;
-    const file2 = formData.get("file2") as File | null;
+    // ─── 파일 업로드 (다중) ───
+    // FormData: "files" 필드에 여러 파일이 들어옴 (HTML: <input type="file" multiple name="files">).
+    // 수정 모드: "keepIds" (JSON array) 에 유지할 기존 첨부 id. 포함 안 된 건 삭제.
+    const files = formData.getAll("files").filter(
+      (f): f is File => f instanceof File && f.size > 0
+    );
+    const keepIdsRaw = formData.get("keepIds") as string | null;
+    const keepIds: number[] = (() => {
+      if (!keepIdsRaw) return [];
+      try {
+        const arr = JSON.parse(keepIdsRaw);
+        return Array.isArray(arr) ? arr.filter((n) => typeof n === "number" && Number.isInteger(n)) : [];
+      } catch {
+        return [];
+      }
+    })();
 
-    // 파일 검증 먼저 수행 (디스크 기록 전)
-    if (file1 && file1.size > 0) {
-      const err = validateUploadFile(file1);
+    // 파일 검증 먼저 (디스크 기록 전)
+    for (const f of files) {
+      const err = validateUploadFile(f);
       if (err) return NextResponse.json({ message: err }, { status: 400 });
     }
-    if (file2 && file2.size > 0) {
-      const err = validateUploadFile(file2);
-      if (err) return NextResponse.json({ message: err }, { status: 400 });
-    }
 
-    let fileName1: string | null = null;
-    let origName1: string | null = null;
-    let fileName2: string | null = null;
-    let origName2: string | null = null;
-
-    // ZeroBoard 구조와 호환: 파일을 {UPLOAD_DIR}/{boardSlug}/ 에 저장.
-    // 경로는 lib/uploadPath 에서 런타임 결정 (Turbopack 정적 분석 회피).
+    // 업로드 디렉터리 보장
     const uploadDir = getUploadDir(boardSlug);
     await mkdir(uploadDir, { recursive: true });
 
-    if (file1 && file1.size > 0) {
-      const ext = path.extname(file1.name).toLowerCase();
-      const storedName = sanitizeStoredName(`${Date.now()}_1${ext}`);
-      fileName1 = getRelUploadPath(boardSlug, storedName);
-      origName1 = file1.name;
-      const buffer = Buffer.from(await file1.arrayBuffer());
-      await writeFile(path.join(uploadDir, storedName), buffer);
-    }
+    type NewFile = { fileName: string; origName: string; size: number; mimeType: string | null };
 
-    if (file2 && file2.size > 0) {
-      const ext = path.extname(file2.name).toLowerCase();
-      const storedName = sanitizeStoredName(`${Date.now()}_2${ext}`);
-      fileName2 = getRelUploadPath(boardSlug, storedName);
-      origName2 = file2.name;
-      const buffer = Buffer.from(await file2.arrayBuffer());
+    // 디스크에 저장 (모드에 관계없이 먼저 기록)
+    const newFiles: NewFile[] = [];
+    let seq = 0;
+    for (const f of files) {
+      const ext = path.extname(f.name).toLowerCase();
+      const storedName = sanitizeStoredName(`${Date.now()}_${++seq}${ext}`);
+      const relPath = getRelUploadPath(boardSlug, storedName);
+      const buffer = Buffer.from(await f.arrayBuffer());
       await writeFile(path.join(uploadDir, storedName), buffer);
+      newFiles.push({
+        fileName: relPath,
+        origName: f.name,
+        size: f.size,
+        mimeType: f.type || null,
+      });
     }
 
     // ================================================================
@@ -209,7 +213,10 @@ export async function POST(request: NextRequest) {
 
     if (mode === "modify" && parentNo) {
       // ---- 수정 모드 ----
-      const existingPost = await prisma.post.findUnique({ where: { id: parentNo } });
+      const existingPost = await prisma.post.findUnique({
+        where: { id: parentNo },
+        include: { attachments: true },
+      });
       if (!existingPost) {
         return NextResponse.json({ message: "게시글이 존재하지 않습니다." }, { status: 404 });
       }
@@ -245,33 +252,83 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const updatedPost = await prisma.post.update({
-        where: { id: parentNo },
-        data: {
-          subject,
-          content,
-          email,
-          homepage,
-          isSecret,
-          isNotice,
-          useHtml,
-          sitelink1,
-          sitelink2,
-          categoryId,
-          commentPolicy,
-          ...(fileName1 ? { fileName1, origName1 } : {}),
-          ...(fileName2 ? { fileName2, origName2 } : {}),
-          // 최종 수정자 정보 (로그인 사용자만)
-          ...(isSessionValid && sessionUserId ? {
-            lastEditorId: sessionUserId,
-            lastEditorUserId: sessionUserLoginId,
-            lastEditorName: sessionUserName,
-            lastEditedAt: new Date(),
-          } : {}),
-        },
+      // ─── 첨부 재구성 ───
+      // 1. keepIds 에 없는 기존 첨부는 DB·디스크에서 삭제
+      // 2. keepIds 순서대로 sortOrder 재부여
+      // 3. newFiles 를 뒤에 이어서 추가
+      const removed = existingPost.attachments.filter((a) => !keepIds.includes(a.id));
+
+      await prisma.$transaction(async (tx) => {
+        // 본문 먼저 갱신
+        await tx.post.update({
+          where: { id: parentNo },
+          data: {
+            subject,
+            content,
+            email,
+            homepage,
+            isSecret,
+            isNotice,
+            useHtml,
+            sitelink1,
+            sitelink2,
+            categoryId,
+            commentPolicy,
+            ...(isSessionValid && sessionUserId ? {
+              lastEditorId: sessionUserId,
+              lastEditorUserId: sessionUserLoginId,
+              lastEditorName: sessionUserName,
+              lastEditedAt: new Date(),
+            } : {}),
+          },
+        });
+
+        // 삭제 대상
+        if (removed.length > 0) {
+          await tx.postAttachment.deleteMany({
+            where: { id: { in: removed.map((a) => a.id) } },
+          });
+        }
+
+        // keepIds 순서대로 sortOrder 재지정
+        for (let i = 0; i < keepIds.length; i++) {
+          await tx.postAttachment.update({
+            where: { id: keepIds[i] },
+            data: { sortOrder: i },
+          });
+        }
+
+        // 새로 올라온 파일들을 뒤에 append
+        for (let i = 0; i < newFiles.length; i++) {
+          const nf = newFiles[i];
+          await tx.postAttachment.create({
+            data: {
+              postId: parentNo,
+              fileName: nf.fileName,
+              origName: nf.origName,
+              sortOrder: keepIds.length + i,
+              size: nf.size,
+              mimeType: nf.mimeType,
+            },
+          });
+        }
       });
 
-      return NextResponse.json({ postId: updatedPost.id });
+      // 디스크 파일 삭제 (DB 트랜잭션 성공 후). 실패해도 응답에는 영향 주지 않음 (고아 파일은 별도 정리 필요 시 스크립트).
+      const uploadRoot = getUploadRoot();
+      for (const a of removed) {
+        try {
+          const base = a.fileName.replace(/\\/g, "/").split("/").filter(Boolean).pop() || "";
+          if (base && !base.includes("..")) {
+            const abs = path.normalize([uploadRoot, boardSlug, base].join(path.sep));
+            if (abs.startsWith(uploadRoot + path.sep)) await unlink(abs).catch(() => {});
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
+      return NextResponse.json({ postId: parentNo });
     }
 
     if (mode === "reply" && parentNo) {
@@ -312,10 +369,15 @@ export async function POST(request: NextRequest) {
             sitelink2,
             categoryId,
             commentPolicy,
-            fileName1,
-            origName1,
-            fileName2,
-            origName2,
+            attachments: {
+              create: newFiles.map((f, i) => ({
+                fileName: f.fileName,
+                origName: f.origName,
+                sortOrder: i,
+                size: f.size,
+                mimeType: f.mimeType,
+              })),
+            },
           },
         });
 
@@ -364,10 +426,15 @@ export async function POST(request: NextRequest) {
           sitelink1,
           sitelink2,
           categoryId,
-          fileName1,
-          origName1,
-          fileName2,
-          origName2,
+          attachments: {
+            create: newFiles.map((f, i) => ({
+              fileName: f.fileName,
+              origName: f.origName,
+              sortOrder: i,
+              size: f.size,
+              mimeType: f.mimeType,
+            })),
+          },
         },
       });
 

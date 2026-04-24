@@ -5,6 +5,19 @@
 // 제로보드 호환 게시판 타입
 export type BoardType = "BBS" | "GALLERY" | "DOWNLOAD" | "MUSIC" | "VOTE";
 
+// 첨부파일
+export interface PostAttachmentItem {
+  id: number;
+  fileName: string;      // "data/<slug>/<파일>" 형식 상대경로
+  origName: string;      // 사용자가 올린 원본 파일명
+  sortOrder: number;
+  downloadCount: number;
+  size: number | null;
+  mimeType: string | null;
+  width: number | null;
+  height: number | null;
+}
+
 // 게시글 목록 아이템 (필요한 필드만)
 export interface PostListItem {
   id: number;
@@ -16,8 +29,8 @@ export interface PostListItem {
   depth: number;
   isSecret: boolean;
   isNotice: boolean;
-  fileName1: string | null;
-  fileName2: string | null;
+  hasAttachment: boolean;        // 📎 표시용 — attachments.length > 0
+  firstImageAttachment: PostAttachmentItem | null;  // 갤러리 썸네일용 (이미지인 0번 첨부)
   categoryId: number | null;
   createdAt: Date;
 }
@@ -40,12 +53,7 @@ export interface PostDetail {
   useHtml: boolean;
   sitelink1: string | null;
   sitelink2: string | null;
-  fileName1: string | null;
-  origName1: string | null;
-  fileName2: string | null;
-  origName2: string | null;
-  download1: number;
-  download2: number;
+  attachments: PostAttachmentItem[];
   categoryId: number | null;
   prevNo: number;
   nextNo: number;

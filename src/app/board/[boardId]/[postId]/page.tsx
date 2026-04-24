@@ -35,6 +35,7 @@ export default async function PostDetailPage({ params }: PageProps) {
   // 2. 게시글 조회 (제로보드: select * from $t_board_$id where no='$no')
   const post = await prisma.post.findFirst({
     where: { id: postNo, boardId: board.id },
+    include: { attachments: { orderBy: { sortOrder: "asc" } } },
   });
   if (!post) notFound();
 
@@ -161,7 +162,8 @@ export default async function PostDetailPage({ params }: PageProps) {
   const nearbyFields = {
     id: true, subject: true, authorName: true, createdAt: true,
     hit: true, totalComment: true, isSecret: true, depth: true,
-    fileName1: true, fileName2: true, headnum: true, arrangenum: true,
+    _count: { select: { attachments: true } },
+    headnum: true, arrangenum: true,
   } as const;
   const [prevList, nextList] = await Promise.all([
     prisma.post.findMany({
@@ -203,8 +205,7 @@ export default async function PostDetailPage({ params }: PageProps) {
       totalComment: post.totalComment,
       isSecret: post.isSecret,
       depth: post.depth,
-      fileName1: post.fileName1,
-      fileName2: post.fileName2,
+      _count: { attachments: post.attachments.length },
       headnum: post.headnum,
       arrangenum: post.arrangenum,
       isCurrent: true,
@@ -235,23 +236,15 @@ export default async function PostDetailPage({ params }: PageProps) {
 
   // 갤러리 유형: 첨부파일 중 이미지만 추출
   const isGallery = board.boardType === "GALLERY";
-  const isImageFile = (name: string | null) =>
-    !!name && /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(name);
-  const galleryImages: { src: string; alt: string }[] = [];
-  if (isGallery) {
-    if (post.fileName1 && isImageFile(post.fileName1)) {
-      galleryImages.push({
-        src: `/api/image?boardId=${boardId}&postId=${post.id}&fileNo=1`,
-        alt: post.origName1 || post.fileName1,
-      });
-    }
-    if (post.fileName2 && isImageFile(post.fileName2)) {
-      galleryImages.push({
-        src: `/api/image?boardId=${boardId}&postId=${post.id}&fileNo=2`,
-        alt: post.origName2 || post.fileName2,
-      });
-    }
-  }
+  const isImageFile = (name: string) => /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(name);
+  const galleryImages: { src: string; alt: string }[] = isGallery
+    ? post.attachments
+        .filter((a) => isImageFile(a.fileName))
+        .map((a) => ({
+          src: `/api/image?attachmentId=${a.id}`,
+          alt: a.origName || a.fileName,
+        }))
+    : [];
 
   return (
     <div className="space-y-4">
@@ -375,31 +368,22 @@ export default async function PostDetailPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* 첨부파일 (제로보드: file_name1, file_name2) */}
-          {(post.fileName1 || post.fileName2) && (
+          {/* 첨부파일 (다중) */}
+          {post.attachments.length > 0 && (
             <div className="mt-6 pt-4 border-t border-gray-300">
               <h3 className="text-sm font-medium text-gray-700 mb-2">첨부파일</h3>
               <div className="space-y-1.5">
-                {post.fileName1 && (
+                {post.attachments.map((a) => (
                   <a
-                    href={`/api/download?boardId=${boardId}&postId=${post.id}&fileNo=1`}
+                    key={a.id}
+                    href={`/api/download?attachmentId=${a.id}`}
                     className="flex items-center gap-2 text-sm text-blue-600 hover:underline"
                   >
                     <span>📎</span>
-                    <span>{post.origName1 || post.fileName1}</span>
-                    <span className="text-gray-400 text-xs">(다운로드 {post.download1})</span>
+                    <span>{a.origName || a.fileName}</span>
+                    <span className="text-gray-400 text-xs">(다운로드 {a.downloadCount})</span>
                   </a>
-                )}
-                {post.fileName2 && (
-                  <a
-                    href={`/api/download?boardId=${boardId}&postId=${post.id}&fileNo=2`}
-                    className="flex items-center gap-2 text-sm text-blue-600 hover:underline"
-                  >
-                    <span>📎</span>
-                    <span>{post.origName2 || post.fileName2}</span>
-                    <span className="text-gray-400 text-xs">(다운로드 {post.download2})</span>
-                  </a>
-                )}
+                ))}
               </div>
             </div>
           )}
@@ -540,7 +524,7 @@ export default async function PostDetailPage({ params }: PageProps) {
                         {p.isSecret && (
                           <span className="ml-1 text-xs text-gray-400" title="비밀글">🔒</span>
                         )}
-                        {(p.fileName1 || p.fileName2) && (
+                        {p._count.attachments > 0 && (
                           <span className="ml-1 text-xs text-gray-400" title="첨부파일">📎</span>
                         )}
                       </div>

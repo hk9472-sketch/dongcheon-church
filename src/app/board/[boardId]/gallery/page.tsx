@@ -34,11 +34,8 @@ export default async function GalleryPage({ params, searchParams }: PageProps) {
   const where = {
     boardId: board.id,
     isNotice: false,
-    // 이미지 파일이 있는 글만
-    OR: [
-      { fileName1: { not: null } },
-      { fileName2: { not: null } },
-    ],
+    // 이미지 첨부 한 개라도 있는 글만
+    attachments: { some: {} },
   };
 
   const totalPosts = await prisma.post.count({ where });
@@ -49,23 +46,18 @@ export default async function GalleryPage({ params, searchParams }: PageProps) {
     orderBy: { createdAt: "desc" },
     skip: paging.skip,
     take: paging.take,
+    include: {
+      attachments: { orderBy: { sortOrder: "asc" } },
+    },
   });
 
-  // 이미지 확장자 체크 함수
-  function isImage(filename: string | null): boolean {
-    if (!filename) return false;
-    return /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(filename);
+  function isImage(name: string) {
+    return /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(name);
   }
 
   function getThumbnailSrc(post: typeof posts[0]): string | null {
-    // 이미지 API 경로로 반환
-    if (post.fileName1 && isImage(post.fileName1)) {
-      return `/api/image?boardId=${boardId}&postId=${post.id}&fileNo=1`;
-    }
-    if (post.fileName2 && isImage(post.fileName2)) {
-      return `/api/image?boardId=${boardId}&postId=${post.id}&fileNo=2`;
-    }
-    return null;
+    const img = post.attachments.find((a) => isImage(a.fileName));
+    return img ? `/api/image?attachmentId=${img.id}` : null;
   }
 
   return (

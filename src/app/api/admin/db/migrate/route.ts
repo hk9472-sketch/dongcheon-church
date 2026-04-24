@@ -963,12 +963,6 @@ async function migrateBoardData(
           commentPolicy: "ALLOW",
           sitelink1: toStr(post.sitelink1) || null,
           sitelink2: toStr(post.sitelink2) || null,
-          fileName1: fn1 || null,
-          fileName2: fn2 || null,
-          origName1: toStr(post.s_file_name1) || null,
-          origName2: toStr(post.s_file_name2) || null,
-          download1: toNum(post.download1),
-          download2: toNum(post.download2),
           extra1: toStr(post.x) || null,
           extra2: toStr(post.y) || null,
           hit: toNum(post.hit),
@@ -987,6 +981,30 @@ async function migrateBoardData(
       });
       postIdMap.set(toNum(post.no), newPost.id);
       stats.posts++;
+
+      // 첨부파일 이관 — ZB 의 file_name1/2 를 PostAttachment 로
+      const attachmentsToCreate: { fileName: string; origName: string; sortOrder: number; downloadCount: number }[] = [];
+      if (fn1) {
+        attachmentsToCreate.push({
+          fileName: fn1,
+          origName: toStr(post.s_file_name1) || fn1,
+          sortOrder: 0,
+          downloadCount: toNum(post.download1),
+        });
+      }
+      if (fn2) {
+        attachmentsToCreate.push({
+          fileName: fn2,
+          origName: toStr(post.s_file_name2) || fn2,
+          sortOrder: 1,
+          downloadCount: toNum(post.download2),
+        });
+      }
+      if (attachmentsToCreate.length > 0) {
+        await prisma.postAttachment.createMany({
+          data: attachmentsToCreate.map((a) => ({ postId: newPost.id, ...a })),
+        });
+      }
     } catch (e) {
       stats.errors.push(`게시글 #${toNum(post.no)} 실패: ${e instanceof Error ? e.message : String(e)}`);
     }

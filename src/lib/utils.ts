@@ -204,10 +204,8 @@ export function buildOrderBy(
       return [{ vote: direction }];
     case "reg_date":
       return [{ createdAt: direction }];
-    case "download1":
-      return [{ download1: direction }];
-    case "download2":
-      return [{ download2: direction }];
+    // download1/download2 정렬은 PostAttachment 로 이관 후 제거됨.
+    // 필요 시 _count 기반 정렬을 추가할 수 있음.
     case "headnum":
     default:
       // 기본 정렬: headnum asc (작을수록 최신), arrangenum asc
