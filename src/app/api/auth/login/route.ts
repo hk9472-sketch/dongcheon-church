@@ -36,6 +36,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "아이디 또는 비밀번호가 올바르지 않습니다." }, { status: 401 });
     }
 
+    // 본인의 만료된 세션 자동 청소 — 누적 방지 (로그아웃 안 하고 닫는 사용자들 패턴)
+    await prisma.session.deleteMany({
+      where: { userId: user.id, expires: { lt: new Date() } },
+    });
+
     // 세션 생성
     const sessionToken = randomBytes(32).toString("hex");
     const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7일
