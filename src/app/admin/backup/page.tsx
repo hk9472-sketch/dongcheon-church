@@ -111,6 +111,8 @@ export default function BackupPage() {
     }
   };
 
+  const [filesSubtype, setFilesSubtype] = useState<"all" | "added" | "modified" | "incremental">("incremental");
+
   const runFtpBackup = async (type: "db" | "files" | "full") => {
     setFtpRunning(type);
     setFtpMessage(null);
@@ -118,7 +120,7 @@ export default function BackupPage() {
       const res = await fetch("/api/admin/backup/ftp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type }),
+        body: JSON.stringify({ type, subtype: filesSubtype }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -561,27 +563,45 @@ export default function BackupPage() {
           {/* 백업 실행 버튼 */}
           <div className="bg-white rounded border border-amber-200 p-3 mb-4">
             <h3 className="text-xs font-bold text-gray-700 mb-2">백업 실행</h3>
+
+            {/* 첨부 subtype 선택 (files / full 에 적용) */}
+            <div className="flex items-center gap-2 mb-2 text-xs">
+              <span className="text-gray-600">첨부 범위:</span>
+              <select
+                value={filesSubtype}
+                onChange={(e) => setFilesSubtype(e.target.value as "all" | "added" | "modified" | "incremental")}
+                disabled={ftpRunning !== null}
+                className="px-2 py-1 text-xs border border-gray-300 rounded"
+              >
+                <option value="incremental">증분 (신규+수정)</option>
+                <option value="added">신규만</option>
+                <option value="modified">수정만</option>
+                <option value="all">전체</option>
+              </select>
+              <span className="text-gray-400 text-[11px]">— DB 백업엔 영향 없음. 모두 단일 압축 파일.</span>
+            </div>
+
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => runFtpBackup("db")}
                 disabled={ftpRunning !== null}
                 className="px-3 py-1.5 text-xs text-white rounded bg-amber-600 hover:bg-amber-700 disabled:opacity-50 transition-colors"
               >
-                {ftpRunning === "db" ? <><Spinner /> DB 백업 중...</> : "DB 백업"}
+                {ftpRunning === "db" ? <><Spinner /> DB 백업 중...</> : "DB 백업 (.sql.gz)"}
               </button>
               <button
                 onClick={() => runFtpBackup("files")}
                 disabled={ftpRunning !== null}
                 className="px-3 py-1.5 text-xs text-white rounded bg-amber-600 hover:bg-amber-700 disabled:opacity-50 transition-colors"
               >
-                {ftpRunning === "files" ? <><Spinner /> 첨부파일 백업 중...</> : "첨부파일 백업"}
+                {ftpRunning === "files" ? <><Spinner /> 첨부 백업 중...</> : "첨부 백업 (.tar.gz)"}
               </button>
               <button
                 onClick={() => runFtpBackup("full")}
                 disabled={ftpRunning !== null}
                 className="px-3 py-1.5 text-xs text-white rounded bg-amber-600 hover:bg-amber-700 disabled:opacity-50 transition-colors"
               >
-                {ftpRunning === "full" ? <><Spinner /> 전체 백업 중...</> : "전체 백업"}
+                {ftpRunning === "full" ? <><Spinner /> 전체 백업 중...</> : "전체 백업 (DB+첨부)"}
               </button>
             </div>
             {ftpRunning && (

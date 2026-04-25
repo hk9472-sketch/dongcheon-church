@@ -82,6 +82,13 @@ function kstDateTimeStr() {
   return `${p.year}${p.month}${p.day}_${p.hour}${p.minute}${p.second}`;
 }
 
+function fmtBytes(b: number): string {
+  if (b < 1024) return `${b}B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)}KB`;
+  if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)}MB`;
+  return `${(b / 1024 / 1024 / 1024).toFixed(2)}GB`;
+}
+
 function parseDatabaseUrl(url: string) {
   // 쿼리스트링(?key=val&...) 은 데이터베이스 이름에서 제외
   const m = url.match(/mysql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/([^?]+)/);
@@ -233,6 +240,8 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
   const type: string = body.type || "full";
+  // 첨부파일 backup subtype: all | added | modified | incremental(=added+modified)
+  const subtype: string = body.subtype || "incremental";
   const scheduled: boolean = body.scheduled === true; // cron 호출 여부
 
   const ftp = await getFtpSettings();
@@ -285,8 +294,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ message: "DATABASE_URL 형식을 파싱할 수 없습니다." }, { status: 500 });
       }
 
-      const dumpFileName = `dongcheon-db-${timestamp}.sql`;
+      // 압축된 단일 파일 .sql.gz 로 업로드
+      const dumpFileName = `dongcheon-db-${timestamp}.sql.gz`;
       const dumpFilePath = path.join(tmpDir, dumpFileName);
+      const sqlPath = path.join(tmpDir, `dongcheon-db-${timestamp}.sql`);
 
       try {
         const dumpArgs = [
@@ -297,67 +308,119 @@ export async function POST(request: NextRequest) {
           "--single-transaction",
           "--routines",
           "--triggers",
-          "--no-tablespaces", // PROCESS 권한 없을 때 tablespace 덤프 시도 차단
+          "--no-tablespaces",
         ];
         const dump = execFileSync("mysqldump", dumpArgs, {
-          maxBuffer: 100 * 1024 * 1024,
+          maxBuffer: 200 * 1024 * 1024,
           env: { ...process.env, MYSQL_PWD: db.password },
         });
-        fs.writeFileSync(dumpFilePath, dump);
+        fs.writeFileSync(sqlPath, dump);
+        filesToCleanup.push(sqlPath);
+
+        // gzip 압축 (sqlPath → sqlPath + ".gz", 원본은 사라짐)
+        execFileSync("gzip", ["-f", sqlPath]);
         filesToCleanup.push(dumpFilePath);
 
         uploadFileViaCurl(dumpFilePath, dumpFileName, ftpWithPassword);
-        results.push(`DB 덤프 업로드 완료: ${dumpFileName}`);
+        const stat = fs.statSync(dumpFilePath);
+        results.push(`DB 덤프 업로드: ${dumpFileName} (${fmtBytes(stat.size)})`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         results.push(`DB 백업 실패: ${msg}`);
       }
     }
 
-    // ─── File backup ───
+    // ─── File backup (단일 tar.gz) ───
     if (type === "files" || type === "full") {
       const dataDir = path.join(process.cwd(), "data");
       if (!fs.existsSync(dataDir)) {
         results.push("첨부파일 백업 건너뜀: data 디렉토리 없음");
       } else {
-        const lastBackupDate = await getSetting("ftp_last_backup");
-        const sinceDate = lastBackupDate ? new Date(lastBackupDate) : new Date(0);
-
-        let uploadedCount = 0;
-        let errorCount = 0;
-
-        // Scan data/ for modified files (excluding backup-tmp)
-        const scanDir = (dir: string, relativeBase: string) => {
-          const entries = fs.readdirSync(dir, { withFileTypes: true });
-          for (const entry of entries) {
-            const fullPath = path.join(dir, entry.name);
-            const relativePath = path.posix.join(relativeBase, entry.name);
-
-            if (entry.isDirectory()) {
-              if (entry.name === "backup-tmp") continue;
-              scanDir(fullPath, relativePath);
-            } else if (entry.isFile()) {
-              try {
-                const stat = fs.statSync(fullPath);
-                if (stat.mtime > sinceDate) {
-                  const remoteFileName = `files/${kstDateStr()}/${relativePath}`;
-                  uploadFileViaCurl(fullPath, remoteFileName, ftpWithPassword);
-                  uploadedCount++;
-                }
-              } catch {
-                errorCount++;
+        try {
+          // 1. 현 인벤토리 수집
+          const currInv: Record<string, { mtime: number; size: number }> = {};
+          const walk = (dir: string, base: string) => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const full = path.join(dir, entry.name);
+              const rel = path.posix.join(base, entry.name);
+              if (entry.isDirectory()) {
+                if (entry.name === "backup-tmp") continue;
+                walk(full, rel);
+              } else if (entry.isFile()) {
+                try {
+                  const s = fs.statSync(full);
+                  currInv[rel] = { mtime: Math.floor(s.mtimeMs), size: s.size };
+                } catch { /* skip */ }
               }
             }
+          };
+          walk(dataDir, "");
+
+          // 2. 이전 인벤토리 와 diff
+          const prevInvJson = await getSetting("ftp_file_inventory");
+          let prevInv: Record<string, { mtime: number; size: number }> = {};
+          try {
+            prevInv = prevInvJson ? JSON.parse(prevInvJson) : {};
+          } catch { prevInv = {}; }
+
+          const added: string[] = [];
+          const modified: string[] = [];
+          for (const [p, meta] of Object.entries(currInv)) {
+            if (!(p in prevInv)) added.push(p);
+            else if (prevInv[p].mtime !== meta.mtime || prevInv[p].size !== meta.size) modified.push(p);
           }
-        };
 
-        scanDir(dataDir, "");
-        historyFilesCount = uploadedCount;
+          // 3. subtype 별 파일 선택
+          let pathsToBackup: string[];
+          let subtypeLabel: string;
+          if (subtype === "all") {
+            pathsToBackup = Object.keys(currInv);
+            subtypeLabel = "전체";
+          } else if (subtype === "added") {
+            pathsToBackup = added;
+            subtypeLabel = "신규";
+          } else if (subtype === "modified") {
+            pathsToBackup = modified;
+            subtypeLabel = "수정";
+          } else {
+            // incremental
+            pathsToBackup = [...added, ...modified];
+            subtypeLabel = "증분";
+          }
 
-        if (errorCount > 0) {
-          results.push(`첨부파일 업로드: ${uploadedCount}개 성공, ${errorCount}개 실패`);
-        } else {
-          results.push(`첨부파일 업로드 완료: ${uploadedCount}개 파일`);
+          if (pathsToBackup.length === 0) {
+            results.push(`첨부 ${subtypeLabel}: 변경분 없음`);
+          } else {
+            // 4. 파일 리스트를 임시 파일로 (tar --files-from)
+            const listFile = path.join(tmpDir, `_filelist-${timestamp}.txt`);
+            fs.writeFileSync(listFile, pathsToBackup.join("\n"));
+            filesToCleanup.push(listFile);
+
+            // 5. tar -czf 로 압축 아카이브 생성
+            const archiveName = `dongcheon-files-${subtype}-${timestamp}.tar.gz`;
+            const archivePath = path.join(tmpDir, archiveName);
+            execFileSync(
+              "tar",
+              ["-czf", archivePath, "-C", dataDir, `--files-from=${listFile}`],
+              { maxBuffer: 100 * 1024 * 1024 }
+            );
+            filesToCleanup.push(archivePath);
+
+            // 6. 단일 아카이브 업로드
+            uploadFileViaCurl(archivePath, archiveName, ftpWithPassword);
+            const stat = fs.statSync(archivePath);
+            results.push(
+              `첨부 ${subtypeLabel} 업로드: ${archiveName} (${pathsToBackup.length}개, ${fmtBytes(stat.size)})`
+            );
+          }
+
+          historyFilesCount = pathsToBackup.length;
+
+          // 7. 인벤토리 갱신 (subtype 무관, 다음 diff 의 기준)
+          await setSetting("ftp_file_inventory", JSON.stringify(currInv));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          results.push(`첨부파일 백업 실패: ${msg}`);
         }
       }
     }
