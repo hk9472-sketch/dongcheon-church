@@ -496,6 +496,25 @@ model SiteSetting {
 }
 
 // ============================================================
+// 백업 이력 — 매 백업 실행 시 1행. 시작/종료/결과 기록.
+// ============================================================
+model BackupHistory {
+  id            Int       @id @default(autoincrement())
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+  durationMs    Int?
+  type          String    @db.VarChar(20)        // "db" | "files" | "full"
+  trigger       String    @db.VarChar(20)        // "manual" | "scheduled"
+  success       Boolean   @default(false)
+  filesCount    Int       @default(0)
+  details       String?   @db.MediumText         // 결과 메시지 또는 JSON
+  errorMessage  String?   @db.MediumText
+
+  @@index([startedAt])
+  @@map("backup_history")
+}
+
+// ============================================================
 // 방문 로그 (방문 경로 기록)
 // ============================================================
 model VisitLog {

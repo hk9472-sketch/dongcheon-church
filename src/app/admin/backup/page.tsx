@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Fragment } from "react";
 import HelpButton from "@/components/HelpButton";
 
 function Spinner() {
@@ -596,6 +596,12 @@ export default function BackupPage() {
             )}
           </div>
 
+          {/* 백업 이력 */}
+          <BackupHistorySection />
+
+          {/* 원격 파일 탐색 */}
+          <BackupBrowserSection />
+
           {/* 정기 백업 안내 */}
           <div className={`rounded border p-3 ${ftpEnabled ? "bg-green-50 border-green-300" : "bg-gray-50 border-gray-300"}`}>
             <p className={`text-xs font-medium mb-1 ${ftpEnabled ? "text-green-800" : "text-gray-600"}`}>
@@ -610,6 +616,270 @@ export default function BackupPage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ================================================================
+// 백업 이력 (최근 30건)
+// ================================================================
+interface HistoryItem {
+  id: number;
+  startedAt: string;
+  endedAt: string | null;
+  durationMs: number | null;
+  type: string;
+  trigger: string;
+  success: boolean;
+  filesCount: number;
+  details: string | null;
+  errorMessage: string | null;
+}
+
+function BackupHistorySection() {
+  const [items, setItems] = useState<HistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [openId, setOpenId] = useState<number | null>(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/backup/history?limit=30", { cache: "no-store" });
+      const data = await res.json();
+      setItems(Array.isArray(data.items) ? data.items : []);
+    } catch {
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  function fmtDuration(ms: number | null) {
+    if (ms == null) return "-";
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}초`;
+    return `${Math.floor(ms / 60_000)}분 ${Math.floor((ms % 60_000) / 1000)}초`;
+  }
+
+  return (
+    <div className="bg-white rounded border border-amber-200 p-3 mb-4">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-bold text-gray-700">백업 이력 (최근 30건)</h3>
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="px-2 py-0.5 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+        >
+          {loading ? "..." : "새로고침"}
+        </button>
+      </div>
+      {loading && items.length === 0 ? (
+        <div className="text-xs text-gray-400">불러오는 중...</div>
+      ) : items.length === 0 ? (
+        <div className="text-xs text-gray-400">백업 이력이 없습니다.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-gray-200 text-gray-500">
+                <th className="text-left py-1.5 pr-2 font-medium">시각</th>
+                <th className="text-left py-1.5 pr-2 font-medium">종류</th>
+                <th className="text-left py-1.5 pr-2 font-medium">트리거</th>
+                <th className="text-left py-1.5 pr-2 font-medium">상태</th>
+                <th className="text-right py-1.5 pr-2 font-medium">파일수</th>
+                <th className="text-right py-1.5 pr-2 font-medium">소요시간</th>
+                <th className="text-center py-1.5 font-medium">상세</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it) => (
+                <Fragment key={it.id}>
+                  <tr className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-1.5 pr-2 font-mono">
+                      {new Date(it.startedAt).toLocaleString("ko-KR", {
+                        timeZone: "Asia/Seoul",
+                        month: "2-digit", day: "2-digit",
+                        hour: "2-digit", minute: "2-digit",
+                      })}
+                    </td>
+                    <td className="py-1.5 pr-2">
+                      {it.type === "full" ? "전체" : it.type === "db" ? "DB" : it.type === "files" ? "첨부" : it.type}
+                    </td>
+                    <td className="py-1.5 pr-2 text-gray-500">
+                      {it.trigger === "scheduled" ? "정기" : "수동"}
+                    </td>
+                    <td className="py-1.5 pr-2">
+                      {it.success ? (
+                        <span className="px-1.5 py-0.5 text-[10px] font-bold text-green-700 bg-green-100 rounded">성공</span>
+                      ) : it.endedAt ? (
+                        <span className="px-1.5 py-0.5 text-[10px] font-bold text-red-700 bg-red-100 rounded">실패</span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 text-[10px] font-bold text-gray-600 bg-gray-100 rounded">진행중</span>
+                      )}
+                    </td>
+                    <td className="py-1.5 pr-2 text-right font-mono">{it.filesCount}</td>
+                    <td className="py-1.5 pr-2 text-right font-mono text-gray-500">{fmtDuration(it.durationMs)}</td>
+                    <td className="py-1.5 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setOpenId(openId === it.id ? null : it.id)}
+                        className="text-blue-600 hover:underline"
+                      >
+                        {openId === it.id ? "닫기" : "보기"}
+                      </button>
+                    </td>
+                  </tr>
+                  {openId === it.id && (
+                    <tr className="bg-gray-50">
+                      <td colSpan={7} className="px-2 py-2 text-[11px] text-gray-700">
+                        {it.details && (
+                          <pre className="whitespace-pre-wrap break-all border border-gray-200 rounded bg-white p-2 mb-1.5">{it.details}</pre>
+                        )}
+                        {it.errorMessage && (
+                          <pre className="whitespace-pre-wrap break-all border border-red-200 rounded bg-red-50 p-2 text-red-700">{it.errorMessage}</pre>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ================================================================
+// 원격 파일 탐색 (NAS FTP LIST 기반)
+// ================================================================
+interface BrowseEntry {
+  name: string;
+  isDir: boolean;
+  size: number;
+  modified: string | null;
+}
+
+function BackupBrowserSection() {
+  const [path, setPath] = useState<string | null>(null); // null = 초기, ftp_remote_path 사용
+  const [root, setRoot] = useState<string>("/");
+  const [parent, setParent] = useState<string | null>(null);
+  const [entries, setEntries] = useState<BrowseEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load(p: string | null) {
+    setLoading(true);
+    setError(null);
+    try {
+      const url = p ? `/api/admin/backup/browse?path=${encodeURIComponent(p)}` : "/api/admin/backup/browse";
+      const res = await fetch(url, { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "조회 실패");
+        setEntries([]);
+        return;
+      }
+      setPath(data.path);
+      setRoot(data.root);
+      setParent(data.parent);
+      setEntries(data.entries || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load(null);
+  }, []);
+
+  function fmtSize(b: number) {
+    if (b < 1024) return `${b}B`;
+    if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)}KB`;
+    if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)}MB`;
+    return `${(b / 1024 / 1024 / 1024).toFixed(2)}GB`;
+  }
+
+  return (
+    <div className="bg-white rounded border border-amber-200 p-3 mb-4">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-bold text-gray-700">원격 파일 탐색 (NAS)</h3>
+        <button
+          type="button"
+          onClick={() => load(path)}
+          disabled={loading}
+          className="px-2 py-0.5 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+        >
+          {loading ? "..." : "새로고침"}
+        </button>
+      </div>
+
+      <div className="text-xs text-gray-600 mb-2 font-mono break-all">
+        📂 {path || "(loading)"}
+      </div>
+
+      {parent !== null && parent !== path && (
+        <button
+          type="button"
+          onClick={() => load(parent)}
+          className="text-xs text-blue-600 hover:underline mb-2"
+        >
+          ↑ 상위 폴더
+        </button>
+      )}
+
+      {error && (
+        <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2 mb-2">{error}</div>
+      )}
+
+      {loading && entries.length === 0 ? (
+        <div className="text-xs text-gray-400">불러오는 중...</div>
+      ) : entries.length === 0 ? (
+        <div className="text-xs text-gray-400">디렉터리가 비어있습니다.</div>
+      ) : (
+        <div className="border border-gray-200 rounded max-h-72 overflow-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 sticky top-0">
+              <tr className="text-gray-500">
+                <th className="text-left py-1.5 px-2 font-medium">이름</th>
+                <th className="text-right py-1.5 px-2 font-medium w-24">크기</th>
+                <th className="text-left py-1.5 px-2 font-medium w-40">수정</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e, i) => (
+                <tr key={i} className="border-t border-gray-100 hover:bg-gray-50">
+                  <td className="py-1.5 px-2">
+                    {e.isDir ? (
+                      <button
+                        type="button"
+                        onClick={() => load(`${path}/${e.name}`.replace(/\/+/g, "/"))}
+                        className="text-blue-600 hover:underline text-left"
+                      >
+                        📁 {e.name}/
+                      </button>
+                    ) : (
+                      <span className="text-gray-700">📄 {e.name}</span>
+                    )}
+                  </td>
+                  <td className="py-1.5 px-2 text-right font-mono text-gray-500">
+                    {e.isDir ? "-" : fmtSize(e.size)}
+                  </td>
+                  <td className="py-1.5 px-2 text-gray-500 font-mono text-[10px]">{e.modified || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

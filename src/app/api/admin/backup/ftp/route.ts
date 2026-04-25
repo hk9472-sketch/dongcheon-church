@@ -261,6 +261,18 @@ export async function POST(request: NextRequest) {
   const results: string[] = [];
   const filesToCleanup: string[] = [];
 
+  // BackupHistory 시작 행 — 종료 시 update
+  const startedAt = new Date();
+  const historyRow = await prisma.backupHistory.create({
+    data: {
+      startedAt,
+      type,
+      trigger: scheduled ? "scheduled" : "manual",
+      success: false,
+    },
+  });
+  let historyFilesCount = 0;
+
   try {
     // ─── DB backup ───
     if (type === "db" || type === "full") {
@@ -340,6 +352,7 @@ export async function POST(request: NextRequest) {
         };
 
         scanDir(dataDir, "");
+        historyFilesCount = uploadedCount;
 
         if (errorCount > 0) {
           results.push(`첨부파일 업로드: ${uploadedCount}개 성공, ${errorCount}개 실패`);
@@ -358,6 +371,19 @@ export async function POST(request: NextRequest) {
     await setSetting("ftp_last_backup", kstISOString());
     await setSetting("ftp_last_result", resultSummary);
 
+    // 이력 종료 갱신
+    const endedAt = new Date();
+    await prisma.backupHistory.update({
+      where: { id: historyRow.id },
+      data: {
+        endedAt,
+        durationMs: endedAt.getTime() - startedAt.getTime(),
+        success: allSuccess,
+        filesCount: historyFilesCount,
+        details: results.join("\n"),
+      },
+    }).catch(() => { /* 로깅 실패는 무시 */ });
+
     return NextResponse.json({
       success: allSuccess,
       message: resultSummary,
@@ -367,6 +393,21 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : "FTP 백업 중 오류가 발생했습니다.";
     await setSetting("ftp_last_result", `실패 - ${msg}`);
+
+    // 이력 종료 갱신 — 예외 시 errorMessage 기록
+    const endedAt = new Date();
+    await prisma.backupHistory.update({
+      where: { id: historyRow.id },
+      data: {
+        endedAt,
+        durationMs: endedAt.getTime() - startedAt.getTime(),
+        success: false,
+        filesCount: historyFilesCount,
+        details: results.join("\n"),
+        errorMessage: msg,
+      },
+    }).catch(() => { /* 로깅 실패는 무시 */ });
+
     return NextResponse.json({ success: false, message: msg }, { status: 500 });
   } finally {
     // Cleanup temp files
