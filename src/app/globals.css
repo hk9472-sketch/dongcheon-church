@@ -328,11 +328,17 @@ html {
   margin: 0.5em 0;
 }
 
-/* 미디어 다운로드 링크 — 조회 페이지의 video/audio 뒤에 자동 삽입됨 */
+/* 미디어 다운로드 링크 — 조회 페이지의 video/audio 뒤에 자동 삽입됨.
+   미디어 옆이 아닌 하단에 배치 (모바일에서 동영상 폭이 좁아지는 문제 방지).
+   - display:block + clear:both : video/audio 의 float 영향까지 끊어 항상 새 줄에서 시작
+   - width:max-content + max-width:100% : 텍스트 너비만 차지, 모바일에서 깨지지 않음 */
 .prose .media-download-link,
 .tiptap-editor .ProseMirror .media-download-link {
-  display: inline-block;
-  margin: 4px 0 8px;
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  clear: both;
+  margin: 6px 0 12px;
   padding: 3px 10px;
   font-size: 12px;
   color: #4338ca;
