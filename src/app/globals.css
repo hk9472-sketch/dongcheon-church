@@ -393,6 +393,32 @@ html {
   height: auto;
 }
 
+/* 모바일 — 동영상/오디오/iframe 은 화면 가로폭 100% 강제.
+   작성자가 60% 등으로 설정한 inline width 를 모바일에선 무시해야
+   휴대폰에서 절반 크기로 보이는 문제가 사라짐.
+   .media-row 는 flex 가로 배치 → column 으로 전환. */
+@media (max-width: 768px) {
+  .prose video,
+  .prose audio,
+  .prose iframe {
+    width: 100% !important;
+    max-width: 100% !important;
+    float: none !important;
+    display: block !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  .prose .media-row,
+  .tiptap-editor .ProseMirror .media-row {
+    flex-direction: column;
+  }
+  .prose .media-row > *,
+  .tiptap-editor .ProseMirror .media-row > * {
+    flex: 1 1 auto;
+    width: 100% !important;
+  }
+}
+
 /* 댓글 본문 — prose 를 쓰지 않으므로 문단 간격만 최소로 부여.
    TipTap 의 inline font-size/font-family style 을 class 규칙이 덮지 않도록
    어떤 규칙도 font-* 를 건드리지 않는다. */
