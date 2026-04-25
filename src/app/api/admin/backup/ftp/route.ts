@@ -83,7 +83,8 @@ function kstDateTimeStr() {
 }
 
 function parseDatabaseUrl(url: string) {
-  const m = url.match(/mysql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
+  // 쿼리스트링(?key=val&...) 은 데이터베이스 이름에서 제외
+  const m = url.match(/mysql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/([^?]+)/);
   if (!m) return null;
   return { user: m[1], password: m[2], host: m[3], port: m[4], database: m[5] };
 }
@@ -280,6 +281,7 @@ export async function POST(request: NextRequest) {
           "--single-transaction",
           "--routines",
           "--triggers",
+          "--no-tablespaces", // PROCESS 권한 없을 때 tablespace 덤프 시도 차단
         ];
         const dump = execFileSync("mysqldump", dumpArgs, {
           maxBuffer: 100 * 1024 * 1024,
