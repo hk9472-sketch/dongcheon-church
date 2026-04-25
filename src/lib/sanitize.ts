@@ -80,26 +80,48 @@ export function sanitizeHtml(dirty: string | null | undefined): string {
   // 입력한 공백 줄이 화면에서 사라진다. 빈 단락 안에 <br> 을 넣어 한 줄 높이를 확보.
   const withEmptyP = clean.replace(/<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, "<p><br></p>");
 
-  // 렌더 시점에 <video>/<audio> 뒤에 '📥 다운로드' 링크 자동 삽입.
-  // iframe(YouTube/Vimeo) 은 플랫폼이 차단하므로 제외.
-  // 저장된 HTML 자체에는 링크가 없고 출력 시에만 덧붙이므로, 이후 에디터 편집 시
-  // 중복으로 저장되지 않고, 링크를 제거하려면 이 함수만 고치면 된다.
+  // 렌더 시점에 <video>/<audio> 처리:
+  //   1. src 가 http:// 외부 도메인이면 → /api/board/media-proxy 로 리라이트
+  //      (HTTPS 페이지의 Mixed Content 차단 회피, 인라인 재생 가능)
+  //   2. 태그 뒤에 '📥 다운로드' 링크 자동 삽입 (/api/board/media-download 경유)
   //
-  // 브라우저는 외부 도메인 파일에 대해 <a download> 속성을 CORS 정책으로 무시한다.
-  // 따라서 자체 서버의 /api/board/media-download 를 경유해 Content-Disposition:
-  // attachment 헤더로 내려받도록 한다. 자체 경로(/api/board/media?path=...)는
-  // 해당 라우트가 리다이렉트로 처리.
+  // 저장된 HTML 자체에는 변경 없고 출력 시에만 변환 → 에디터 편집 시 원본 보존.
+  function rewriteSrcForProxy(srcUrl: string): string {
+    // 자체 경로(/...) 또는 https:// 는 그대로
+    if (srcUrl.startsWith("/") || srcUrl.startsWith("https://") || srcUrl.startsWith("//")) {
+      return srcUrl;
+    }
+    // http:// 만 프록시 경유 (Mixed Content 차단 우회)
+    if (srcUrl.startsWith("http://")) {
+      return `/api/board/media-proxy?src=${encodeURIComponent(srcUrl)}`;
+    }
+    return srcUrl;
+  }
+
   const withDownload = withEmptyP.replace(
     /<(video|audio)\b([^>]*)>([\s\S]*?)<\/\1>/gi,
-    (full, _tag, attrs, inner) => {
+    (_full, tag, attrs, inner) => {
+      // 외곽 태그 src 추출 (다운로드 링크용 원본 URL 보존)
       const srcMatch = (attrs + inner).match(/\bsrc=(?:"([^"]+)"|'([^']+)')/i);
-      const src = srcMatch ? srcMatch[1] || srcMatch[2] : "";
-      if (!src) return full;
-      const lastSeg = src.split("?")[0].split("/").filter(Boolean).pop() || "";
-      const proxyHref =
-        `/api/board/media-download?src=${encodeURIComponent(src)}` +
+      const originalSrc = srcMatch ? srcMatch[1] || srcMatch[2] : "";
+
+      // 외곽 태그와 내부 <source> 들의 src 를 프록시로 리라이트
+      const rewriteAttr = (str: string) =>
+        str.replace(
+          /\bsrc=(["'])([^"']+)\1/gi,
+          (_m, q, url) => `src=${q}${rewriteSrcForProxy(url)}${q}`
+        );
+      const newAttrs = rewriteAttr(attrs);
+      const newInner = rewriteAttr(inner);
+      const newTag = `<${tag}${newAttrs}>${newInner}</${tag}>`;
+
+      // 다운로드 링크 추가 (원본 URL 사용 — media-download 가 자체적으로 프록시)
+      if (!originalSrc) return newTag;
+      const lastSeg = originalSrc.split("?")[0].split("/").filter(Boolean).pop() || "";
+      const dlHref =
+        `/api/board/media-download?src=${encodeURIComponent(originalSrc)}` +
         (lastSeg ? `&name=${encodeURIComponent(lastSeg)}` : "");
-      return `${full}<a class="media-download-link" href="${proxyHref}" download rel="noopener noreferrer">📥 다운로드</a>`;
+      return `${newTag}<a class="media-download-link" href="${dlHref}" download rel="noopener noreferrer">📥 다운로드</a>`;
     }
   );
   return withDownload;
