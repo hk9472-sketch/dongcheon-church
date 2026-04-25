@@ -10,6 +10,7 @@ import CommentSection from "@/components/board/CommentSection";
 import PostActions from "@/components/board/PostActions";
 import SecretPostUnlock from "@/components/board/SecretPostUnlock";
 import HitCounter from "@/components/board/HitCounter";
+import FloppyIcon from "@/components/icons/FloppyIcon";
 
 
 // ============================================================
@@ -379,7 +380,7 @@ export default async function PostDetailPage({ params }: PageProps) {
                     href={`/api/download?attachmentId=${a.id}`}
                     className="flex items-center gap-2 text-sm text-blue-600 hover:underline"
                   >
-                    <span>📎</span>
+                    <FloppyIcon className="w-5 h-5 text-blue-600 shrink-0" />
                     <span>{a.origName || a.fileName}</span>
                     <span className="text-gray-400 text-xs">(다운로드 {a.downloadCount})</span>
                   </a>
@@ -524,9 +525,7 @@ export default async function PostDetailPage({ params }: PageProps) {
                         {p.isSecret && (
                           <span className="ml-1 text-xs text-gray-400" title="비밀글">🔒</span>
                         )}
-                        {p._count.attachments > 0 && (
-                          <span className="ml-1 text-xs text-gray-400" title="첨부파일">📎</span>
-                        )}
+                        {p._count.attachments > 0 && <FloppyIcon className="ml-1 w-4 h-4 text-blue-600" />}
                       </div>
                     </td>
                     <td className="py-2.5 text-center text-gray-600 hidden sm:table-cell">

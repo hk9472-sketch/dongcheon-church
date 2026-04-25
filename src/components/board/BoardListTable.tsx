@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import FloppyIcon from "@/components/icons/FloppyIcon";
 
 interface PostItem {
   id: number;
@@ -300,9 +301,7 @@ export default function BoardListTable({
                         {post.isSecret && (
                           <span className="ml-1 text-xs text-gray-400" title="비밀글">🔒</span>
                         )}
-                        {post.hasAttachment && (
-                          <span className="ml-1 text-xs text-gray-400" title="첨부파일">📎</span>
-                        )}
+                        {post.hasAttachment && <FloppyIcon className="ml-1 w-4 h-4 text-blue-600" />}
                       </Link>
                     </div>
                   </td>

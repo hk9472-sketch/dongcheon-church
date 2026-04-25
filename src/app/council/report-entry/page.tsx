@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { handleArrowNav } from "@/lib/useArrowNav";
 import HelpButton from "@/components/HelpButton";
+import FloppyIcon from "@/components/icons/FloppyIcon";
 
 interface AttachedFile {
   id: number;
@@ -511,7 +512,7 @@ export default function ReportEntryPage() {
               <div className="space-y-1">
                 {files.map((f) => (
                   <div key={f.id} className="flex items-center gap-2 text-[11px] bg-gray-50 rounded px-2 py-1 border border-gray-200">
-                    <span className="text-gray-400 shrink-0">📎</span>
+                    <FloppyIcon className="w-4 h-4 text-blue-600 shrink-0" />
                     <a
                       href={`/api/council/files/download?id=${f.id}`}
                       className="text-indigo-600 hover:underline truncate flex-1"

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import prisma from "@/lib/db";
 import { sanitizeHtml } from "@/lib/sanitize";
+import FloppyIcon from "@/components/icons/FloppyIcon";
 
 
 // 게시판별 아이콘 매핑 (기본값: 📋)
@@ -496,9 +497,7 @@ function BoardWidget({ board, rows }: {
                     <span className="inline-block text-[10px] sm:text-xs mr-0.5 align-middle" title="비밀글">🔒</span>
                   )}
                   {post.subject}
-                  {post.hasAttachment && (
-                    <span className="inline-block text-[10px] sm:text-xs ml-1 text-gray-400 align-middle" title="첨부파일">📎</span>
-                  )}
+                  {post.hasAttachment && <FloppyIcon className="ml-1 w-4 h-4 text-blue-600" />}
                   {" "}
                   <span
                     style={{ fontFamily: "var(--skin-widget-author-font)", fontSize: "var(--skin-widget-author-size)", color: "var(--skin-widget-author-color)", fontWeight: "var(--skin-widget-author-weight)" as never, textDecoration: "var(--skin-widget-author-decoration)" as never, fontStyle: "var(--skin-widget-author-style)" as never }}
@@ -605,9 +604,7 @@ function RecentPostsWidget({ posts, rows }: { posts: RecentPost[]; rows: number 
                   )}
                   {post.isSecret && <span className="text-[10px] sm:text-xs mr-0.5 align-middle" title="비밀글">🔒</span>}
                   {post.subject}
-                  {post.hasAttachment && (
-                    <span className="inline-block text-[10px] sm:text-xs ml-1 text-gray-400 align-middle" title="첨부파일">📎</span>
-                  )}
+                  {post.hasAttachment && <FloppyIcon className="ml-1 w-4 h-4 text-blue-600" />}
                   {post.hasRecentComment && (
                     <span className="text-red-500 text-[10px] ml-0.5 font-bold">[c]</span>
                   )}

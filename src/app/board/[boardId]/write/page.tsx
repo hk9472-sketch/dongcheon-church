@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, Suspense, use } from "react";
 import dynamic from "next/dynamic";
 import HelpButton from "@/components/HelpButton";
 import CaptchaField from "@/components/CaptchaField";
+import FloppyIcon from "@/components/icons/FloppyIcon";
 
 // TipTap 은 무거운 에디터 (@tiptap/* + prosemirror 다수). 글쓰기 진입 시에만 로드하도록
 // 동적 import 로 분리해 초기 번들 사이즈 감소.
@@ -450,7 +451,7 @@ function WriteForm({ boardId }: { boardId: string }) {
                     key={a.id}
                     className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded bg-gray-50"
                   >
-                    <span className="text-gray-400">📎</span>
+                    <FloppyIcon className="w-4 h-4 text-blue-600 shrink-0" />
                     <span className="flex-1 truncate">{a.origName}</span>
                     <button
                       type="button"
@@ -513,7 +514,7 @@ function WriteForm({ boardId }: { boardId: string }) {
                     key={idx}
                     className="flex items-center gap-2 px-3 py-2 text-sm border border-blue-200 rounded bg-blue-50/40"
                   >
-                    <span className="text-blue-500">📎</span>
+                    <FloppyIcon className="w-4 h-4 text-blue-600 shrink-0" />
                     <span className="flex-1 truncate">{f.name}</span>
                     <span className="text-xs text-gray-400">{(f.size / 1024).toFixed(1)}KB</span>
                     <button

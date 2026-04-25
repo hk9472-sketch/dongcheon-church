@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { handleArrowNav } from "@/lib/useArrowNav";
 import HelpButton from "@/components/HelpButton";
+import FloppyIcon from "@/components/icons/FloppyIcon";
 
 interface DistrictRow {
   groupId: number;
@@ -592,9 +593,11 @@ export default function OverallPage() {
               const isExcel = /\.(xlsx?|csv)$/i.test(f.origName);
               return (
                 <div key={f.id} className="flex items-center gap-2 text-xs bg-gray-50 rounded px-3 py-1.5 border border-gray-200">
-                  <span className={`shrink-0 ${isExcel ? "text-green-600" : "text-gray-400"}`}>
-                    {isExcel ? "📊" : "📎"}
-                  </span>
+                  {isExcel ? (
+                    <span className="shrink-0 text-green-600">📊</span>
+                  ) : (
+                    <FloppyIcon className="w-4 h-4 text-blue-600 shrink-0" />
+                  )}
                   <a
                     href={`/api/council/files/download?id=${f.id}`}
                     className="text-indigo-600 hover:underline truncate flex-1"
