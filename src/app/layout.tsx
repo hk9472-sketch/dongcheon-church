@@ -3,6 +3,7 @@ import "./globals.css";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import VisitorTracker from "@/components/VisitorTracker";
+import ScrollRestorer from "@/components/ScrollRestorer";
 import prisma from "@/lib/db";
 import React from "react";
 
@@ -192,6 +193,7 @@ export default async function RootLayout({
   return (
     <html lang="ko" style={themeStyle}>
       <body className="flex flex-col min-h-dvh bg-gray-50 text-gray-900">
+        <ScrollRestorer />
         <VisitorTracker />
         <Header />
         <main className="flex-1 w-full max-w-[1450px] mx-auto px-4 py-2">
