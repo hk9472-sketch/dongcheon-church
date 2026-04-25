@@ -131,7 +131,11 @@ function uploadFileViaCurl(
   remoteFileName: string,
   ftp: { host: string; port: string; user: string; password: string; remotePath: string }
 ) {
-  const remoteUrl = `ftp://${ftp.host}:${ftp.port}${ftp.remotePath}/${remoteFileName}`;
+  // remotePath 정규화: 선행 / 없으면 추가, 후행 / 제거 → "/HDD1/realtime"
+  let p = ftp.remotePath || "";
+  if (!p.startsWith("/")) p = "/" + p;
+  if (p.length > 1 && p.endsWith("/")) p = p.replace(/\/+$/, "");
+  const remoteUrl = `ftp://${ftp.host}:${ftp.port}${p}/${remoteFileName}`;
   // execFile로 argv 배열 직접 전달 → 쉘 해석 없음, 주입 불가
   const args = [
     "-T", localPath,
