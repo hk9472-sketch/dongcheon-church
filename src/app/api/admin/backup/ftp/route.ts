@@ -14,6 +14,29 @@ async function verifyAdmin(request: NextRequest) {
   return user;
 }
 
+/**
+ * cron 호출용 인증 — 서버 .env 의 BACKUP_SECRET 와 일치하는 토큰을
+ * Authorization: Bearer <token> 또는 X-Backup-Token 헤더로 받으면 통과.
+ * 환경변수 미설정 또는 헤더 불일치면 false.
+ */
+function verifyBackupToken(request: NextRequest): boolean {
+  const expected = process.env.BACKUP_SECRET;
+  if (!expected || expected.length < 16) return false; // 너무 짧은 비밀은 거부
+
+  const auth = request.headers.get("authorization") || "";
+  const bearerMatch = auth.match(/^Bearer\s+(.+)$/i);
+  const provided = bearerMatch ? bearerMatch[1].trim() : (request.headers.get("x-backup-token") || "").trim();
+
+  if (!provided) return false;
+  // 타이밍 공격 방지용 단순 길이 비교 + 상수시간 비교
+  if (provided.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) {
+    diff |= provided.charCodeAt(i) ^ expected.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 // 시스템 TZ 와 무관하게 KST 문자열을 만든다.
 // 이전 구현은 new Date(Date.now()+9h) 로 epoch 를 미리 당겨 놓은 뒤 .getHours() 등을 호출해
 // 시스템이 UTC 일 때만 정상 동작했다. 시스템을 KST 로 바꾸면 표준 메서드가 한 번 더
@@ -191,9 +214,15 @@ export async function PUT(request: NextRequest) {
 }
 
 // POST: execute FTP backup
+//
+// 인증 두 갈래:
+//   1) 관리자 세션 — UI 에서 클릭한 경우
+//   2) BACKUP_SECRET 토큰 — cron 등 서버 측 자동 호출 (관리자 세션 없음)
+//      Authorization: Bearer <secret>  또는  X-Backup-Token: <secret>
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin(request);
-  if (!admin) {
+  const tokenAuth = !admin && verifyBackupToken(request);
+  if (!admin && !tokenAuth) {
     return NextResponse.json({ message: "관리자 권한이 필요합니다." }, { status: 403 });
   }
 
