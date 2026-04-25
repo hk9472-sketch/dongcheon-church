@@ -328,16 +328,6 @@ html {
   margin: 0.5em 0;
 }
 
-/* video — 메타데이터 로드 실패/지연 시 fallback 비율.
-   기본은 16:9 박스 + object-fit:contain 으로 영상 자연 비율 letterbox.
-   메타 받으면 video 의 자연 비율이 우선 (브라우저가 알아서 처리). */
-.prose video,
-.tiptap-editor .ProseMirror video {
-  aspect-ratio: 16 / 9;
-  object-fit: contain;
-  background: #000;
-}
-
 /* 미디어 다운로드 링크 — 조회 페이지의 video/audio 뒤에 자동 삽입됨.
    미디어 옆이 아닌 하단에 배치 (모바일에서 동영상 폭이 좁아지는 문제 방지).
    - display:block + clear:both : video/audio 의 float 영향까지 끊어 항상 새 줄에서 시작

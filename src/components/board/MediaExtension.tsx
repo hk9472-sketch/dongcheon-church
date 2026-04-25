@@ -360,9 +360,6 @@ function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode, g
             display: "block",
             width: "100%",
             height: "auto",
-            // 메타 로드 전/실패 시에도 16:9 박스 유지 (납작하게 뻗는 문제 방지)
-            aspectRatio: "16 / 9",
-            objectFit: "contain",
             background: "#000",
             outline: show ? "2px solid #3b82f6" : "none",
             outlineOffset: 1,
