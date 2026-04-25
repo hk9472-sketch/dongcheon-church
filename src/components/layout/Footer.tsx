@@ -169,7 +169,7 @@ export default async function Footer() {
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs text-blue-200/80 hover:text-white hover:underline"
-              title="구 제로보드 사이트 (박물관)"
+              title="구 홈페이지 (제로보드)"
             >
               🗄️ 이전 홈 바로가기
             </a>
