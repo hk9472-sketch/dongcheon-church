@@ -35,6 +35,7 @@ interface RecentPost {
   boardSlug?: string;
   boardTitle?: string;
   hasRecentComment?: boolean;
+  hasAttachment?: boolean;
 }
 
 interface RecentComment {
@@ -102,6 +103,7 @@ async function getRecentPostsBatch(
     authorName: true,
     depth: true,
     comments: { where: { createdAt: { gte: fiveDaysAgoW } }, select: { id: true }, take: 1 },
+    _count: { select: { attachments: true } },
   } as const;
 
   // 모든 보드의 공지 + 일반글 쿼리를 한 번에 병렬 실행
@@ -126,9 +128,10 @@ async function getRecentPostsBatch(
         const combined: RecentPost[] = [
           ...notices.slice(0, Math.min(notices.length, rows)),
           ...posts.slice(0, Math.max(0, rows - notices.length)),
-        ].map(({ comments, ...rest }) => ({
+        ].map(({ comments, _count, ...rest }) => ({
           ...rest,
           hasRecentComment: comments.length > 0,
+          hasAttachment: _count.attachments > 0,
         }));
         return [boardId, combined] as const;
       } catch {
@@ -214,6 +217,7 @@ async function getRecentNewPosts(rows: number): Promise<RecentPost[]> {
           select: { id: true },
           take: 1,
         },
+        _count: { select: { attachments: true } },
       },
     });
     return posts.map((p) => ({
@@ -221,6 +225,7 @@ async function getRecentNewPosts(rows: number): Promise<RecentPost[]> {
       boardSlug: p.board.slug,
       boardTitle: p.board.title,
       hasRecentComment: p.comments.length > 0,
+      hasAttachment: p._count.attachments > 0,
     }));
   } catch {
     return [];
@@ -491,6 +496,9 @@ function BoardWidget({ board, rows }: {
                     <span className="inline-block text-[10px] sm:text-xs mr-0.5 align-middle" title="비밀글">🔒</span>
                   )}
                   {post.subject}
+                  {post.hasAttachment && (
+                    <span className="inline-block text-[10px] sm:text-xs ml-1 text-gray-400 align-middle" title="첨부파일">📎</span>
+                  )}
                   {" "}
                   <span
                     style={{ fontFamily: "var(--skin-widget-author-font)", fontSize: "var(--skin-widget-author-size)", color: "var(--skin-widget-author-color)", fontWeight: "var(--skin-widget-author-weight)" as never, textDecoration: "var(--skin-widget-author-decoration)" as never, fontStyle: "var(--skin-widget-author-style)" as never }}
@@ -597,6 +605,9 @@ function RecentPostsWidget({ posts, rows }: { posts: RecentPost[]; rows: number 
                   )}
                   {post.isSecret && <span className="text-[10px] sm:text-xs mr-0.5 align-middle" title="비밀글">🔒</span>}
                   {post.subject}
+                  {post.hasAttachment && (
+                    <span className="inline-block text-[10px] sm:text-xs ml-1 text-gray-400 align-middle" title="첨부파일">📎</span>
+                  )}
                   {post.hasRecentComment && (
                     <span className="text-red-500 text-[10px] ml-0.5 font-bold">[c]</span>
                   )}
