@@ -163,16 +163,20 @@ export default async function Footer() {
         <div className="flex flex-col md:flex-row items-center justify-between gap-2 pt-2 border-t border-white/20">
           <div className="flex items-center gap-3">
             <VisitorCounter />
-            <span className="text-white/40 select-none text-xs">|</span>
-            <a
-              href="http://pkistdc.net:8080"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-blue-200/80 hover:text-white hover:underline"
-              title="구 홈페이지"
-            >
-              🗄️ 이전 홈 바로가기
-            </a>
+            {user && (
+              <>
+                <span className="text-white/40 select-none text-xs">|</span>
+                <a
+                  href="http://pkistdc.net:8080"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-200/80 hover:text-white hover:underline"
+                  title="구 홈페이지"
+                >
+                  🗄️ 이전 홈 바로가기
+                </a>
+              </>
+            )}
           </div>
           <div className="flex flex-col md:flex-row items-center gap-2 md:gap-3 text-xs">
             <div className="flex items-center gap-2">
