@@ -47,9 +47,21 @@ function statusBadge(s?: "ok" | "expiring" | "expired") {
   return <span className="px-2 py-0.5 text-xs font-bold text-gray-600 bg-gray-100 rounded">미설정</span>;
 }
 
+interface RenewResult {
+  success: boolean;
+  skipped?: boolean;
+  message?: string;
+  stdout?: string;
+  stderr?: string;
+  code?: number;
+  error?: string;
+}
+
 export default function CertificateAdminPage() {
   const [results, setResults] = useState<(CertInfo & { label: string })[]>([]);
   const [loading, setLoading] = useState(true);
+  const [renewing, setRenewing] = useState(false);
+  const [renewResult, setRenewResult] = useState<RenewResult | null>(null);
 
   async function load() {
     setLoading(true);
@@ -75,6 +87,30 @@ export default function CertificateAdminPage() {
     );
     setResults(out);
     setLoading(false);
+  }
+
+  async function handleRenew() {
+    if (!confirm("인증서 갱신을 시도하시겠습니까?\n\nLet's Encrypt 의 '만료 30일 이내' 인증서만 실제 갱신됩니다.\n실행 시간 1~3분.")) {
+      return;
+    }
+    setRenewing(true);
+    setRenewResult(null);
+    try {
+      const res = await fetch("/api/admin/certificate/renew", { method: "POST" });
+      const data = await res.json();
+      setRenewResult(data);
+      if (data.success) {
+        // 카드 새로고침 (재발급된 만료일 즉시 반영)
+        await load();
+      }
+    } catch (e) {
+      setRenewResult({
+        success: false,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setRenewing(false);
+    }
   }
 
   useEffect(() => {
@@ -183,17 +219,69 @@ export default function CertificateAdminPage() {
         ))}
       </div>
 
-      {/* 인증서 갱신 안내 */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-xs text-gray-600 space-y-1">
-        <p className="font-semibold text-blue-900">자동 갱신</p>
-        <p>
-          Let&apos;s Encrypt 인증서는 90일 유효이며, certbot 이 만료 30일 전부터 자동 갱신을 시도합니다.
-          남은 기간이 30일 미만으로 떨어져도 갱신이 안 된다면 서버에서{" "}
-          <code className="px-1 py-0.5 bg-white border border-gray-300 rounded font-mono">
-            sudo systemctl status certbot.timer
-          </code>{" "}
-          를 확인하세요.
-        </p>
+      {/* 인증서 수동 갱신 */}
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+          <h2 className="text-sm font-semibold text-gray-700">수동 갱신</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Let&apos;s Encrypt 인증서는 90일 유효이며 certbot 이 자동 갱신합니다.
+            자동 갱신이 실패했거나 갱신 알림 메일을 받으셨을 때 아래 버튼으로 즉시 시도하세요.
+            (만료 30일 이상 남으면 실제 갱신 없이 통과)
+          </p>
+        </div>
+        <div className="p-5 space-y-3">
+          <button
+            type="button"
+            onClick={handleRenew}
+            disabled={renewing}
+            className="px-5 py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {renewing ? "갱신 중... (최대 3분)" : "🔄 인증서 갱신 시도"}
+          </button>
+
+          {/* 결과 패널 */}
+          {renewResult && (
+            <div
+              className={`rounded-lg border p-3 text-sm ${
+                renewResult.success
+                  ? renewResult.skipped
+                    ? "bg-blue-50 border-blue-200"
+                    : "bg-green-50 border-green-200"
+                  : "bg-red-50 border-red-200"
+              }`}
+            >
+              <div className="font-semibold mb-1">
+                {renewResult.success
+                  ? renewResult.skipped
+                    ? "ℹ️ 갱신 불필요"
+                    : "✅ 갱신 완료"
+                  : "❌ 갱신 실패"}
+              </div>
+              {renewResult.message && (
+                <div className="text-xs text-gray-700 mb-2">{renewResult.message}</div>
+              )}
+              {renewResult.error && (
+                <div className="text-xs text-red-700 mb-2">{renewResult.error}</div>
+              )}
+              {(renewResult.stdout || renewResult.stderr) && (
+                <pre className="text-[11px] text-gray-600 bg-white border border-gray-200 rounded p-2 mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-all">
+                  {renewResult.stdout}
+                  {renewResult.stderr && (renewResult.stdout ? "\n---\n" : "") + renewResult.stderr}
+                </pre>
+              )}
+              {!renewResult.success && (
+                <div className="text-xs text-gray-600 mt-2 space-y-1">
+                  <p className="font-semibold">실패 원인 점검:</p>
+                  <ol className="list-decimal list-inside space-y-0.5">
+                    <li>서버에 <code className="px-1 bg-white rounded">/usr/local/bin/dc-cert-renew</code> 스크립트가 있는지</li>
+                    <li>sudoers 에 <code className="px-1 bg-white rounded">hk9472 ALL=(root) NOPASSWD: /usr/local/bin/dc-cert-renew</code> 있는지</li>
+                    <li>위 출력에 <code>certbot</code> 관련 에러가 있는지</li>
+                  </ol>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
