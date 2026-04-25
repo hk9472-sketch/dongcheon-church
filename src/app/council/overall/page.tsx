@@ -596,7 +596,7 @@ export default function OverallPage() {
                   {isExcel ? (
                     <span className="shrink-0 text-green-600">📊</span>
                   ) : (
-                    <FloppyIcon className="w-4 h-4 text-blue-600 shrink-0" />
+                    <FloppyIcon className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                   )}
                   <a
                     href={`/api/council/files/download?id=${f.id}`}

@@ -36,9 +36,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "아이디 또는 비밀번호가 올바르지 않습니다." }, { status: 401 });
     }
 
-    // 본인의 만료된 세션 자동 청소 — 누적 방지 (로그아웃 안 하고 닫는 사용자들 패턴)
+    // 만료된 세션 일괄 청소 — 누적 방지. 본인 + 다른 모든 사용자 모두 커버.
+    // expires < NOW() 만 삭제하므로 활성 세션은 절대 건드리지 않음 (안전).
     await prisma.session.deleteMany({
-      where: { userId: user.id, expires: { lt: new Date() } },
+      where: { expires: { lt: new Date() } },
     });
 
     // 세션 생성

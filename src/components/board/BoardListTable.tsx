@@ -301,7 +301,7 @@ export default function BoardListTable({
                         {post.isSecret && (
                           <span className="ml-1 text-xs text-gray-400" title="비밀글">🔒</span>
                         )}
-                        {post.hasAttachment && <FloppyIcon className="ml-1 w-4 h-4 text-blue-600" />}
+                        {post.hasAttachment && <FloppyIcon className="ml-1 w-3.5 h-3.5 text-blue-600" />}
                       </Link>
                     </div>
                   </td>

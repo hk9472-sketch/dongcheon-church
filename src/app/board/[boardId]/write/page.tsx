@@ -451,7 +451,7 @@ function WriteForm({ boardId }: { boardId: string }) {
                     key={a.id}
                     className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded bg-gray-50"
                   >
-                    <FloppyIcon className="w-4 h-4 text-blue-600 shrink-0" />
+                    <FloppyIcon className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                     <span className="flex-1 truncate">{a.origName}</span>
                     <button
                       type="button"
@@ -514,7 +514,7 @@ function WriteForm({ boardId }: { boardId: string }) {
                     key={idx}
                     className="flex items-center gap-2 px-3 py-2 text-sm border border-blue-200 rounded bg-blue-50/40"
                   >
-                    <FloppyIcon className="w-4 h-4 text-blue-600 shrink-0" />
+                    <FloppyIcon className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                     <span className="flex-1 truncate">{f.name}</span>
                     <span className="text-xs text-gray-400">{(f.size / 1024).toFixed(1)}KB</span>
                     <button
