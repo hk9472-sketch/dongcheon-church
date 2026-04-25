@@ -16,6 +16,7 @@ const ADMIN_MENU: { label: string; href: string; icon: string; external?: boolea
   { label: "SQL 관리", href: "/admin/db/sql", icon: "💾" },
   { label: "도움말 관리", href: "/admin/help", icon: "❓" },
   { label: "백업", href: "/admin/backup", icon: "📦" },
+  { label: "SSL 인증서", href: "/admin/certificate", icon: "🔐" },
   { label: "Google Cloud", href: "https://console.cloud.google.com/compute/instances?hl=ko&project=project-d273e626-5a30-41ff-b5f", icon: "☁️", external: true },
   { label: "레거시 (제로보드)", href: "http://35.212.199.48:8080/", icon: "🗄️", external: true },
 ];
