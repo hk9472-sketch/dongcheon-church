@@ -4,9 +4,25 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
+// 외부 사이트로의 open redirect 방지.
+// 허용: 상대경로(/...) 또는 pkistdc.net 호스트 (포트 무관, http/https 둘 다).
+function safeRedirect(raw: string | null): string {
+  if (!raw) return "/";
+  if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  try {
+    const u = new URL(raw);
+    if (u.hostname === "pkistdc.net" && (u.protocol === "https:" || u.protocol === "http:")) {
+      return u.toString();
+    }
+  } catch {
+    // ignore
+  }
+  return "/";
+}
+
 function LoginForm() {
   const searchParams = useSearchParams();
-  const redirectUrl = searchParams.get("redirect") || "/";
+  const redirectUrl = safeRedirect(searchParams.get("redirect"));
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");

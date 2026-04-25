@@ -4,6 +4,7 @@ import prisma from "@/lib/db";
 import { verifyPassword } from "@/lib/auth";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import { isSecureRequest } from "@/lib/cookieSecure";
+import { signLegacyToken } from "@/lib/legacyToken";
 
 // POST /api/auth/login
 export async function POST(request: NextRequest) {
@@ -61,6 +62,20 @@ export async function POST(request: NextRequest) {
       expires,
       path: "/",
     });
+
+    // 레거시 ZB 사이트 (pkistdc.net:8080) SSO 게이트용 토큰.
+    // HTTP 포트라 Secure 플래그는 설정하지 않음 (설정하면 :8080 에서 전송 안 됨).
+    // 신홈 세션과 별개의 stateless HMAC 토큰 — 만료 7일.
+    if (process.env.LEGACY_TOKEN_SECRET) {
+      const legacyToken = signLegacyToken({ userId: user.id, expires: expires.getTime() });
+      response.cookies.set("dc_legacy_token", legacyToken, {
+        httpOnly: true,
+        secure: false,
+        sameSite: "lax",
+        expires,
+        path: "/",
+      });
+    }
 
     return response;
   } catch (error) {

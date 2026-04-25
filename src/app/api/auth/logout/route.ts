@@ -12,6 +12,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({ success: true });
     response.cookies.set("dc_session", "", { maxAge: 0, path: "/" });
     response.cookies.set("dc_reauth", "", { maxAge: 0, path: "/" });
+    response.cookies.set("dc_legacy_token", "", { maxAge: 0, path: "/" });
     return response;
   } catch {
     return NextResponse.json({ success: true });
