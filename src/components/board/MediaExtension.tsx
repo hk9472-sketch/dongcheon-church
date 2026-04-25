@@ -158,13 +158,28 @@ const MediaNode = Node.create({
   },
 });
 
+// 외부 HTTP 미디어를 신홈(HTTPS) 에디터에서도 인라인 재생되도록 프록시 경유.
+// sanitize 가 출력 단계에서 똑같이 처리하지만, 에디터 NodeView 는 sanitize 안 거쳐서
+// 별도 적용 필요. 메타데이터 로드 실패로 video 가 비율 못 잡고 납작하게 뻗는 문제 해결.
+function rewriteSrcForProxy(srcUrl: string): string {
+  if (!srcUrl) return "";
+  if (srcUrl.startsWith("/") || srcUrl.startsWith("https://") || srcUrl.startsWith("//")) {
+    return srcUrl;
+  }
+  if (srcUrl.startsWith("http://")) {
+    return `/api/board/media-proxy?src=${encodeURIComponent(srcUrl)}`;
+  }
+  return srcUrl;
+}
+
 function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode, getPos }: ReactNodeViewProps) {
   const wrapRef = useRef<HTMLSpanElement>(null);
   const [drag, setDrag] = useState<{ startX: number; startW: number } | null>(null);
   const [hover, setHover] = useState(false);
 
   const kind = (node.attrs.kind as Kind) || "video";
-  const src = (node.attrs.src as string) || "";
+  const rawSrc = (node.attrs.src as string) || "";
+  const src = rewriteSrcForProxy(rawSrc);
   const widthAttr = (node.attrs.width as string | null) || null;
   const align = ((node.attrs.align as Align) || "center") as Align;
   const title = (node.attrs.title as string | undefined) || undefined;
@@ -345,6 +360,9 @@ function MediaNodeView({ node, updateAttributes, selected, editor, deleteNode, g
             display: "block",
             width: "100%",
             height: "auto",
+            // 메타 로드 전/실패 시에도 16:9 박스 유지 (납작하게 뻗는 문제 방지)
+            aspectRatio: "16 / 9",
+            objectFit: "contain",
             background: "#000",
             outline: show ? "2px solid #3b82f6" : "none",
             outlineOffset: 1,
