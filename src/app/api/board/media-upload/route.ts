@@ -1,23 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir } from "fs/promises";
+import { createWriteStream } from "fs";
 import path from "path";
 import { randomBytes } from "crypto";
-import { spawn } from "child_process";
+import { spawn, type ChildProcess } from "child_process";
 import { Readable } from "stream";
-import type { ReadableStream as WebReadableStream } from "stream/web";
+import busboy from "busboy";
 import prisma from "@/lib/db";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import { getUploadDir, getRelUploadPath } from "@/lib/uploadPath";
 
 // ────────────────────────────────────────────────────────────
-// FTP 미디어 서버 지원 — 사이트 설정 media_ftp_* 키가 모두 설정돼 있으면
-// 로컬 저장 대신 원격 FTP 로 업로드하고 media_base_url 을 결합한 공개 URL 반환.
-// 없으면 기존 로컬 저장 동작.
+// POST /api/board/media-upload  (busboy 기반 streaming)
+// 사용자 → 서버에서 byte 가 들어오는 즉시 NAS(또는 로컬) 로 pipe.
+// 결과: 사용자→서버 단계와 서버→NAS 단계가 동시 진행 → 시간 max(N, M).
+//
+// nginx 측 사전 설정 필수:
+//   proxy_request_buffering off;
+//   proxy_http_version 1.1;
+// 없으면 nginx 가 request body 를 fully buffer 후 보내 streaming 효과 사라짐.
 // ────────────────────────────────────────────────────────────
 type UploadMode = "general" | "realtime";
 
-// FTP 원격 경로 정규화 — 사용자가 "publist/HDD1" 처럼 leading "/" 없이
-// 입력해도 정상 URL 이 되도록. trailing "/" 는 제거 (조립 시 또 붙음).
+const VIDEO_EXT = new Set([".mp4", ".webm", ".ogv", ".m4v", ".mov"]);
+const AUDIO_EXT = new Set([".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac"]);
+const MAX_SIZE = 1000 * 1024 * 1024; // 1000MB
+
 function normalizeFtpRoot(p: string): string {
   let s = (p || "").trim();
   s = s.replace(/\/+$/g, "");
@@ -64,73 +72,16 @@ async function getFtpConfig(mode: UploadMode): Promise<{
   };
 }
 
-// 사용자 → 서버에서 받은 파일 stream 을 디스크 거치지 않고 바로 curl stdin 으로
-// pipe 해서 NAS 에 FTP 업로드. 메모리 적게 쓰고 디스크 I/O 없음.
-// 큰 파일(1GB) 도 OOM 없이 처리 가능.
-function uploadStreamViaCurl(
-  webStream: WebReadableStream<Uint8Array>,
-  remoteRelPath: string,
-  cfg: { host: string; port: string; user: string; password: string; remoteRoot: string }
-): Promise<void> {
-  const remoteUrl = `ftp://${cfg.host}:${cfg.port}${cfg.remoteRoot}/${remoteRelPath}`;
-  return new Promise((resolve, reject) => {
-    const child = spawn("curl", [
-      "-T", "-",                                // stdin 으로 받음
-      remoteUrl,
-      "--user", `${cfg.user}:${cfg.password}`,
-      "--ftp-create-dirs",
-      "--connect-timeout", "30",
-      "--max-time", "1800",                     // 1000MB 큰 파일 대비 30분
-      "-s", "-S",
-    ]);
-    let stderr = "";
-    child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`curl exit ${code}: ${stderr || "unknown error"}`));
-    });
-    const nodeStream = Readable.fromWeb(webStream);
-    nodeStream.pipe(child.stdin);
-    nodeStream.on("error", (err) => {
-      child.kill("SIGTERM");
-      reject(err);
-    });
-  });
-}
-
-// ────────────────────────────────────────────────────────────
-// POST /api/board/media-upload
-// FormData: file (mp4/mp3 등 동영상·음성), boardSlug
-//
-// TipTap 에디터의 미디어 업로드(파일선택/드래그앤드롭/붙여넣기)에서 호출.
-// 저장 위치: {UPLOAD_DIR}/{boardSlug}/inline/{YYYYMMDD}/{timestamp}_{rand}.ext
-// 반환:      { url: "/api/board/media?path=<relative>", kind: "video"|"audio" }
-//
-// 보안
-// - 게시판 grantWrite 기준 권한 (image-upload 와 동일 규칙)
-// - Rate limit: IP 당 30개/10분
-// - 허용 확장자: mp4/webm/ogv/m4v/mov(video) · mp3/wav/ogg/m4a/aac/flac(audio)
-// - 최대 1000MB
-// ────────────────────────────────────────────────────────────
-const VIDEO_EXT = new Set([".mp4", ".webm", ".ogv", ".m4v", ".mov"]);
-const AUDIO_EXT = new Set([".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac"]);
-const MAX_SIZE = 1000 * 1024 * 1024; // 1000MB
-
-// 파일명 안전화 — 원본 이름 보존 (한국어 등 비-ASCII 허용).
-// path traversal/제어문자/hidden 파일만 차단.
 function sanitizeStoredName(name: string): string {
   const cleaned = name
-    .replace(/[\\/]+/g, "_")        // path separator 차단
-    .replace(/\.\.+/g, ".")          // 연속 점 (.. path traversal)
-    .replace(/[\x00-\x1f]/g, "")     // 제어문자
-    .replace(/^\.+/, "")             // 앞 점 (hidden 파일 방지)
+    .replace(/[\\/]+/g, "_")
+    .replace(/\.\.+/g, ".")
+    .replace(/[\x00-\x1f]/g, "")
+    .replace(/^\.+/, "")
     .trim();
   return cleaned || `media_${Date.now()}`;
 }
 
-// dateBase (사용자가 직접 입력한 기준일자 "YYYY-MM-DD") → 연/월.
-// 형식 안 맞거나 유효하지 않으면 null.
 function parseDateBase(s: string): { yyyy: string; mm: string } | null {
   const m = s.match(/^(\d{4})-(\d{1,2})-\d{1,2}$/);
   if (!m) return null;
@@ -140,35 +91,22 @@ function parseDateBase(s: string): { yyyy: string; mm: string } | null {
   return { yyyy: String(y), mm: String(mo).padStart(2, "0") };
 }
 
-// 파일 이름에서 연/월 추출.
-// 지원 패턴 (파일명 어디든 매칭, 처음 발견된 것 사용):
-//   YYYYMMDD       (예: 20260425_video.mp4 → 2026/04)
-//   YYYY[-_./]MM[-_./]DD (예: 2026-04-25.mp4 → 2026/04)
-//   YYMMDD         (예: 260425-토새.mp3 → 2026/04, 991231-old.mp3 → 1999/12)
-// 추출 실패 시 null 반환 (호출자가 현재 시간 fallback 사용).
 function extractYearMonthFromName(filename: string): { yyyy: string; mm: string } | null {
-  const base = filename.replace(/\.[^.]+$/, ""); // 확장자 제거
+  const base = filename.replace(/\.[^.]+$/, "");
+  const isValid = (y: number, m: number) => y >= 1990 && y <= 2100 && m >= 1 && m <= 12;
 
-  const isValid = (y: number, m: number) =>
-    y >= 1990 && y <= 2100 && m >= 1 && m <= 12;
-
-  // 1) YYYY[구분자]MM[구분자]DD
   let m = base.match(/(\d{4})[-_.\/](\d{1,2})[-_.\/](\d{1,2})/);
   if (m) {
     const y = parseInt(m[1], 10);
     const mo = parseInt(m[2], 10);
     if (isValid(y, mo)) return { yyyy: String(y), mm: String(mo).padStart(2, "0") };
   }
-
-  // 2) YYYYMMDD (8자리 숫자)
   m = base.match(/(\d{4})(\d{2})(\d{2})/);
   if (m) {
     const y = parseInt(m[1], 10);
     const mo = parseInt(m[2], 10);
     if (isValid(y, mo)) return { yyyy: String(y), mm: m[2] };
   }
-
-  // 3) YYMMDD (6자리 숫자) — 50 이상이면 19xx, 미만이면 20xx
   m = base.match(/(?:^|[^\d])(\d{2})(\d{2})(\d{2})(?!\d)/);
   if (m) {
     const yy = parseInt(m[1], 10);
@@ -178,129 +116,241 @@ function extractYearMonthFromName(filename: string): { yyyy: string; mm: string 
       return { yyyy, mm: m[2] };
     }
   }
-
   return null;
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const ip = getClientIp(request);
-    const rl = checkRateLimit(`media-upload:${ip}`, 30, 10 * 60 * 1000);
-    if (!rl.allowed) {
-      return NextResponse.json(
-        { message: "미디어 업로드 요청이 너무 많습니다." },
-        { status: 429, headers: { "Retry-After": String(rl.retryAfter || 60) } }
-      );
-    }
+  // Rate limit
+  const ip = getClientIp(request);
+  const rl = checkRateLimit(`media-upload:${ip}`, 30, 10 * 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { message: "미디어 업로드 요청이 너무 많습니다." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter || 60) } }
+    );
+  }
 
-    const formData = await request.formData();
-    const file = formData.get("file") as File | null;
-    const boardSlug = ((formData.get("boardSlug") as string) || "").trim();
-    const modeRaw = ((formData.get("mode") as string) || "general").trim();
-    const mode: UploadMode = modeRaw === "realtime" ? "realtime" : "general";
+  if (!request.body) {
+    return NextResponse.json({ message: "요청 본문이 없습니다." }, { status: 400 });
+  }
+  const contentType = request.headers.get("content-type") || "";
+  if (!contentType.startsWith("multipart/form-data")) {
+    return NextResponse.json({ message: "multipart/form-data 만 허용됩니다." }, { status: 400 });
+  }
 
-    if (!file || !boardSlug) {
-      return NextResponse.json({ message: "file, boardSlug 는 필수입니다." }, { status: 400 });
-    }
-    if (!/^[A-Za-z0-9_-]+$/.test(boardSlug)) {
-      return NextResponse.json({ message: "잘못된 boardSlug" }, { status: 400 });
-    }
-    if (file.size > MAX_SIZE) {
-      return NextResponse.json(
-        { message: `파일 크기가 ${Math.floor(MAX_SIZE / 1024 / 1024)}MB 를 초과합니다.` },
-        { status: 400 }
-      );
-    }
-    const ext = path.extname(file.name).toLowerCase();
-    const isVideo = VIDEO_EXT.has(ext);
-    const isAudio = AUDIO_EXT.has(ext);
-    if (!isVideo && !isAudio) {
-      return NextResponse.json({ message: `허용되지 않는 미디어 형식: ${ext}` }, { status: 400 });
-    }
+  return new Promise<NextResponse>((resolve) => {
+    let resolved = false;
+    const respond = (resp: NextResponse) => {
+      if (!resolved) {
+        resolved = true;
+        resolve(resp);
+      }
+    };
 
-    const board = await prisma.board.findUnique({ where: { slug: boardSlug } });
-    if (!board) {
-      return NextResponse.json({ message: "게시판이 존재하지 않습니다." }, { status: 404 });
-    }
+    const fields: Record<string, string> = {};
+    let totalReceived = 0;
 
-    const sessionToken = request.cookies.get("dc_session")?.value;
-    let userLevel = 99;
-    let isAdminUser = false;
-    if (sessionToken) {
-      const session = await prisma.session.findUnique({ where: { sessionToken } });
-      if (session && session.expires > new Date()) {
-        const u = await prisma.user.findUnique({ where: { id: session.userId } });
-        if (u) {
-          userLevel = u.level;
-          isAdminUser = u.isAdmin <= 2;
+    const bb = busboy({
+      headers: { "content-type": contentType },
+      limits: { fileSize: MAX_SIZE },
+    });
+
+    bb.on("field", (name, val) => {
+      fields[name] = val;
+    });
+
+    bb.on("file", async (fieldname, fileStream, info) => {
+      if (resolved) {
+        fileStream.resume();
+        return;
+      }
+      if (fieldname !== "file") {
+        fileStream.resume();
+        return respond(NextResponse.json({ message: "잘못된 필드명" }, { status: 400 }));
+      }
+
+      // ─── 메타 검증 ───
+      const filename = (info.filename || "").trim();
+      const ext = path.extname(filename).toLowerCase();
+      const isVideo = VIDEO_EXT.has(ext);
+      const isAudio = AUDIO_EXT.has(ext);
+      if (!isVideo && !isAudio) {
+        fileStream.resume();
+        return respond(
+          NextResponse.json({ message: `허용되지 않는 미디어 형식: ${ext}` }, { status: 400 })
+        );
+      }
+
+      const boardSlug = (fields.boardSlug || "").trim();
+      const modeRaw = (fields.mode || "general").trim();
+      const mode: UploadMode = modeRaw === "realtime" ? "realtime" : "general";
+      if (!boardSlug) {
+        fileStream.resume();
+        return respond(NextResponse.json({ message: "boardSlug 는 필수입니다." }, { status: 400 }));
+      }
+      if (!/^[A-Za-z0-9_-]+$/.test(boardSlug)) {
+        fileStream.resume();
+        return respond(NextResponse.json({ message: "잘못된 boardSlug" }, { status: 400 }));
+      }
+
+      // ─── 게시판 + 사용자 권한 ───
+      const board = await prisma.board.findUnique({ where: { slug: boardSlug } });
+      if (!board) {
+        fileStream.resume();
+        return respond(NextResponse.json({ message: "게시판이 존재하지 않습니다." }, { status: 404 }));
+      }
+      const sessionToken = request.cookies.get("dc_session")?.value;
+      let userLevel = 99;
+      let isAdminUser = false;
+      if (sessionToken) {
+        const session = await prisma.session.findUnique({ where: { sessionToken } });
+        if (session && session.expires > new Date()) {
+          const u = await prisma.user.findUnique({ where: { id: session.userId } });
+          if (u) {
+            userLevel = u.level;
+            isAdminUser = u.isAdmin <= 2;
+          }
         }
       }
-    }
-    if (!isAdminUser && userLevel > board.grantWrite) {
-      return NextResponse.json({ message: "미디어 업로드 권한이 없습니다." }, { status: 403 });
-    }
-
-    // 폴더 결정 우선순위:
-    //   1. dateBase formData (사용자가 통합 모달에서 직접 선택한 기준일자)
-    //   2. 파일명에서 날짜 추출 (예: "260425-토새.mp3" → 2026/04)
-    //   3. 오늘 날짜
-    // 폴더가 없으면 mkdir -p / --ftp-create-dirs 가 자동 생성.
-    const dateBaseRaw = ((formData.get("dateBase") as string) || "").trim();
-    const fromDateBase = parseDateBase(dateBaseRaw);
-    const fromName = extractYearMonthFromName(file.name);
-    const now = new Date();
-    const yyyy = fromDateBase?.yyyy ?? fromName?.yyyy ?? String(now.getFullYear());
-    const mm = fromDateBase?.mm ?? fromName?.mm ?? String(now.getMonth() + 1).padStart(2, "0");
-    const rand = randomBytes(4).toString("hex");
-    // 디스크에 저장되는 파일명은 시스템이 자동 생성 (timestamp + random hex).
-    // 같은 이름 파일이 여러 번 업로드돼도 충돌 없이 모두 보존.
-    // 원본 파일명은 video/audio element 의 title 속성으로 게시글에 보존됨
-    // (TipTapEditor 의 insertContent attrs.title 참조).
-    const storedName = sanitizeStoredName(`${Date.now()}_${rand}${ext}`);
-
-    // 원격 FTP 설정이 있으면 stream 으로 직접 NAS 로 pipe (디스크 거치지 않음).
-    // 모드별 경로 패턴 (월별 폴더):
-    //   general  → {remoteRoot}/{boardSlug}/{YYYY}/{MM}/{파일명}
-    //   realtime → {remoteRoot}/{YYYY}/{MM}/{파일명}
-    const ftp = await getFtpConfig(mode);
-    if (ftp) {
-      const remoteRel =
-        mode === "realtime"
-          ? `${yyyy}/${mm}/${storedName}`
-          : `${boardSlug}/${yyyy}/${mm}/${storedName}`;
-      try {
-        await uploadStreamViaCurl(
-          file.stream() as unknown as WebReadableStream<Uint8Array>,
-          remoteRel,
-          ftp
-        );
-      } catch (e) {
-        return NextResponse.json(
-          { message: `FTP 업로드 실패: ${e instanceof Error ? e.message : String(e)}` },
-          { status: 500 }
+      if (!isAdminUser && userLevel > board.grantWrite) {
+        fileStream.resume();
+        return respond(
+          NextResponse.json({ message: "미디어 업로드 권한이 없습니다." }, { status: 403 })
         );
       }
-      const publicUrl = `${ftp.publicBase}${remoteRel}`;
-      return NextResponse.json({
-        url: publicUrl,
-        kind: isVideo ? "video" : "audio",
-        size: file.size,
-        name: storedName,
-        remote: true,
-      });
-    }
 
-    // 로컬 저장 (FTP 비활성 시) — 월별 폴더
-    const subPath = `${boardSlug}/inline/${yyyy}/${mm}`;
-    const dir = getUploadDir(subPath);
-    await mkdir(dir, { recursive: true });
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(path.join(dir, storedName), buffer);
-    const rel = getRelUploadPath(subPath, storedName);
-    const url = `/api/board/media?path=${encodeURIComponent(rel)}`;
-    return NextResponse.json({ url, kind: isVideo ? "video" : "audio", size: file.size, name: storedName });
-  } catch (e) {
-    console.error("media-upload error:", e);
-    return NextResponse.json({ message: "서버 오류" }, { status: 500 });
-  }
+      // ─── 폴더 결정 ───
+      const dateBaseRaw = (fields.dateBase || "").trim();
+      const fromDateBase = parseDateBase(dateBaseRaw);
+      const fromName = extractYearMonthFromName(filename);
+      const now = new Date();
+      const yyyy = fromDateBase?.yyyy ?? fromName?.yyyy ?? String(now.getFullYear());
+      const mm = fromDateBase?.mm ?? fromName?.mm ?? String(now.getMonth() + 1).padStart(2, "0");
+
+      const rand = randomBytes(4).toString("hex");
+      const storedName = sanitizeStoredName(`${Date.now()}_${rand}${ext}`);
+
+      // ─── 파일 크기 초과 감지 ───
+      fileStream.on("data", (chunk: Buffer) => {
+        totalReceived += chunk.length;
+      });
+      fileStream.on("limit", () => {
+        respond(
+          NextResponse.json(
+            { message: `파일 크기가 ${Math.floor(MAX_SIZE / 1024 / 1024)}MB 를 초과합니다.` },
+            { status: 400 }
+          )
+        );
+      });
+
+      const ftp = await getFtpConfig(mode);
+      if (ftp) {
+        // ─── FTP streaming pass-through ───
+        const remoteRel =
+          mode === "realtime"
+            ? `${yyyy}/${mm}/${storedName}`
+            : `${boardSlug}/${yyyy}/${mm}/${storedName}`;
+        const remoteUrl = `ftp://${ftp.host}:${ftp.port}${ftp.remoteRoot}/${remoteRel}`;
+        const child: ChildProcess = spawn("curl", [
+          "-T", "-",
+          remoteUrl,
+          "--user", `${ftp.user}:${ftp.password}`,
+          "--ftp-create-dirs",
+          "--connect-timeout", "30",
+          "--max-time", "1800",
+          "-s", "-S",
+        ]);
+        let stderr = "";
+        child.stderr?.on("data", (c) => { stderr += c.toString(); });
+        child.on("error", (err) => {
+          respond(NextResponse.json({ message: `FTP 업로드 오류: ${err.message}` }, { status: 500 }));
+        });
+        child.on("close", (code) => {
+          if (code === 0) {
+            const publicUrl = `${ftp.publicBase}${remoteRel}`;
+            respond(
+              NextResponse.json({
+                url: publicUrl,
+                kind: isVideo ? "video" : "audio",
+                size: totalReceived,
+                name: storedName,
+                remote: true,
+              })
+            );
+          } else {
+            respond(
+              NextResponse.json(
+                { message: `FTP 업로드 실패: ${stderr || `curl exit ${code}`}` },
+                { status: 500 }
+              )
+            );
+          }
+        });
+        fileStream.on("error", (err) => {
+          child.kill("SIGTERM");
+          respond(NextResponse.json({ message: err.message }, { status: 500 }));
+        });
+        if (child.stdin) {
+          fileStream.pipe(child.stdin);
+        } else {
+          respond(NextResponse.json({ message: "curl stdin 사용 불가" }, { status: 500 }));
+        }
+      } else {
+        // ─── 로컬 저장 streaming ───
+        const subPath = `${boardSlug}/inline/${yyyy}/${mm}`;
+        const dir = getUploadDir(subPath);
+        await mkdir(dir, { recursive: true });
+        const fullPath = path.join(dir, storedName);
+        const writeStream = createWriteStream(fullPath);
+        writeStream.on("error", (err) => {
+          respond(NextResponse.json({ message: err.message }, { status: 500 }));
+        });
+        writeStream.on("finish", () => {
+          const rel = getRelUploadPath(subPath, storedName);
+          const url = `/api/board/media?path=${encodeURIComponent(rel)}`;
+          respond(
+            NextResponse.json({
+              url,
+              kind: isVideo ? "video" : "audio",
+              size: totalReceived,
+              name: storedName,
+            })
+          );
+        });
+        fileStream.on("error", (err) => {
+          writeStream.destroy();
+          respond(NextResponse.json({ message: err.message }, { status: 500 }));
+        });
+        fileStream.pipe(writeStream);
+      }
+    });
+
+    bb.on("error", (err) => {
+      respond(
+        NextResponse.json(
+          { message: `업로드 처리 오류: ${err instanceof Error ? err.message : String(err)}` },
+          { status: 500 }
+        )
+      );
+    });
+
+    bb.on("close", () => {
+      // 모든 파트 처리 완료 후에도 응답 안 됐으면 (file part 없음 등)
+      if (!resolved) {
+        respond(NextResponse.json({ message: "file 필드가 없습니다." }, { status: 400 }));
+      }
+    });
+
+    // request body (Web ReadableStream) → Node Readable → busboy
+    Readable.fromWeb(request.body as unknown as Parameters<typeof Readable.fromWeb>[0])
+      .on("error", (err) => {
+        respond(
+          NextResponse.json(
+            { message: `요청 본문 오류: ${err instanceof Error ? err.message : String(err)}` },
+            { status: 500 }
+          )
+        );
+      })
+      .pipe(bb);
+  });
 }

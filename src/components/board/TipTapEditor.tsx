@@ -561,11 +561,13 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       if (!isVideo && !isAudio) return false;
       setUploadProgress({ name: file.name, loaded: 0, total: file.size, startTime: Date.now(), processingStartTime: null });
       try {
+        // 서버 (busboy) 가 fields 먼저 받고 file 이벤트 시점에 검증·인증 후 stream pipe.
+        // 그래서 fields 를 file 보다 먼저 append.
         const fd = new FormData();
-        fd.append("file", file);
         fd.append("boardSlug", boardSlug);
         fd.append("mode", mode);
         if (dateBase) fd.append("dateBase", dateBase);
+        fd.append("file", file);
         const { ok, status, data } = await xhrUpload(
           "/api/board/media-upload",
           fd,
@@ -671,9 +673,10 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       if (!isVideo && !isAudio) return null;
       setUploadProgress({ name: file.name, loaded: 0, total: file.size, startTime: Date.now(), processingStartTime: null });
       try {
+        // fields 먼저, file 마지막 (busboy 가 fields 모이면 file 처리 시작)
         const fd = new FormData();
-        fd.append("file", file);
         fd.append("boardSlug", boardSlug);
+        fd.append("file", file);
         const { ok, status, data } = await xhrUpload(
           "/api/board/media-upload",
           fd,
