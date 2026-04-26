@@ -338,6 +338,22 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     total: number;
   } | null>(null);
 
+  // 100% 도달 후 서버 처리(NAS FTP 전송) 단계의 경과 시간(초). 1초마다 증가.
+  const [processingSeconds, setProcessingSeconds] = useState(0);
+  useEffect(() => {
+    if (!uploadProgress) {
+      setProcessingSeconds(0);
+      return;
+    }
+    if (uploadProgress.loaded < uploadProgress.total || uploadProgress.total === 0) {
+      setProcessingSeconds(0);
+      return;
+    }
+    // 100% 도달 → 카운터 시작
+    const id = setInterval(() => setProcessingSeconds((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [uploadProgress]);
+
   // 글꼴 목록 — 관리자가 /admin/settings 에서 편집한 DB 값을 우선 사용하고,
   // 비어 있거나 fetch 실패 시 DEFAULT_FONTS 로 폴백.
   const [fonts, setFonts] = useState<typeof DEFAULT_FONTS>(DEFAULT_FONTS);
@@ -799,40 +815,65 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
           await uploadAndInsertMedia(file, "realtime", dateBase);
         }}
       />
-      {/* 미디어 업로드 진행률 — 화면 정중앙 모달 */}
+      {/* 미디어 업로드 진행률 — 화면 정중앙 모달
+         두 단계 표시:
+         1) 사용자 → 서버 업로드 (loaded/total 로 정확한 %)
+         2) 서버 → NAS FTP 전송 (서버 응답 대기, indeterminate 애니메이션 + 경과시간) */}
       {uploadProgress && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="w-full max-w-2xl bg-white border border-gray-300 rounded-xl shadow-2xl p-6">
             <div className="text-base font-semibold text-gray-800 mb-4 break-all">
               📤 {uploadProgress.name}
             </div>
-            <div className="flex items-center gap-4 mb-3">
-              <div className="flex-1 h-4 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-blue-500 transition-[width] duration-200"
-                  style={{
-                    width: `${
-                      uploadProgress.total > 0
-                        ? Math.min(100, (uploadProgress.loaded / uploadProgress.total) * 100)
-                        : 0
-                    }%`,
-                  }}
-                />
+
+            {/* 1단계: 업로드 (정확한 %) */}
+            <div className="mb-3">
+              <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+                <span>① 서버로 업로드</span>
+                <span className="tabular-nums">
+                  {(uploadProgress.loaded / 1024 / 1024).toFixed(1)} MB /{" "}
+                  {(uploadProgress.total / 1024 / 1024).toFixed(1)} MB
+                </span>
               </div>
-              <span className="text-3xl font-bold text-blue-600 tabular-nums w-20 text-right">
-                {uploadProgress.total > 0
-                  ? Math.floor((uploadProgress.loaded / uploadProgress.total) * 100)
-                  : 0}
-                %
-              </span>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 transition-[width] duration-200"
+                    style={{
+                      width: `${
+                        uploadProgress.total > 0
+                          ? Math.min(100, (uploadProgress.loaded / uploadProgress.total) * 100)
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </div>
+                <span className="text-xl font-bold text-blue-600 tabular-nums w-14 text-right">
+                  {uploadProgress.total > 0
+                    ? Math.floor((uploadProgress.loaded / uploadProgress.total) * 100)
+                    : 0}
+                  %
+                </span>
+              </div>
             </div>
-            <div className="text-sm text-gray-600 tabular-nums">
-              {(uploadProgress.loaded / 1024 / 1024).toFixed(1)} MB /{" "}
-              {(uploadProgress.total / 1024 / 1024).toFixed(1)} MB
-              {uploadProgress.loaded >= uploadProgress.total && uploadProgress.total > 0
-                ? " — 서버 처리 중..."
-                : ""}
-            </div>
+
+            {/* 2단계: 서버 처리 (NAS FTP 전송) — 100% 도달 후 표시 */}
+            {uploadProgress.loaded >= uploadProgress.total && uploadProgress.total > 0 && (
+              <div>
+                <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+                  <span>② 미디어 서버 전송 중</span>
+                  <span className="tabular-nums">{processingSeconds}초 경과</span>
+                </div>
+                <div className="h-3 bg-gray-200 rounded-full overflow-hidden relative">
+                  {/* indeterminate 애니메이션 — 좌→우 반복 */}
+                  <div className="absolute top-0 h-full w-1/3 bg-indigo-500 rounded-full animate-[dc-indeterminate_1.4s_ease-in-out_infinite]" />
+                </div>
+                <p className="mt-2 text-[11px] text-gray-500">
+                  파일을 미디어 서버(NAS) 로 전송하고 있습니다. 큰 파일일수록 오래 걸립니다.
+                  완료될 때까지 창을 닫지 마세요.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
