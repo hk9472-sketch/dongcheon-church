@@ -377,8 +377,10 @@ export async function POST(request: NextRequest) {
     });
 
     bb.on("close", () => {
-      // 모든 파트 처리 완료 후에도 응답 안 됐으면 (file part 없음 등)
-      if (!resolved) {
+      // file 이벤트가 한 번도 안 일어났으면 진짜 file 필드 없음.
+      // file 이벤트가 발생했으면 그 핸들러의 비동기 처리가 끝나면서 응답하므로
+      // close 시점엔 응답 강제하지 않음 (false-positive 방지).
+      if (!fileFound && !resolved) {
         respond(NextResponse.json({ message: "file 필드가 없습니다." }, { status: 400 }));
       }
     });
