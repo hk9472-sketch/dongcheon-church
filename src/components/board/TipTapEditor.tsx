@@ -409,13 +409,16 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     processingStartTime: number | null;
   } | null>(null);
 
-  // 매 초 시간 표시 갱신용 tick (실제 byte 진척과는 별개)
+  // 매 초 시간 표시 갱신용 tick (실제 byte 진척과는 별개).
+  // dependency 를 단순 boolean(isUploading)으로 — uploadProgress 객체가 byte 마다
+  // 새로 만들어져도 setInterval 이 reset 되지 않음.
   const [tickNow, setTickNow] = useState(() => Date.now());
+  const isUploading = uploadProgress !== null;
   useEffect(() => {
-    if (!uploadProgress) return;
+    if (!isUploading) return;
     const id = setInterval(() => setTickNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [uploadProgress]);
+  }, [isUploading]);
 
   // 글꼴 목록 — 관리자가 /admin/settings 에서 편집한 DB 값을 우선 사용하고,
   // 비어 있거나 fetch 실패 시 DEFAULT_FONTS 로 폴백.
