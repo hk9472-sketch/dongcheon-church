@@ -104,6 +104,25 @@ export async function verifyPassword(
     }
   }
 
+  // 3) 평문 비교 — 관리자가 DB 에 임시 비번을 평문으로 직접 SET 한 케이스.
+  //    bcrypt/legacy 형식 둘 다 안 맞은 값에 한해 마지막으로 평문과 동일 여부.
+  //    예: 운영자가 "UPDATE posts SET password='1234' WHERE id=14740" 처리 후
+  //    사용자가 "1234" 입력하면 통과.
+  //    bcrypt 형식($2)은 위에서 이미 bcrypt 비교 끝났으므로 여기서 평문 비교 안 함.
+  if (hashedPassword && !hashedPassword.startsWith("$2")) {
+    if (password === hashedPassword) {
+      // User 로그인 케이스라면 다음 로그인부터 bcrypt 로 동작하도록 자동 업그레이드.
+      if (userId) {
+        const newHash = await hashPassword(password);
+        await prisma.user.update({
+          where: { id: userId },
+          data: { password: newHash, legacyPwHash: null },
+        });
+      }
+      return true;
+    }
+  }
+
   return false;
 }
 
