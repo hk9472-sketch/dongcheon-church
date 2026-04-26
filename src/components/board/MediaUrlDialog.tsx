@@ -24,10 +24,20 @@ function normalizeBase(s: string): string {
   return trimmed.endsWith("/") ? trimmed : trimmed + "/";
 }
 
-function combineUrl(base: string, path: string): string {
+// base + "YYYY/MM/" + path 로 조립.
+// path 가 이미 yyyy 또는 yyyy/mm 으로 시작하면 prefix 안 붙임 (중복 방지).
+// dateBase 형식 안 맞으면 prefix 없이 base + path.
+function combineUrl(base: string, path: string, dateBase?: string): string {
   const b = normalizeBase(base);
   const p = path.trim().replace(/^\/+/, "");
-  return b + p;
+  if (!dateBase) return b + p;
+  const m = dateBase.match(/^(\d{4})-(\d{2})-\d{2}$/);
+  if (!m) return b + p;
+  const yyyy = m[1];
+  const mm = m[2];
+  // 이미 yyyy 또는 yyyy/mm 으로 시작하면 prefix 안 붙임
+  if (new RegExp(`^${yyyy}(\\/|$)`).test(p)) return b + p;
+  return b + `${yyyy}/${mm}/` + p;
 }
 
 function todayIso(): string {
@@ -78,7 +88,7 @@ export default function MediaUrlDialog({ open, onClose, onSubmit, onUpload }: Me
 
   if (!open) return null;
 
-  const urlPreview = rawMode ? rawUrl.trim() : combineUrl(baseUrl, path);
+  const urlPreview = rawMode ? rawUrl.trim() : combineUrl(baseUrl, path, dateBase);
   const canSubmitUrl = urlPreview.length > 0 && /^https?:\/\//i.test(urlPreview);
   const canSubmitUpload = file !== null && /^\d{4}-\d{2}-\d{2}$/.test(dateBase);
 
@@ -239,6 +249,20 @@ export default function MediaUrlDialog({ open, onClose, onSubmit, onUpload }: Me
             <>
               {!rawMode && (
                 <>
+                  {/* 기준일자 — yyyy/mm/ 자동 prefix 용 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      기준일자 (등록일자)
+                      <span className="ml-1 text-[11px] text-gray-400">— 이 날짜의 YYYY/MM/ 폴더가 경로 앞에 자동 추가됨</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={dateBase}
+                      onChange={(e) => setDateBase(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                    />
+                  </div>
+
                   <div>
                     <label className="flex items-center justify-between mb-1">
                       <span className="text-xs font-medium text-gray-500">기본 URL</span>
@@ -267,16 +291,19 @@ export default function MediaUrlDialog({ open, onClose, onSubmit, onUpload }: Me
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">경로/파일명</label>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      파일명
+                      <span className="ml-1 text-[11px] text-gray-400">— 폴더는 기준일자에서 자동 생성, 파일명만 입력</span>
+                    </label>
                     <input
                       type="text"
                       value={path}
-                      onChange={(e) => setPath(e.target.value)}
+                      onChange={(e) => setPath(e.target.value.replace(/[\\/]/g, ""))}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleSubmitUrl();
                       }}
                       autoFocus
-                      placeholder="2026/05/260525-주일.mp4"
+                      placeholder="260525-주일.mp4"
                       className="w-full px-3 py-2 text-sm font-mono border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                     />
                   </div>
