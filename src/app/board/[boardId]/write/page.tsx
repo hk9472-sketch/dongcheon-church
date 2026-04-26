@@ -626,17 +626,17 @@ function WriteForm({ boardId }: { boardId: string }) {
                 />
                 HTML
               </label>
-              {isLoggedIn && (
-                <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none hover:text-gray-900 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={isSecret}
-                    onChange={(e) => setIsSecret(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-400 text-blue-600 accent-blue-600"
-                  />
-                  비밀글
-                </label>
-              )}
+              {/* 비밀글 — 회원/비회원 모두 가능. 비회원은 위쪽 비밀번호 필드의
+                 비번이 곧 unlock 비번 역할 (작성·수정·삭제·unlock 4-in-1). */}
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none hover:text-gray-900 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={isSecret}
+                  onChange={(e) => setIsSecret(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-400 text-blue-600 accent-blue-600"
+                />
+                비밀글
+              </label>
               {/* 회원 + 비밀글 시 공유 비번 — 필수. 개인용 비밀글은 배제 (열람 비번 항상 있어야 함). */}
               {isLoggedIn && isSecret && (
                 <input
