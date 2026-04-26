@@ -158,8 +158,18 @@ export async function POST(request: NextRequest) {
     // 작성자 이름 강제: 로그인 사용자는 세션 이름으로 덮어씌움 (사칭 방지)
     const effectiveName = isSessionValid && sessionUserName ? sessionUserName : name;
 
-    // 비밀번호 해시: 로그인 사용자는 해시 과정 생략 (DoS 완화)
-    const hashedPassword = isSessionValid ? null : await hashPassword(passwordRaw);
+    // 비밀번호 해시:
+    // - 비회원: 작성/수정/삭제·unlock 비번 (필수)
+    // - 회원 + 비밀글 + 비번 입력: 비밀글 unlock 비번 (선택, 비로그인자도 비번 알면 열람 가능)
+    // - 회원 + 그 외: 비번 저장 안 함
+    let hashedPassword: string | null;
+    if (!isSessionValid) {
+      hashedPassword = await hashPassword(passwordRaw);
+    } else if (isSecret && passwordRaw) {
+      hashedPassword = await hashPassword(passwordRaw);
+    } else {
+      hashedPassword = null;
+    }
 
     // ─── 파일 업로드 (다중) ───
     // FormData: "files" 필드에 여러 파일이 들어옴 (HTML: <input type="file" multiple name="files">).
@@ -274,6 +284,11 @@ export async function POST(request: NextRequest) {
             sitelink2,
             categoryId,
             commentPolicy,
+            // 회원이 비밀글에 새 unlock 비번 입력한 경우 password 도 갱신.
+            // 비번 빈 값이면 기존 password 유지 (필드 미포함).
+            ...(isSessionValid && isSecret && passwordRaw
+              ? { password: await hashPassword(passwordRaw) }
+              : {}),
             ...(isSessionValid && sessionUserId ? {
               lastEditorId: sessionUserId,
               lastEditorUserId: sessionUserLoginId,

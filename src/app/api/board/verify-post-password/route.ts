@@ -39,8 +39,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 비회원이 작성한 비밀글만 unlock 대상
-    if (post.authorId !== null || !post.password) {
+    // 비번 hash 가 저장된 글만 unlock 대상.
+    // 비회원 글은 작성 비번이 자동으로 unlock 비번 역할.
+    // 회원 글은 비밀글 작성 시 별도 unlock 비번을 설정한 경우만.
+    if (!post.password) {
       return NextResponse.json(
         { success: false, message: "비밀번호로 열람할 수 없는 글입니다." },
         { status: 400 }

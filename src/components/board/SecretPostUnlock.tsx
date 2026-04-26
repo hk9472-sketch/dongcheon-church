@@ -42,7 +42,7 @@ export default function SecretPostUnlock({ postId }: SecretPostUnlockProps) {
   return (
     <form onSubmit={handleSubmit} className="mt-6 max-w-sm mx-auto">
       <p className="text-xs text-gray-500 mb-2">
-        본인이 작성한 비밀글이라면 비밀번호를 입력해 열람할 수 있습니다.
+        비밀글의 열람용 비밀번호를 알고 있다면 입력하여 열람할 수 있습니다.
       </p>
       <div className="flex gap-2">
         <input
