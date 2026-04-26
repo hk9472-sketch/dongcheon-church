@@ -2,6 +2,8 @@
 
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import BulletList from "@tiptap/extension-bullet-list";
+import OrderedList from "@tiptap/extension-ordered-list";
 import Underline from "@tiptap/extension-underline";
 import TextAlign from "@tiptap/extension-text-align";
 import { TextStyle, FontSize } from "@tiptap/extension-text-style";
@@ -28,6 +30,52 @@ interface TipTapEditorProps {
   /** 이미지 업로드 API 에 전달할 게시판 slug. 없으면 업로드 시도 시 알림. */
   boardSlug?: string;
 }
+
+// 글머리/번호 목록에 dataStyle 속성 추가 — globals.css 의 ul/ol[data-style="..."]
+// 규칙으로 다양한 마커 (circle, square, lower-alpha, lower-roman, paren "9)" 등) 표시.
+const StyledBulletList = BulletList.extend({
+  addAttributes() {
+    return {
+      dataStyle: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-style"),
+        renderHTML: (attrs: Record<string, unknown>) =>
+          attrs.dataStyle ? { "data-style": attrs.dataStyle as string } : {},
+      },
+    };
+  },
+});
+
+const StyledOrderedList = OrderedList.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      dataStyle: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-style"),
+        renderHTML: (attrs: Record<string, unknown>) =>
+          attrs.dataStyle ? { "data-style": attrs.dataStyle as string } : {},
+      },
+    };
+  },
+});
+
+const BULLET_STYLES: { value: string; label: string }[] = [
+  { value: "", label: "● 점 (기본)" },
+  { value: "circle", label: "○ 동그라미" },
+  { value: "square", label: "■ 네모" },
+];
+
+const ORDERED_STYLES: { value: string; label: string }[] = [
+  { value: "", label: "1. 숫자 (기본)" },
+  { value: "decimal-zero", label: "01. 두 자리" },
+  { value: "lower-alpha", label: "a. 영문 소문자" },
+  { value: "upper-alpha", label: "A. 영문 대문자" },
+  { value: "lower-roman", label: "i. 로마 소문자" },
+  { value: "upper-roman", label: "I. 로마 대문자" },
+  { value: "paren", label: "9) 우괄호" },
+  { value: "bracket", label: "(9) 양괄호" },
+];
 
 // XMLHttpRequest 기반 업로드 — fetch 는 upload progress 트래킹 안 됨.
 // 큰 미디어 파일 업로드 시 사용자에게 진행률 표시하기 위함.
@@ -382,7 +430,11 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3, 4] },
+        bulletList: false,
+        orderedList: false,
       }),
+      StyledBulletList,
+      StyledOrderedList,
       Underline,
       TextStyle,
       FontSize,
@@ -1091,6 +1143,21 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         >
           ●
         </TBtn>
+        {editor.isActive("bulletList") && (
+          <select
+            value={(editor.getAttributes("bulletList").dataStyle as string) || ""}
+            onChange={(e) => {
+              const v = e.target.value || null;
+              editor.chain().focus().updateAttributes("bulletList", { dataStyle: v }).run();
+            }}
+            title="글머리 모양"
+            className="text-xs px-1.5 py-0.5 border border-gray-300 rounded bg-white"
+          >
+            {BULLET_STYLES.map((s) => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
+        )}
         <TBtn
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
           active={editor.isActive("orderedList")}
@@ -1098,6 +1165,21 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         >
           1.
         </TBtn>
+        {editor.isActive("orderedList") && (
+          <select
+            value={(editor.getAttributes("orderedList").dataStyle as string) || ""}
+            onChange={(e) => {
+              const v = e.target.value || null;
+              editor.chain().focus().updateAttributes("orderedList", { dataStyle: v }).run();
+            }}
+            title="번호 모양"
+            className="text-xs px-1.5 py-0.5 border border-gray-300 rounded bg-white"
+          >
+            {ORDERED_STYLES.map((s) => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
+        )}
 
         <Sep />
 
