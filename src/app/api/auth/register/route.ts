@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomBytes } from "crypto";
 import prisma from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { verifyCaptcha } from "@/lib/captcha";
-import { sendVerificationEmail } from "@/lib/email";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 
 // POST /api/auth/register
@@ -49,18 +47,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "올바른 이메일 주소를 입력하세요." }, { status: 400 });
     }
 
-    // 중복 확인
-    const existing = await prisma.user.findUnique({ where: { userId } });
-    if (existing) {
+    // 아이디 중복 확인
+    const existingId = await prisma.user.findUnique({ where: { userId } });
+    if (existingId) {
       return NextResponse.json({ message: "이미 사용 중인 아이디입니다." }, { status: 409 });
     }
 
-    // 이메일 인증 토큰 생성 (24시간 유효)
-    const verifyToken = randomBytes(32).toString("hex");
-    const verifyExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    // 이메일 중복 확인 — 동일 이메일로 다중 계정 차단
+    const existingEmail = await prisma.user.findFirst({ where: { email } });
+    if (existingEmail) {
+      return NextResponse.json(
+        { message: "이미 사용 중인 이메일입니다. 비밀번호를 잊으셨다면 비밀번호 찾기를 이용해 주세요." },
+        { status: 409 }
+      );
+    }
 
     const hashedPassword = await hashPassword(password);
 
+    // 즉시 활성 가입 — 이메일 인증/관리자 승인 단계 없음.
+    // 부적절한 가입자는 사후 회원 관리 페이지에서 삭제(탈퇴 처리).
     const user = await prisma.user.create({
       data: {
         userId,
@@ -71,26 +76,12 @@ export async function POST(request: NextRequest) {
         level: 10,
         isAdmin: 3,
         groupNo: 1,
-        emailVerified: false,
-        emailVerifyToken: verifyToken,
-        emailVerifyExpiry: verifyExpiry,
+        emailVerified: true,
       },
     });
 
-    // 인증 메일 발송
-    const siteUrl = process.env.SITE_URL || "http://localhost:3000";
-    const verifyUrl = `${siteUrl}/api/auth/verify-email?token=${verifyToken}`;
-
-    try {
-      await sendVerificationEmail(email, verifyUrl, name);
-    } catch (emailErr) {
-      console.error("[REGISTER] 인증 메일 발송 실패:", emailErr);
-      // 메일 발송 실패해도 가입은 완료 처리 (SMTP 미설정 환경 고려)
-    }
-
     return NextResponse.json({
-      message: "회원가입이 완료되었습니다. 입력하신 이메일로 인증 링크를 발송했습니다.",
-      needEmailVerify: true,
+      message: "회원가입이 완료되었습니다. 바로 로그인하실 수 있습니다.",
       user: { id: user.id, userId: user.userId, name: user.name },
     });
   } catch (error) {
