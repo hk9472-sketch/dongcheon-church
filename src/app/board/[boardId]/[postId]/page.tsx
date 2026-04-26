@@ -67,12 +67,13 @@ export default async function PostDetailPage({ params }: PageProps) {
 
   // 비밀글 접근 권한 체크
   // - 관리자(isAdmin <= board.grantViewSecret 기준) 또는 작성자 본인만 열람 가능
-  // - 비회원이 작성한 비밀글(authorId=null)은 비밀번호 입력으로 unlock 쿠키가 있으면 허용
+  // - 작성자가 unlock 비번을 설정해 둔 글은 비번 입력 후 발급된 쿠키로 누구나 열람 가능
+  //   (비회원 작성 글 + password hash 있는 회원 비밀글 둘 다)
   const isSecretBlocked =
     post.isSecret &&
     !((currentUser?.isAdmin ?? 3) <= board.grantViewSecret) &&
     !(currentUser?.id !== undefined && currentUser.id === post.authorId) &&
-    !(post.authorId === null && hasUnlockCookie);
+    !(post.password && hasUnlockCookie);
 
   // 조회수 증가는 <HitCounter /> 클라이언트 컴포넌트가 /api/board/view 를 호출해 처리.
   // Server Component 에서는 cookies().set() 이 렌더 단계에 따라 실패할 수 있어,
@@ -127,19 +128,22 @@ export default async function PostDetailPage({ params }: PageProps) {
             <p className="text-4xl mb-4">🔒</p>
             <p className="text-base font-medium text-gray-700 mb-1">비밀글입니다</p>
             <p className="text-sm text-gray-500">
-              이 글은 작성자와 관리자만 열람할 수 있습니다.
+              작성자가 공유한 비밀번호를 입력하거나 권한 있는 계정으로 로그인하면 열람할 수 있습니다.
             </p>
-            {/* 비회원(authorId=null)이 쓴 비밀글: 비밀번호 입력으로 unlock 가능 */}
-            {post.authorId === null && post.password && (
-              <SecretPostUnlock postId={post.id} />
-            )}
-            {!currentUser && post.authorId !== null && (
-              <Link
-                href={`/auth/login?redirect=/board/${boardId}/${postId}`}
-                className="mt-4 inline-block px-5 py-2 text-sm bg-blue-700 text-white rounded hover:bg-blue-800"
-              >
-                로그인하기
-              </Link>
+
+            {/* 작성자가 공유 비번을 설정해 둔 글: 비번 입력으로 unlock 가능 */}
+            {post.password && <SecretPostUnlock postId={post.id} />}
+
+            {/* 비로그인 사용자: 로그인하면 본인 작성 글 또는 권한자 케이스 자동 통과 */}
+            {!currentUser && (
+              <div className="mt-4">
+                <Link
+                  href={`/auth/login?redirect=/board/${boardId}/${postId}`}
+                  className="inline-block px-5 py-2 text-sm bg-blue-700 text-white rounded hover:bg-blue-800"
+                >
+                  로그인하기
+                </Link>
+              </div>
             )}
           </div>
         </article>
