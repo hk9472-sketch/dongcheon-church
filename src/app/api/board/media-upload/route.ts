@@ -99,8 +99,16 @@ const VIDEO_EXT = new Set([".mp4", ".webm", ".ogv", ".m4v", ".mov"]);
 const AUDIO_EXT = new Set([".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac"]);
 const MAX_SIZE = 1000 * 1024 * 1024; // 1000MB
 
+// 파일명 안전화 — 원본 이름 보존 (한국어 등 비-ASCII 허용).
+// path traversal/제어문자/hidden 파일만 차단.
 function sanitizeStoredName(name: string): string {
-  return name.replace(/[\\/]+/g, "_").replace(/\.\.+/g, ".").replace(/[^A-Za-z0-9_.]/g, "_");
+  const cleaned = name
+    .replace(/[\\/]+/g, "_")        // path separator 차단
+    .replace(/\.\.+/g, ".")          // 연속 점 (.. path traversal)
+    .replace(/[\x00-\x1f]/g, "")     // 제어문자
+    .replace(/^\.+/, "")             // 앞 점 (hidden 파일 방지)
+    .trim();
+  return cleaned || `media_${Date.now()}`;
 }
 
 // 파일 이름에서 연/월 추출.
@@ -210,7 +218,8 @@ export async function POST(request: NextRequest) {
     const yyyy = fromName ? fromName.yyyy : String(now.getFullYear());
     const mm = fromName ? fromName.mm : String(now.getMonth() + 1).padStart(2, "0");
     const rand = randomBytes(4).toString("hex");
-    const storedName = sanitizeStoredName(`${Date.now()}_${rand}${ext}`);
+    // 원본 파일명 그대로 사용 (한글 포함). 동일 이름 충돌 시 덮어씀.
+    const storedName = sanitizeStoredName(file.name);
     const buffer = Buffer.from(await file.arrayBuffer());
 
     // 원격 FTP 설정이 있으면 FTP 업로드 → 공개 URL 반환.

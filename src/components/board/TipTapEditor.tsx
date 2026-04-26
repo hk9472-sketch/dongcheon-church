@@ -804,36 +804,40 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         onClose={() => setMediaUrlOpen(false)}
         onSubmit={handleMediaUrlSubmit}
       />
-      {/* 미디어 업로드 진행률 — 화면 하단 floating */}
+      {/* 미디어 업로드 진행률 — 화면 정중앙 모달 */}
       {uploadProgress && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md bg-white border border-gray-300 rounded-lg shadow-xl p-3">
-          <div className="flex items-center justify-between text-sm mb-1.5 gap-2">
-            <span className="truncate flex-1 text-gray-700">📤 {uploadProgress.name}</span>
-            <span className="text-blue-600 font-semibold tabular-nums">
-              {uploadProgress.total > 0
-                ? Math.floor((uploadProgress.loaded / uploadProgress.total) * 100)
-                : 0}
-              %
-            </span>
-          </div>
-          <div className="w-full h-2 bg-gray-200 rounded overflow-hidden">
-            <div
-              className="h-full bg-blue-500 transition-[width] duration-200"
-              style={{
-                width: `${
-                  uploadProgress.total > 0
-                    ? Math.min(100, (uploadProgress.loaded / uploadProgress.total) * 100)
-                    : 0
-                }%`,
-              }}
-            />
-          </div>
-          <div className="text-xs text-gray-500 mt-1 tabular-nums">
-            {(uploadProgress.loaded / 1024 / 1024).toFixed(1)} MB /{" "}
-            {(uploadProgress.total / 1024 / 1024).toFixed(1)} MB
-            {uploadProgress.loaded >= uploadProgress.total && uploadProgress.total > 0
-              ? " — 서버 처리 중..."
-              : ""}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-2xl bg-white border border-gray-300 rounded-xl shadow-2xl p-6">
+            <div className="text-base font-semibold text-gray-800 mb-4 break-all">
+              📤 {uploadProgress.name}
+            </div>
+            <div className="flex items-center gap-4 mb-3">
+              <div className="flex-1 h-4 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-500 transition-[width] duration-200"
+                  style={{
+                    width: `${
+                      uploadProgress.total > 0
+                        ? Math.min(100, (uploadProgress.loaded / uploadProgress.total) * 100)
+                        : 0
+                    }%`,
+                  }}
+                />
+              </div>
+              <span className="text-3xl font-bold text-blue-600 tabular-nums w-20 text-right">
+                {uploadProgress.total > 0
+                  ? Math.floor((uploadProgress.loaded / uploadProgress.total) * 100)
+                  : 0}
+                %
+              </span>
+            </div>
+            <div className="text-sm text-gray-600 tabular-nums">
+              {(uploadProgress.loaded / 1024 / 1024).toFixed(1)} MB /{" "}
+              {(uploadProgress.total / 1024 / 1024).toFixed(1)} MB
+              {uploadProgress.loaded >= uploadProgress.total && uploadProgress.total > 0
+                ? " — 서버 처리 중..."
+                : ""}
+            </div>
           </div>
         </div>
       )}
