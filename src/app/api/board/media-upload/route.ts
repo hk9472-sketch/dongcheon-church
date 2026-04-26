@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir, unlink } from "fs/promises";
+import { mkdir, writeFile } from "fs/promises";
 import path from "path";
-import os from "os";
 import { randomBytes } from "crypto";
-import { execFileSync } from "child_process";
+import { spawn } from "child_process";
+import { Readable } from "stream";
+import type { ReadableStream as WebReadableStream } from "stream/web";
 import prisma from "@/lib/db";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import { getUploadDir, getRelUploadPath } from "@/lib/uploadPath";
@@ -63,22 +64,39 @@ async function getFtpConfig(mode: UploadMode): Promise<{
   };
 }
 
-function uploadViaCurl(
-  localPath: string,
+// 사용자 → 서버에서 받은 파일 stream 을 디스크 거치지 않고 바로 curl stdin 으로
+// pipe 해서 NAS 에 FTP 업로드. 메모리 적게 쓰고 디스크 I/O 없음.
+// 큰 파일(1GB) 도 OOM 없이 처리 가능.
+function uploadStreamViaCurl(
+  webStream: WebReadableStream<Uint8Array>,
   remoteRelPath: string,
   cfg: { host: string; port: string; user: string; password: string; remoteRoot: string }
-) {
+): Promise<void> {
   const remoteUrl = `ftp://${cfg.host}:${cfg.port}${cfg.remoteRoot}/${remoteRelPath}`;
-  const args = [
-    "-T", localPath,
-    remoteUrl,
-    "--user", `${cfg.user}:${cfg.password}`,
-    "--ftp-create-dirs",
-    "--connect-timeout", "30",
-    "--max-time", "600",
-    "-s", "-S",
-  ];
-  execFileSync("curl", args, { maxBuffer: 10 * 1024 * 1024 });
+  return new Promise((resolve, reject) => {
+    const child = spawn("curl", [
+      "-T", "-",                                // stdin 으로 받음
+      remoteUrl,
+      "--user", `${cfg.user}:${cfg.password}`,
+      "--ftp-create-dirs",
+      "--connect-timeout", "30",
+      "--max-time", "1800",                     // 1000MB 큰 파일 대비 30분
+      "-s", "-S",
+    ]);
+    let stderr = "";
+    child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`curl exit ${code}: ${stderr || "unknown error"}`));
+    });
+    const nodeStream = Readable.fromWeb(webStream);
+    nodeStream.pipe(child.stdin);
+    nodeStream.on("error", (err) => {
+      child.kill("SIGTERM");
+      reject(err);
+    });
+  });
 }
 
 // ────────────────────────────────────────────────────────────
@@ -239,9 +257,8 @@ export async function POST(request: NextRequest) {
     // 원본 파일명은 video/audio element 의 title 속성으로 게시글에 보존됨
     // (TipTapEditor 의 insertContent attrs.title 참조).
     const storedName = sanitizeStoredName(`${Date.now()}_${rand}${ext}`);
-    const buffer = Buffer.from(await file.arrayBuffer());
 
-    // 원격 FTP 설정이 있으면 FTP 업로드 → 공개 URL 반환.
+    // 원격 FTP 설정이 있으면 stream 으로 직접 NAS 로 pipe (디스크 거치지 않음).
     // 모드별 경로 패턴 (월별 폴더):
     //   general  → {remoteRoot}/{boardSlug}/{YYYY}/{MM}/{파일명}
     //   realtime → {remoteRoot}/{YYYY}/{MM}/{파일명}
@@ -251,17 +268,17 @@ export async function POST(request: NextRequest) {
         mode === "realtime"
           ? `${yyyy}/${mm}/${storedName}`
           : `${boardSlug}/${yyyy}/${mm}/${storedName}`;
-      const tmpPath = path.join(os.tmpdir(), `mup_${rand}${ext}`);
       try {
-        await writeFile(tmpPath, buffer);
-        uploadViaCurl(tmpPath, remoteRel, ftp);
+        await uploadStreamViaCurl(
+          file.stream() as unknown as WebReadableStream<Uint8Array>,
+          remoteRel,
+          ftp
+        );
       } catch (e) {
         return NextResponse.json(
           { message: `FTP 업로드 실패: ${e instanceof Error ? e.message : String(e)}` },
           { status: 500 }
         );
-      } finally {
-        await unlink(tmpPath).catch(() => {});
       }
       const publicUrl = `${ftp.publicBase}${remoteRel}`;
       return NextResponse.json({
@@ -273,10 +290,11 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 로컬 저장 (기존 동작) — 월별 폴더
+    // 로컬 저장 (FTP 비활성 시) — 월별 폴더
     const subPath = `${boardSlug}/inline/${yyyy}/${mm}`;
     const dir = getUploadDir(subPath);
     await mkdir(dir, { recursive: true });
+    const buffer = Buffer.from(await file.arrayBuffer());
     await writeFile(path.join(dir, storedName), buffer);
     const rel = getRelUploadPath(subPath, storedName);
     const url = `/api/board/media?path=${encodeURIComponent(rel)}`;
