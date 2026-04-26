@@ -2,94 +2,55 @@
 
 Claude Code 에이전트가 이 저장소에서 작업할 때 **반드시** 지킬 규칙.
 
-## 배포 방식 (확정)
+## 배포 방식 (확정 — 2026-04-26 변경)
 
-**delta 패키지 방식** — 변경된 파일만 tar.gz 로 묶어 사용자에게 전달. 사용자가 서버로 옮기고 `apply-delta.sh` 로 적용.
+**git push + 서버 git pull 방식**. tar.gz delta 는 **만들지 않음**.
 
-### Claude 가 할 일
+### Claude 가 할 일 (전부)
 
-1. 요청된 수정 반영 → 커밋 → 원격 푸시 (git 기록은 계속 유지)
-2. 이번 커밋에서 **변경·추가된 파일만** tar.gz 로 묶기
-    - 빌드 산출물(`.next/`) 포함 **금지**
-    - `node_modules/` 포함 **금지**
-    - `.env`, `data/`, `.git/` 포함 **금지**
-3. 파일명 규칙: **`dc-YYYYMMDD.tar.gz`** (고정)
-    - 예: `dc-20260419.tar.gz`
-    - 같은 날 여러 번 배포 시: `dc-20260419a.tar.gz`, `dc-20260419b.tar.gz` …
-    - 설명 suffix(예: `-image-resize`) 사용하지 않음
-4. 아카이브는 저장소 부모 디렉터리(`d:/Works/Christ/pkistdc_new/`)에 생성
-5. 서버에 필요한 후처리(schema 변경, 의존성 변경 등)를 **간단히 안내**
+1. 요청된 수정 반영
+2. 한국어 커밋 메시지로 commit
+3. `git push origin main`
+
+이걸로 끝. **압축파일(tar.gz) 만들지 않음**. 사용자가 서버에서 직접 받음.
+
+### 사용자가 서버에서 실행 (한 줄)
+
+```bash
+dcup
+```
+
+(`~/dc-update.sh` → `~/pkistdc/scripts/git-deploy.sh` 호출)
+
+자동으로:
+1. `git fetch + reset --hard origin/main`
+2. `package*.json` 변경 시 `npm ci`
+3. `prisma/schema.prisma` 변경 시 `prisma generate + db push`
+4. `.next` 삭제 + `npm run build`
+5. `pm2 restart pkistdc` + `pm2 flush`
+6. 5초 후 헬스 체크 (pm2 status + 에러 로그)
+
+이미 최신이면 빌드/재시작 생략. 강제하려면 `dcup --force`.
 
 ### 금지
 
-- 전체 tar (`.next/` 포함한 8MB+짜리) 는 더 이상 만들지 않는다 — 교차 플랫폼 빌드 불일치 재발 우려
-- 로컬에서 `npm run build` 해서 `.next/` 를 서버로 보내지 않는다
-- **`apply-delta.sh` 를 Claude 가 실행하려 하지 않는다** — 사용자가 직접 서버에서 실행
+- **tar.gz delta 만들지 않음** — `dc-YYYYMMDD*.tar.gz` 같은 파일 더 이상 생성 X
+- 로컬에서 `npm run build` 해서 `.next/` 를 서버로 보내지 않음 (서버에서 빌드)
+- `apply-delta.sh` 도 사용 안 함 (git-deploy.sh 가 대체)
 
-### 파일 목록 결정 방법
+### GitHub 저장소
 
-```bash
-# 이번 커밋에서 변경된 파일 (신규 + 수정, 삭제는 수동 처리)
-git diff-tree --no-commit-id --name-only --diff-filter=AM -r HEAD
+- URL: https://github.com/hk9472-sketch/dongcheon-church
+- 가시성: **public** (인증 없이 git fetch 가능)
+- `.env`, `data/`, `node_modules/`, `.next/` 는 `.gitignore` 라 노출되지 않음
 
-# 여러 커밋 범위 (이전 배포 지점부터)
-git diff --name-only --diff-filter=AM <이전커밋>..HEAD
-```
-
-Claude 는 tar 를 만들기 전 이 목록을 사용자에게 보여 주고 확인 후 진행한다.
-
-### tar 예시
+### 롤백
 
 ```bash
-# 저장소 루트에서
-tar -czf ../delta-YYYYMMDD-<설명>.tar.gz \
-  src/components/board/ResizableImage.tsx \
-  src/components/board/TipTapEditor.tsx \
-  deploy.sh
-```
-
-상대 경로가 저장소 루트 기준이면 서버 앱 루트(`~/pkistdc`)에서 그대로 전개해도 구조가 맞다.
-
-### 파일명 규칙 (엄수)
-
-- 형식: **`dc-YYYYMMDD.tar.gz`**
-- 포맷: 소문자 `dc-` + ISO 날짜(하이픈 없이 8자리) + `.tar.gz`
-- 같은 날 2번 이상 배포 시: `dc-YYYYMMDDa.tar.gz`, `dc-YYYYMMDDb.tar.gz` … (알파벳 소문자 접미)
-- 설명/브랜치/이슈번호 등 추가 문자열 **절대 금지** — 파일명만 보고 날짜만 분별 가능해야 함
-- 압축 포맷은 항상 `gzip` (tar.gz). `zip`, `7z`, `xz` 등은 사용하지 않음
-- 경로는 항상 저장소 부모 디렉터리 (`d:/Works/Christ/pkistdc_new/dc-YYYYMMDD.tar.gz`)
-- Claude 는 새 아카이브 생성 전에 **기존 같은 이름이 있는지 확인**하고, 있으면 suffix(a/b/c…) 붙임
-
-## 서버 반영 절차 (사용자가 실행)
-
-```bash
-# 1) 로컬 → 서버 전송
-scp d:/Works/Christ/pkistdc_new/delta-YYYYMMDD-xxx.tar.gz hk9472@35.212.199.48:~/
-
-# 2) 서버에서 적용
-ssh hk9472@35.212.199.48
 cd ~/pkistdc
-./apply-delta.sh ~/delta-YYYYMMDD-xxx.tar.gz
-```
-
-`apply-delta.sh` 가 자동으로:
-1. 아카이브 전개 + 이전 파일 백업 (`~/.pkistdc-delta-backup/<timestamp>`)
-2. `prisma/schema.prisma` 변경 감지 시 `prisma generate` + `db push`
-3. `package(-lock).json` 변경 감지 시 `npm ci`
-4. `.next` 삭제 + `npm run build`
-5. `pm2 restart pkistdc` + `pm2 flush`
-6. 5초 후 에러 로그 자동 확인
-7. **성공 시** (에러 0 + 프로세스 online) **백업 디렉터리 + 아카이브 자동 삭제**
-    - `--keep` / `-k` 옵션 주면 보존
-    - 에러 감지 시엔 자동으로 보존 (롤백 대비)
-
-### 롤백이 필요할 때
-
-`--keep` 없이 성공하면 흔적이 남지 않으므로 실수 방지 됨. 문제 발생으로 자동 보존된 경우:
-
-```bash
-cp -r ~/.pkistdc-delta-backup/<timestamp>/* ~/pkistdc/
-pm2 restart pkistdc
+git log --oneline -10                      # 직전 커밋 SHA 확인
+git reset --hard <이전_SHA>
+rm -rf .next && npm run build && pm2 restart pkistdc
 ```
 
 ## PM2 프로세스 이름
