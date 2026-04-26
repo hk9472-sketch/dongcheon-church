@@ -83,11 +83,11 @@ function uploadViaCurl(
 // - 게시판 grantWrite 기준 권한 (image-upload 와 동일 규칙)
 // - Rate limit: IP 당 30개/10분
 // - 허용 확장자: mp4/webm/ogv/m4v/mov(video) · mp3/wav/ogg/m4a/aac/flac(audio)
-// - 최대 100MB
+// - 최대 1000MB
 // ────────────────────────────────────────────────────────────
 const VIDEO_EXT = new Set([".mp4", ".webm", ".ogv", ".m4v", ".mov"]);
 const AUDIO_EXT = new Set([".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac"]);
-const MAX_SIZE = 100 * 1024 * 1024; // 100MB
+const MAX_SIZE = 1000 * 1024 * 1024; // 1000MB
 
 function sanitizeStoredName(name: string): string {
   return name.replace(/[\\/]+/g, "_").replace(/\.\.+/g, ".").replace(/[^A-Za-z0-9_.]/g, "_");
