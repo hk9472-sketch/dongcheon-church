@@ -111,6 +111,17 @@ function sanitizeStoredName(name: string): string {
   return cleaned || `media_${Date.now()}`;
 }
 
+// dateBase (사용자가 직접 입력한 기준일자 "YYYY-MM-DD") → 연/월.
+// 형식 안 맞거나 유효하지 않으면 null.
+function parseDateBase(s: string): { yyyy: string; mm: string } | null {
+  const m = s.match(/^(\d{4})-(\d{1,2})-\d{1,2}$/);
+  if (!m) return null;
+  const y = parseInt(m[1], 10);
+  const mo = parseInt(m[2], 10);
+  if (y < 1990 || y > 2100 || mo < 1 || mo > 12) return null;
+  return { yyyy: String(y), mm: String(mo).padStart(2, "0") };
+}
+
 // 파일 이름에서 연/월 추출.
 // 지원 패턴 (파일명 어디든 매칭, 처음 발견된 것 사용):
 //   YYYYMMDD       (예: 20260425_video.mp4 → 2026/04)
@@ -211,12 +222,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "미디어 업로드 권한이 없습니다." }, { status: 403 });
     }
 
-    // 폴더 결정 — 파일명에서 날짜 추출 우선, 추출 실패 시 오늘 날짜 fallback.
+    // 폴더 결정 우선순위:
+    //   1. dateBase formData (사용자가 통합 모달에서 직접 선택한 기준일자)
+    //   2. 파일명에서 날짜 추출 (예: "260425-토새.mp3" → 2026/04)
+    //   3. 오늘 날짜
     // 폴더가 없으면 mkdir -p / --ftp-create-dirs 가 자동 생성.
+    const dateBaseRaw = ((formData.get("dateBase") as string) || "").trim();
+    const fromDateBase = parseDateBase(dateBaseRaw);
     const fromName = extractYearMonthFromName(file.name);
     const now = new Date();
-    const yyyy = fromName ? fromName.yyyy : String(now.getFullYear());
-    const mm = fromName ? fromName.mm : String(now.getMonth() + 1).padStart(2, "0");
+    const yyyy = fromDateBase?.yyyy ?? fromName?.yyyy ?? String(now.getFullYear());
+    const mm = fromDateBase?.mm ?? fromName?.mm ?? String(now.getMonth() + 1).padStart(2, "0");
     const rand = randomBytes(4).toString("hex");
     // 원본 파일명 그대로 사용 (한글 포함). 동일 이름 충돌 시 덮어씀.
     const storedName = sanitizeStoredName(file.name);

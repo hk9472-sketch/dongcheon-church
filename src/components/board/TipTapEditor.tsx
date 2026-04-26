@@ -460,8 +460,14 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
   );
 
   // 미디어(동영상/오디오) 업로드 — /api/board/media-upload (XHR + 진행률)
+  // dateBase: "YYYY-MM-DD" — 통합 모달에서 사용자가 지정한 기준일자.
+  //          이 값이 있으면 폴더가 그 날짜의 YYYY/MM 으로 결정.
   const uploadAndInsertMedia = useCallback(
-    async (file: File, mode: "general" | "realtime" = "general"): Promise<boolean> => {
+    async (
+      file: File,
+      mode: "general" | "realtime" = "general",
+      dateBase?: string
+    ): Promise<boolean> => {
       if (!editor) return false;
       if (!boardSlug) {
         alert("이 편집기는 현재 파일 업로드를 지원하지 않습니다.");
@@ -476,6 +482,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         fd.append("file", file);
         fd.append("boardSlug", boardSlug);
         fd.append("mode", mode);
+        if (dateBase) fd.append("dateBase", dateBase);
         const { ok, status, data } = await xhrUpload(
           "/api/board/media-upload",
           fd,
@@ -522,11 +529,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     mediaInputRef.current?.click();
   }, []);
 
-  // 툴바 실시간 미디어 버튼 — 파일 선택창 열기 (realtime 모드 — FTP 설정의 '실시간 루트' 사용)
-  const mediaRealtimeInputRef = useRef<HTMLInputElement>(null);
-  const addMediaFileRealtime = useCallback(() => {
-    mediaRealtimeInputRef.current?.click();
-  }, []);
+  // (실시간 미디어 / URL 입력은 통합 모달 MediaUrlDialog 로 대체됨)
 
   // 툴바 "여러 개 나란히" 버튼 — 이미지+미디어 다중 선택해 MediaRow 한 덩어리로 삽입.
   const rowInputRef = useRef<HTMLInputElement>(null);
@@ -638,17 +641,6 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     },
     [uploadAndInsertMedia]
   );
-  const handleMediaRealtimeInputChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files || []);
-      for (const f of files) {
-        await uploadAndInsertMedia(f, "realtime");
-      }
-      e.target.value = "";
-    },
-    [uploadAndInsertMedia]
-  );
-
   // 툴바 미디어 URL 버튼 — 외부 mp3/mp4 또는 YouTube 링크 삽입.
   // 미디어 URL 삽입 — React 모달(MediaUrlDialog)로 대체.
   // 기본 URL(사이트 설정) prefix + 경로/파일명 입력 패턴을 지원.
@@ -803,6 +795,9 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         open={mediaUrlOpen}
         onClose={() => setMediaUrlOpen(false)}
         onSubmit={handleMediaUrlSubmit}
+        onUpload={async (file, dateBase) => {
+          await uploadAndInsertMedia(file, "realtime", dateBase);
+        }}
       />
       {/* 미디어 업로드 진행률 — 화면 정중앙 모달 */}
       {uploadProgress && (
@@ -1088,19 +1083,8 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
           hidden
           onChange={handleMediaInputChange}
         />
-        <TBtn onClick={addMediaFileRealtime} title="실시간 미디어 업로드 — 실시간 루트/{YYYY}/{YYYYMMDD}/ (FTP 설정에서 지정)">
+        <TBtn onClick={addMediaUrl} title="실시간 미디어 삽입 — 파일 업로드 또는 URL 입력 (한 다이얼로그에서 통합)">
           🎙️
-        </TBtn>
-        <input
-          ref={mediaRealtimeInputRef}
-          type="file"
-          accept="video/*,audio/*"
-          multiple
-          hidden
-          onChange={handleMediaRealtimeInputChange}
-        />
-        <TBtn onClick={addMediaUrl} title="동영상/음성 URL 삽입 (mp4·mp3 또는 YouTube/Vimeo)">
-          📺
         </TBtn>
         <TBtn onClick={addMediaRow} title="이미지·미디어 여러 개 나란히 — 다중 선택 후 한 줄에 자동 배치">
           🔳
