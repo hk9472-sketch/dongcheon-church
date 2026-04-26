@@ -234,8 +234,11 @@ export async function POST(request: NextRequest) {
     const yyyy = fromDateBase?.yyyy ?? fromName?.yyyy ?? String(now.getFullYear());
     const mm = fromDateBase?.mm ?? fromName?.mm ?? String(now.getMonth() + 1).padStart(2, "0");
     const rand = randomBytes(4).toString("hex");
-    // 원본 파일명 그대로 사용 (한글 포함). 동일 이름 충돌 시 덮어씀.
-    const storedName = sanitizeStoredName(file.name);
+    // 디스크에 저장되는 파일명은 시스템이 자동 생성 (timestamp + random hex).
+    // 같은 이름 파일이 여러 번 업로드돼도 충돌 없이 모두 보존.
+    // 원본 파일명은 video/audio element 의 title 속성으로 게시글에 보존됨
+    // (TipTapEditor 의 insertContent attrs.title 참조).
+    const storedName = sanitizeStoredName(`${Date.now()}_${rand}${ext}`);
     const buffer = Buffer.from(await file.arrayBuffer());
 
     // 원격 FTP 설정이 있으면 FTP 업로드 → 공개 URL 반환.
