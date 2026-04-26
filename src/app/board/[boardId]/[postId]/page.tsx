@@ -128,7 +128,9 @@ export default async function PostDetailPage({ params }: PageProps) {
             <p className="text-4xl mb-4">🔒</p>
             <p className="text-base font-medium text-gray-700 mb-1">비밀글입니다</p>
             <p className="text-sm text-gray-500">
-              작성자가 공유한 비밀번호를 입력하거나 권한 있는 계정으로 로그인하면 열람할 수 있습니다.
+              {post.password
+                ? "작성자가 공유한 비밀번호를 입력하거나 권한 있는 계정으로 로그인하면 열람할 수 있습니다."
+                : "작성자가 공유 비밀번호를 설정하지 않았습니다. 작성자 본인 또는 권한 있는 계정으로 로그인해 주세요."}
             </p>
 
             {/* 작성자가 공유 비번을 설정해 둔 글: 비번 입력으로 unlock 가능 */}
