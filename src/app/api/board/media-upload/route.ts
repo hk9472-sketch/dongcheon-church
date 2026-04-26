@@ -15,6 +15,16 @@ import { getUploadDir, getRelUploadPath } from "@/lib/uploadPath";
 // ────────────────────────────────────────────────────────────
 type UploadMode = "general" | "realtime";
 
+// FTP 원격 경로 정규화 — 사용자가 "publist/HDD1" 처럼 leading "/" 없이
+// 입력해도 정상 URL 이 되도록. trailing "/" 는 제거 (조립 시 또 붙음).
+function normalizeFtpRoot(p: string): string {
+  let s = (p || "").trim();
+  s = s.replace(/\/+$/g, "");
+  if (!s) return "/";
+  if (!s.startsWith("/")) s = "/" + s;
+  return s;
+}
+
 async function getFtpConfig(mode: UploadMode): Promise<{
   host: string;
   port: string;
@@ -40,15 +50,15 @@ async function getFtpConfig(mode: UploadMode): Promise<{
   if (!map.media_ftp_host || !map.media_ftp_user || !map.media_ftp_password) return null;
   if (!map.media_base_url) return null;
 
-  const rootGeneral = map.media_ftp_remote_root || "/";
-  const rootRealtime = map.media_ftp_remote_root_realtime || rootGeneral;
+  const rootGeneral = normalizeFtpRoot(map.media_ftp_remote_root || "/");
+  const rootRealtime = normalizeFtpRoot(map.media_ftp_remote_root_realtime || rootGeneral);
   const picked = mode === "realtime" ? rootRealtime : rootGeneral;
   return {
     host: map.media_ftp_host,
     port: map.media_ftp_port || "21",
     user: map.media_ftp_user,
     password: map.media_ftp_password,
-    remoteRoot: picked.replace(/\/+$/g, "") || "/",
+    remoteRoot: picked,
     publicBase: map.media_base_url.replace(/\/+$/g, "") + "/",
   };
 }
