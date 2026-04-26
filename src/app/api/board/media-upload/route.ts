@@ -173,6 +173,7 @@ export async function POST(request: NextRequest) {
 
     const fields: Record<string, string> = {};
     let totalReceived = 0;
+    let fileFound = false; // file 이벤트가 발생했는지 추적 (close 보다 먼저 file 이 fire 보장 X)
 
     const bb = busboy({
       headers: { "content-type": contentType },
@@ -184,6 +185,7 @@ export async function POST(request: NextRequest) {
     });
 
     bb.on("file", async (fieldname, fileStream, info) => {
+      fileFound = true;
       if (resolved) {
         fileStream.resume();
         return;
