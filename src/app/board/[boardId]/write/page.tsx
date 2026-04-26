@@ -213,6 +213,11 @@ function WriteForm({ boardId }: { boardId: string }) {
       if (!name.trim()) { alert("이름을 입력하세요."); return; }
       if (!password.trim()) { alert("비밀번호를 입력하세요."); return; }
     }
+    // 회원이 비밀글 체크 시 공유 비밀번호 필수 — 개인용 비밀글은 정책상 배제
+    if (isLoggedIn === true && isSecret && !password.trim()) {
+      alert("비밀글에는 공유 비밀번호를 반드시 입력해 주세요.");
+      return;
+    }
     if (!subject.trim()) { alert("제목을 입력하세요."); return; }
     if (!content.trim()) { alert("내용을 입력하세요."); return; }
 
@@ -632,20 +637,16 @@ function WriteForm({ boardId }: { boardId: string }) {
                   비밀글
                 </label>
               )}
-              {/* 회원 + 비밀글 시 공유 비번 (옵션) — 입력해 두면 그 비번을 아는 사람만 열람 가능.
-                 비워 두면 작성자 본인만 열람 (기존 동작). 별도 비번이 아니라 한 번만 입력. */}
+              {/* 회원 + 비밀글 시 공유 비번 — 필수. 개인용 비밀글은 배제 (열람 비번 항상 있어야 함). */}
               {isLoggedIn && isSecret && (
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={
-                    mode === "modify"
-                      ? "공유 비번 (바꿀 때만 입력)"
-                      : "공유 비번 (비워두면 본인만 열람)"
-                  }
+                  required
+                  placeholder="공유 비밀번호 (필수) — 다른 사람과 공유할 비밀번호"
                   autoComplete="off"
-                  className="px-2.5 py-1 text-sm border border-gray-400 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors w-64"
+                  className="px-2.5 py-1 text-sm border border-red-300 bg-red-50/30 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors w-72"
                 />
               )}
               <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none hover:text-gray-900 transition-colors">
