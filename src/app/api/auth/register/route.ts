@@ -27,9 +27,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "자동 입력 방지 정답이 올바르지 않습니다." }, { status: 400 });
     }
 
-    // 유효성 검사
-    if (!userId || !password || !name || !email) {
-      return NextResponse.json({ message: "아이디, 비밀번호, 이름, 이메일은 필수입니다." }, { status: 400 });
+    // 유효성 검사 — email 은 선택 입력
+    if (!userId || !password || !name) {
+      return NextResponse.json({ message: "아이디, 비밀번호, 이름은 필수입니다." }, { status: 400 });
     }
     if (userId.length < 3 || userId.length > 20) {
       return NextResponse.json({ message: "아이디는 3~20자로 입력하세요." }, { status: 400 });
@@ -43,7 +43,8 @@ export async function POST(request: NextRequest) {
     if (password !== passwordConfirm) {
       return NextResponse.json({ message: "비밀번호가 일치하지 않습니다." }, { status: 400 });
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // 이메일 입력한 경우에만 형식 검증
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ message: "올바른 이메일 주소를 입력하세요." }, { status: 400 });
     }
 
@@ -53,13 +54,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "이미 사용 중인 아이디입니다." }, { status: 409 });
     }
 
-    // 이메일 중복 확인 — 동일 이메일로 다중 계정 차단
-    const existingEmail = await prisma.user.findFirst({ where: { email } });
-    if (existingEmail) {
-      return NextResponse.json(
-        { message: "이미 사용 중인 이메일입니다. 비밀번호를 잊으셨다면 비밀번호 찾기를 이용해 주세요." },
-        { status: 409 }
-      );
+    // 이메일 중복 확인 — 입력된 경우만. 빈 이메일은 중복으로 안 잡음.
+    if (email) {
+      const existingEmail = await prisma.user.findFirst({ where: { email } });
+      if (existingEmail) {
+        return NextResponse.json(
+          { message: "이미 사용 중인 이메일입니다. 비밀번호를 잊으셨다면 비밀번호 찾기를 이용해 주세요." },
+          { status: 409 }
+        );
+      }
     }
 
     const hashedPassword = await hashPassword(password);
@@ -71,7 +74,7 @@ export async function POST(request: NextRequest) {
         userId,
         password: hashedPassword,
         name,
-        email,
+        email: email || null,
         phone: phone || null,
         level: 10,
         isAdmin: 3,

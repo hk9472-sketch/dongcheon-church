@@ -66,19 +66,9 @@ export default function RegisterPage() {
             <h1 className="text-lg font-bold text-gray-800">회원가입 완료</h1>
           </div>
           <div className="p-6 text-center space-y-4">
-            <p className="text-5xl">📧</p>
-            <p className="text-base font-semibold text-gray-800">가입 신청이 완료되었습니다!</p>
-            <div className="px-4 py-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800 text-left">
-              <p className="font-medium mb-1">이메일 인증이 필요합니다</p>
-              <p>
-                <strong>{form.email}</strong>로 인증 링크를 발송했습니다.
-                메일함을 확인하여 인증을 완료해 주세요.
-              </p>
-              <p className="mt-1 text-xs text-blue-600">
-                * 인증 링크는 24시간 유효합니다.
-                * 스팸 메일함도 확인해 보세요.
-              </p>
-            </div>
+            <p className="text-5xl">🎉</p>
+            <p className="text-base font-semibold text-gray-800">가입이 완료되었습니다!</p>
+            <p className="text-sm text-gray-600">바로 로그인하실 수 있습니다.</p>
             <Link
               href="/auth/login"
               className="inline-block mt-2 px-6 py-2.5 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors"
@@ -174,18 +164,17 @@ export default function RegisterPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              이메일 <span className="text-red-500">*</span>
-              <span className="ml-1 text-xs text-gray-400 font-normal">(인증 링크 발송)</span>
+              이메일
+              <span className="ml-1 text-xs text-gray-400 font-normal">(선택 — 비밀번호 찾기 등에 사용)</span>
             </label>
             <input
               type="email"
               name="email"
               value={form.email}
               onChange={handleChange}
-              required
               autoComplete="email"
               className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="실제 사용하시는 이메일을 입력하세요"
+              placeholder="이메일 주소 (선택 입력)"
             />
           </div>
 
