@@ -93,6 +93,48 @@ function sanitizeStoredName(name: string): string {
   return name.replace(/[\\/]+/g, "_").replace(/\.\.+/g, ".").replace(/[^A-Za-z0-9_.]/g, "_");
 }
 
+// 파일 이름에서 연/월 추출.
+// 지원 패턴 (파일명 어디든 매칭, 처음 발견된 것 사용):
+//   YYYYMMDD       (예: 20260425_video.mp4 → 2026/04)
+//   YYYY[-_./]MM[-_./]DD (예: 2026-04-25.mp4 → 2026/04)
+//   YYMMDD         (예: 260425-토새.mp3 → 2026/04, 991231-old.mp3 → 1999/12)
+// 추출 실패 시 null 반환 (호출자가 현재 시간 fallback 사용).
+function extractYearMonthFromName(filename: string): { yyyy: string; mm: string } | null {
+  const base = filename.replace(/\.[^.]+$/, ""); // 확장자 제거
+
+  const isValid = (y: number, m: number) =>
+    y >= 1990 && y <= 2100 && m >= 1 && m <= 12;
+
+  // 1) YYYY[구분자]MM[구분자]DD
+  let m = base.match(/(\d{4})[-_.\/](\d{1,2})[-_.\/](\d{1,2})/);
+  if (m) {
+    const y = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10);
+    if (isValid(y, mo)) return { yyyy: String(y), mm: String(mo).padStart(2, "0") };
+  }
+
+  // 2) YYYYMMDD (8자리 숫자)
+  m = base.match(/(\d{4})(\d{2})(\d{2})/);
+  if (m) {
+    const y = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10);
+    if (isValid(y, mo)) return { yyyy: String(y), mm: m[2] };
+  }
+
+  // 3) YYMMDD (6자리 숫자) — 50 이상이면 19xx, 미만이면 20xx
+  m = base.match(/(?:^|[^\d])(\d{2})(\d{2})(\d{2})(?!\d)/);
+  if (m) {
+    const yy = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10);
+    if (mo >= 1 && mo <= 12) {
+      const yyyy = yy >= 50 ? `19${m[1]}` : `20${m[1]}`;
+      return { yyyy, mm: m[2] };
+    }
+  }
+
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request);
@@ -151,9 +193,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "미디어 업로드 권한이 없습니다." }, { status: 403 });
     }
 
+    // 폴더 결정 — 파일명에서 날짜 추출 우선, 추출 실패 시 오늘 날짜 fallback.
+    // 폴더가 없으면 mkdir -p / --ftp-create-dirs 가 자동 생성.
+    const fromName = extractYearMonthFromName(file.name);
     const now = new Date();
-    const yyyy = String(now.getFullYear());
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const yyyy = fromName ? fromName.yyyy : String(now.getFullYear());
+    const mm = fromName ? fromName.mm : String(now.getMonth() + 1).padStart(2, "0");
     const rand = randomBytes(4).toString("hex");
     const storedName = sanitizeStoredName(`${Date.now()}_${rand}${ext}`);
     const buffer = Buffer.from(await file.arrayBuffer());
