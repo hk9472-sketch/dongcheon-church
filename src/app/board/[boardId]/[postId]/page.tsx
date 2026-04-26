@@ -67,13 +67,14 @@ export default async function PostDetailPage({ params }: PageProps) {
 
   // 비밀글 접근 권한 체크
   // - 관리자(isAdmin <= board.grantViewSecret 기준) 또는 작성자 본인만 열람 가능
-  // - 작성자가 unlock 비번을 설정해 둔 글은 비번 입력 후 발급된 쿠키로 누구나 열람 가능
-  //   (비회원 작성 글 + password hash 있는 회원 비밀글 둘 다)
+  // - unlock 쿠키 보유자는 post.password 유무와 무관하게 통과.
+  //   (평문 비번 매칭 후 password=null 로 reset 된 케이스 대응 — 그 사용자는
+  //    이미 정당한 비번을 알고 있던 사람이므로 30분 쿠키 동안 열람 인정)
   const isSecretBlocked =
     post.isSecret &&
     !((currentUser?.isAdmin ?? 3) <= board.grantViewSecret) &&
     !(currentUser?.id !== undefined && currentUser.id === post.authorId) &&
-    !(post.password && hasUnlockCookie);
+    !hasUnlockCookie;
 
   // 조회수 증가는 <HitCounter /> 클라이언트 컴포넌트가 /api/board/view 를 호출해 처리.
   // Server Component 에서는 cookies().set() 이 렌더 단계에 따라 실패할 수 있어,

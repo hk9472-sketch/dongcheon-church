@@ -57,7 +57,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = NextResponse.json({ success: true });
+    // 평문 비번이었는지 판단 — bcrypt/legacy 형식 어디에도 안 맞으면 평문.
+    // 평문 매칭이라는 건 관리자가 임시 SET 한 비번을 사용자가 입력한 케이스.
+    // → 즉시 password 를 null 로 비워 다음에 작성자가 글 수정 시점에 새 비번을
+    //   다시 입력하도록 강제. 그동안 unlock 쿠키로만 30분 열람 가능.
+    const stored = post.password!;
+    const isPlaintext =
+      !stored.startsWith("$2") &&
+      !(stored.length === 41 && stored.startsWith("*")) &&
+      !(stored.length === 16 && /^[0-9a-fA-F]+$/.test(stored));
+    if (isPlaintext) {
+      await prisma.post.update({
+        where: { id: postId },
+        data: { password: null },
+      });
+    }
+
+    const response = NextResponse.json({ success: true, plaintextReset: isPlaintext });
     response.cookies.set(`dc_post_unlock_${postId}`, "1", {
       httpOnly: true,
       secure: isSecureRequest(request),
