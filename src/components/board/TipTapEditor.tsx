@@ -29,6 +29,36 @@ interface TipTapEditorProps {
   boardSlug?: string;
 }
 
+// XMLHttpRequest 기반 업로드 — fetch 는 upload progress 트래킹 안 됨.
+// 큰 미디어 파일 업로드 시 사용자에게 진행률 표시하기 위함.
+type XhrResult = { ok: boolean; status: number; data: { url?: string; kind?: string; message?: string } };
+function xhrUpload(
+  url: string,
+  formData: FormData,
+  onProgress: (loaded: number, total: number) => void
+): Promise<XhrResult> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(e.loaded, e.total);
+    };
+    xhr.onload = () => {
+      let data: XhrResult["data"] = {};
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch {
+        // JSON 아닌 응답 (nginx 413 등) — message 에 일부 노출
+        data = { message: xhr.responseText.slice(0, 200) || `HTTP ${xhr.status}` };
+      }
+      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data });
+    };
+    xhr.onerror = () => reject(new Error("네트워크 오류"));
+    xhr.onabort = () => reject(new Error("업로드 취소됨"));
+    xhr.send(formData);
+  });
+}
+
 // ─── 색상 팔레트 ───
 const COLORS = [
   "#000000", "#434343", "#666666", "#999999", "#cccccc", "#efefef", "#ffffff",
@@ -301,6 +331,13 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
   // minHeight: CSS 픽셀값 (예: "60px", "400px")
   const minH = minHeight || "400px";
 
+  // 미디어 업로드 진행률 — null 이면 업로드 중 아님.
+  const [uploadProgress, setUploadProgress] = useState<{
+    name: string;
+    loaded: number;
+    total: number;
+  } | null>(null);
+
   // 글꼴 목록 — 관리자가 /admin/settings 에서 편집한 DB 값을 우선 사용하고,
   // 비어 있거나 fetch 실패 시 DEFAULT_FONTS 로 폴백.
   const [fonts, setFonts] = useState<typeof DEFAULT_FONTS>(DEFAULT_FONTS);
@@ -422,7 +459,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     [editor, boardSlug]
   );
 
-  // 미디어(동영상/오디오) 업로드 — /api/board/media-upload
+  // 미디어(동영상/오디오) 업로드 — /api/board/media-upload (XHR + 진행률)
   const uploadAndInsertMedia = useCallback(
     async (file: File, mode: "general" | "realtime" = "general"): Promise<boolean> => {
       if (!editor) return false;
@@ -433,15 +470,19 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       const isVideo = file.type.startsWith("video/");
       const isAudio = file.type.startsWith("audio/");
       if (!isVideo && !isAudio) return false;
+      setUploadProgress({ name: file.name, loaded: 0, total: file.size });
       try {
         const fd = new FormData();
         fd.append("file", file);
         fd.append("boardSlug", boardSlug);
         fd.append("mode", mode);
-        const res = await fetch("/api/board/media-upload", { method: "POST", body: fd });
-        const data = await res.json();
-        if (!res.ok) {
-          alert(`미디어 업로드 실패: ${data.message || res.status}`);
+        const { ok, status, data } = await xhrUpload(
+          "/api/board/media-upload",
+          fd,
+          (loaded, total) => setUploadProgress({ name: file.name, loaded, total })
+        );
+        if (!ok) {
+          alert(`미디어 업로드 실패: ${data.message || status}`);
           return false;
         }
         editor
@@ -462,6 +503,8 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       } catch (e) {
         alert(`미디어 업로드 실패: ${e instanceof Error ? e.message : String(e)}`);
         return false;
+      } finally {
+        setUploadProgress(null);
       }
     },
     [editor, boardSlug]
@@ -527,20 +570,26 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       const isVideo = file.type.startsWith("video/");
       const isAudio = file.type.startsWith("audio/");
       if (!isVideo && !isAudio) return null;
+      setUploadProgress({ name: file.name, loaded: 0, total: file.size });
       try {
         const fd = new FormData();
         fd.append("file", file);
         fd.append("boardSlug", boardSlug);
-        const res = await fetch("/api/board/media-upload", { method: "POST", body: fd });
-        const data = await res.json();
-        if (!res.ok) {
-          alert(`미디어 업로드 실패: ${data.message || res.status}`);
+        const { ok, status, data } = await xhrUpload(
+          "/api/board/media-upload",
+          fd,
+          (loaded, total) => setUploadProgress({ name: file.name, loaded, total })
+        );
+        if (!ok) {
+          alert(`미디어 업로드 실패: ${data.message || status}`);
           return null;
         }
         return { url: data.url as string, kind: isVideo ? "video" : "audio" };
       } catch (e) {
         alert(`미디어 업로드 실패: ${e instanceof Error ? e.message : String(e)}`);
         return null;
+      } finally {
+        setUploadProgress(null);
       }
     },
     [boardSlug]
@@ -755,6 +804,39 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         onClose={() => setMediaUrlOpen(false)}
         onSubmit={handleMediaUrlSubmit}
       />
+      {/* 미디어 업로드 진행률 — 화면 하단 floating */}
+      {uploadProgress && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md bg-white border border-gray-300 rounded-lg shadow-xl p-3">
+          <div className="flex items-center justify-between text-sm mb-1.5 gap-2">
+            <span className="truncate flex-1 text-gray-700">📤 {uploadProgress.name}</span>
+            <span className="text-blue-600 font-semibold tabular-nums">
+              {uploadProgress.total > 0
+                ? Math.floor((uploadProgress.loaded / uploadProgress.total) * 100)
+                : 0}
+              %
+            </span>
+          </div>
+          <div className="w-full h-2 bg-gray-200 rounded overflow-hidden">
+            <div
+              className="h-full bg-blue-500 transition-[width] duration-200"
+              style={{
+                width: `${
+                  uploadProgress.total > 0
+                    ? Math.min(100, (uploadProgress.loaded / uploadProgress.total) * 100)
+                    : 0
+                }%`,
+              }}
+            />
+          </div>
+          <div className="text-xs text-gray-500 mt-1 tabular-nums">
+            {(uploadProgress.loaded / 1024 / 1024).toFixed(1)} MB /{" "}
+            {(uploadProgress.total / 1024 / 1024).toFixed(1)} MB
+            {uploadProgress.loaded >= uploadProgress.total && uploadProgress.total > 0
+              ? " — 서버 처리 중..."
+              : ""}
+          </div>
+        </div>
+      )}
       {/* ── 툴바 ── */}
       <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 bg-gray-50 border-b border-gray-300 rounded-t-lg">
         {/* 실행취소/재실행 */}
