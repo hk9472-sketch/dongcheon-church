@@ -632,15 +632,20 @@ function WriteForm({ boardId }: { boardId: string }) {
                   비밀글
                 </label>
               )}
-              {/* 회원 + 비밀글 시 unlock 비번 (옵션) — 비번 알면 비로그인자도 열람 가능 */}
+              {/* 회원 + 비밀글 시 공유 비번 (옵션) — 입력해 두면 그 비번을 아는 사람만 열람 가능.
+                 비워 두면 작성자 본인만 열람 (기존 동작). 별도 비번이 아니라 한 번만 입력. */}
               {isLoggedIn && isSecret && (
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={mode === "modify" ? "열람 비밀번호 (변경 시에만 입력)" : "열람 비밀번호 (선택)"}
+                  placeholder={
+                    mode === "modify"
+                      ? "공유 비번 (바꿀 때만 입력)"
+                      : "공유 비번 (비워두면 본인만 열람)"
+                  }
                   autoComplete="off"
-                  className="px-2.5 py-1 text-sm border border-gray-400 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors w-56"
+                  className="px-2.5 py-1 text-sm border border-gray-400 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors w-64"
                 />
               )}
               <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none hover:text-gray-900 transition-colors">
