@@ -153,21 +153,21 @@ export async function POST(request: NextRequest) {
 
     const now = new Date();
     const yyyy = String(now.getFullYear());
-    const yyyymmdd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
     const rand = randomBytes(4).toString("hex");
     const storedName = sanitizeStoredName(`${Date.now()}_${rand}${ext}`);
     const buffer = Buffer.from(await file.arrayBuffer());
 
     // 원격 FTP 설정이 있으면 FTP 업로드 → 공개 URL 반환.
-    // 모드별 경로 패턴:
-    //   general  → {remoteRoot}/{boardSlug}/{YYYYMMDD}/{파일명}
-    //   realtime → {remoteRoot}/{YYYY}/{YYYYMMDD}/{파일명}
+    // 모드별 경로 패턴 (월별 폴더):
+    //   general  → {remoteRoot}/{boardSlug}/{YYYY}/{MM}/{파일명}
+    //   realtime → {remoteRoot}/{YYYY}/{MM}/{파일명}
     const ftp = await getFtpConfig(mode);
     if (ftp) {
       const remoteRel =
         mode === "realtime"
-          ? `${yyyy}/${yyyymmdd}/${storedName}`
-          : `${boardSlug}/${yyyymmdd}/${storedName}`;
+          ? `${yyyy}/${mm}/${storedName}`
+          : `${boardSlug}/${yyyy}/${mm}/${storedName}`;
       const tmpPath = path.join(os.tmpdir(), `mup_${rand}${ext}`);
       try {
         await writeFile(tmpPath, buffer);
@@ -190,8 +190,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 로컬 저장 (기존 동작)
-    const subPath = `${boardSlug}/inline/${yyyymmdd}`;
+    // 로컬 저장 (기존 동작) — 월별 폴더
+    const subPath = `${boardSlug}/inline/${yyyy}/${mm}`;
     const dir = getUploadDir(subPath);
     await mkdir(dir, { recursive: true });
     await writeFile(path.join(dir, storedName), buffer);
