@@ -77,6 +77,25 @@ const ORDERED_STYLES: { value: string; label: string }[] = [
   { value: "bracket", label: "(9) 양괄호" },
 ];
 
+// 진행률 모달용 시간/속도 포맷터
+function fmtDuration(ms: number): string {
+  const sec = Math.max(0, Math.round(ms / 1000));
+  if (sec < 60) return `${sec}초`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return s > 0 ? `${m}분 ${s}초` : `${m}분`;
+}
+function fmtMB(bytes: number): string {
+  return (bytes / 1024 / 1024).toFixed(1);
+}
+function fmtSpeed(bytesPerSec: number): string {
+  if (bytesPerSec <= 0) return "—";
+  const mbps = bytesPerSec / 1024 / 1024;
+  if (mbps >= 1) return `${mbps.toFixed(1)} MB/s`;
+  const kbps = bytesPerSec / 1024;
+  return `${kbps.toFixed(0)} KB/s`;
+}
+
 // XMLHttpRequest 기반 업로드 — fetch 는 upload progress 트래킹 안 됨.
 // 큰 미디어 파일 업로드 시 사용자에게 진행률 표시하기 위함.
 type XhrResult = { ok: boolean; status: number; data: { url?: string; kind?: string; message?: string } };
@@ -380,25 +399,21 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
   const minH = minHeight || "400px";
 
   // 미디어 업로드 진행률 — null 이면 업로드 중 아님.
+  // startTime: ① 단계 시작 ms timestamp (속도/예상 계산)
+  // processingStartTime: ② 단계 (NAS 전송) 시작 ms timestamp
   const [uploadProgress, setUploadProgress] = useState<{
     name: string;
     loaded: number;
     total: number;
+    startTime: number;
+    processingStartTime: number | null;
   } | null>(null);
 
-  // 100% 도달 후 서버 처리(NAS FTP 전송) 단계의 경과 시간(초). 1초마다 증가.
-  const [processingSeconds, setProcessingSeconds] = useState(0);
+  // 매 초 시간 표시 갱신용 tick (실제 byte 진척과는 별개)
+  const [tickNow, setTickNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!uploadProgress) {
-      setProcessingSeconds(0);
-      return;
-    }
-    if (uploadProgress.loaded < uploadProgress.total || uploadProgress.total === 0) {
-      setProcessingSeconds(0);
-      return;
-    }
-    // 100% 도달 → 카운터 시작
-    const id = setInterval(() => setProcessingSeconds((s) => s + 1), 1000);
+    if (!uploadProgress) return;
+    const id = setInterval(() => setTickNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [uploadProgress]);
 
@@ -544,7 +559,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       const isVideo = file.type.startsWith("video/");
       const isAudio = file.type.startsWith("audio/");
       if (!isVideo && !isAudio) return false;
-      setUploadProgress({ name: file.name, loaded: 0, total: file.size });
+      setUploadProgress({ name: file.name, loaded: 0, total: file.size, startTime: Date.now(), processingStartTime: null });
       try {
         const fd = new FormData();
         fd.append("file", file);
@@ -554,7 +569,20 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         const { ok, status, data } = await xhrUpload(
           "/api/board/media-upload",
           fd,
-          (loaded, total) => setUploadProgress({ name: file.name, loaded, total })
+          (loaded, total) =>
+            setUploadProgress((prev) => {
+              if (!prev) {
+                return { name: file.name, loaded, total, startTime: Date.now(), processingStartTime: null };
+              }
+              const justFinished =
+                loaded >= total && total > 0 && prev.loaded < prev.total && prev.processingStartTime === null;
+              return {
+                ...prev,
+                loaded,
+                total,
+                processingStartTime: justFinished ? Date.now() : prev.processingStartTime,
+              };
+            })
         );
         if (!ok) {
           alert(`미디어 업로드 실패: ${data.message || status}`);
@@ -641,7 +669,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       const isVideo = file.type.startsWith("video/");
       const isAudio = file.type.startsWith("audio/");
       if (!isVideo && !isAudio) return null;
-      setUploadProgress({ name: file.name, loaded: 0, total: file.size });
+      setUploadProgress({ name: file.name, loaded: 0, total: file.size, startTime: Date.now(), processingStartTime: null });
       try {
         const fd = new FormData();
         fd.append("file", file);
@@ -649,7 +677,20 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         const { ok, status, data } = await xhrUpload(
           "/api/board/media-upload",
           fd,
-          (loaded, total) => setUploadProgress({ name: file.name, loaded, total })
+          (loaded, total) =>
+            setUploadProgress((prev) => {
+              if (!prev) {
+                return { name: file.name, loaded, total, startTime: Date.now(), processingStartTime: null };
+              }
+              const justFinished =
+                loaded >= total && total > 0 && prev.loaded < prev.total && prev.processingStartTime === null;
+              return {
+                ...prev,
+                loaded,
+                total,
+                processingStartTime: justFinished ? Date.now() : prev.processingStartTime,
+              };
+            })
         );
         if (!ok) {
           alert(`미디어 업로드 실패: ${data.message || status}`);
@@ -868,67 +909,98 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         }}
       />
       {/* 미디어 업로드 진행률 — 화면 정중앙 모달
-         두 단계 표시:
-         1) 사용자 → 서버 업로드 (loaded/total 로 정확한 %)
-         2) 서버 → NAS FTP 전송 (서버 응답 대기, indeterminate 애니메이션 + 경과시간) */}
-      {uploadProgress && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl bg-white border border-gray-300 rounded-xl shadow-2xl p-6">
-            <div className="text-base font-semibold text-gray-800 mb-4 break-all">
-              📤 {uploadProgress.name}
-            </div>
+         ① 사용자 → 서버 (정확한 byte %, 속도 기반 남은시간)
+         ② 서버 → NAS (indeterminate, ① 측정 속도로 예상시간 추정) */}
+      {uploadProgress && (() => {
+        const isPhase2 = uploadProgress.processingStartTime !== null;
+        // ① 경과 ms — phase2 진입 후엔 phase2 시작시점에서 멈춤
+        const elapsed1Ms =
+          (uploadProgress.processingStartTime ?? tickNow) - uploadProgress.startTime;
+        // ① 평균 속도 (bytes/sec)
+        const speed = elapsed1Ms > 0 ? uploadProgress.loaded / (elapsed1Ms / 1000) : 0;
+        const pct = uploadProgress.total > 0
+          ? Math.min(100, (uploadProgress.loaded / uploadProgress.total) * 100)
+          : 0;
+        const remaining1Ms = speed > 0
+          ? Math.max(0, ((uploadProgress.total - uploadProgress.loaded) / speed) * 1000)
+          : 0;
 
-            {/* 1단계: 업로드 (정확한 %) */}
-            <div className="mb-3">
-              <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
-                <span>① 서버로 업로드</span>
-                <span className="tabular-nums">
-                  {(uploadProgress.loaded / 1024 / 1024).toFixed(1)} MB /{" "}
-                  {(uploadProgress.total / 1024 / 1024).toFixed(1)} MB
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500 transition-[width] duration-200"
-                    style={{
-                      width: `${
-                        uploadProgress.total > 0
-                          ? Math.min(100, (uploadProgress.loaded / uploadProgress.total) * 100)
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </div>
-                <span className="text-xl font-bold text-blue-600 tabular-nums w-14 text-right">
-                  {uploadProgress.total > 0
-                    ? Math.floor((uploadProgress.loaded / uploadProgress.total) * 100)
-                    : 0}
-                  %
-                </span>
-              </div>
-            </div>
+        // ② 경과/예상
+        const elapsed2Ms = isPhase2 ? tickNow - uploadProgress.processingStartTime! : 0;
+        // 예상: ① 의 속도로 동일 byte 가는 데 걸릴 시간 (NAS 회선이 비슷하다 가정)
+        const expected2Ms = speed > 0 && isPhase2 ? (uploadProgress.total / speed) * 1000 : 0;
 
-            {/* 2단계: 서버 처리 (NAS FTP 전송) — 100% 도달 후 표시 */}
-            {uploadProgress.loaded >= uploadProgress.total && uploadProgress.total > 0 && (
-              <div>
-                <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
-                  <span>② 미디어 서버 전송 중</span>
-                  <span className="tabular-nums">{processingSeconds}초 경과</span>
-                </div>
-                <div className="h-3 bg-gray-200 rounded-full overflow-hidden relative">
-                  {/* indeterminate 애니메이션 — 좌→우 반복 */}
-                  <div className="absolute top-0 h-full w-1/3 bg-indigo-500 rounded-full animate-[dc-indeterminate_1.4s_ease-in-out_infinite]" />
-                </div>
-                <p className="mt-2 text-[11px] text-gray-500">
-                  파일을 미디어 서버(NAS) 로 전송하고 있습니다. 큰 파일일수록 오래 걸립니다.
-                  완료될 때까지 창을 닫지 마세요.
-                </p>
+        const totalElapsedMs = isPhase2
+          ? (uploadProgress.processingStartTime! - uploadProgress.startTime) + elapsed2Ms
+          : elapsed1Ms;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="w-full max-w-2xl bg-white border border-gray-300 rounded-xl shadow-2xl p-6">
+              <div className="text-base font-semibold text-gray-800 mb-1 break-all">
+                📤 {uploadProgress.name}
               </div>
-            )}
+              <div className="text-xs text-gray-500 mb-4 tabular-nums">
+                전체 경과: {fmtDuration(totalElapsedMs)} · 속도 {fmtSpeed(speed)}
+              </div>
+
+              {/* ① 단계 */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between text-xs text-gray-600 mb-1.5">
+                  <span className={isPhase2 ? "text-gray-400" : "font-semibold text-blue-700"}>
+                    ① 서버로 업로드 {isPhase2 && "✓"}
+                  </span>
+                  <span className="tabular-nums">
+                    {fmtMB(uploadProgress.loaded)} / {fmtMB(uploadProgress.total)} MB
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-[width] duration-200 ${isPhase2 ? "bg-gray-400" : "bg-blue-500"}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className={`text-xl font-bold tabular-nums w-14 text-right ${isPhase2 ? "text-gray-400" : "text-blue-600"}`}>
+                    {Math.floor(pct)}%
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mt-1 text-[11px] text-gray-500 tabular-nums">
+                  <span>경과 {fmtDuration(elapsed1Ms)}</span>
+                  {!isPhase2 && remaining1Ms > 0 && pct < 100 && (
+                    <span>남은 시간 ~{fmtDuration(remaining1Ms)}</span>
+                  )}
+                  {isPhase2 && <span className="text-green-600">완료</span>}
+                </div>
+              </div>
+
+              {/* ② 단계 */}
+              {isPhase2 && (
+                <div>
+                  <div className="flex items-center justify-between text-xs text-gray-600 mb-1.5">
+                    <span className="font-semibold text-indigo-700">② 미디어 서버 전송 중</span>
+                  </div>
+                  <div className="h-3 bg-gray-200 rounded-full overflow-hidden relative">
+                    <div className="absolute top-0 h-full w-1/3 bg-indigo-500 rounded-full animate-[dc-indeterminate_1.4s_ease-in-out_infinite]" />
+                  </div>
+                  <div className="flex items-center justify-between mt-1 text-[11px] text-gray-500 tabular-nums">
+                    <span>경과 {fmtDuration(elapsed2Ms)}</span>
+                    {expected2Ms > 0 && (
+                      <span>
+                        예상 ~{fmtDuration(expected2Ms)}
+                        <span className="ml-1 text-gray-400">(서버 회선 기준 추정)</span>
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-[11px] text-gray-500">
+                    파일을 미디어 서버(NAS) 로 전송 중입니다. 완료될 때까지 창을 닫지 마세요.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       {/* ── 툴바 ── */}
       <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 bg-gray-50 border-b border-gray-300 rounded-t-lg">
         {/* 실행취소/재실행 */}
