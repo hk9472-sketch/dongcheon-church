@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { mkdir, unlink } from "fs/promises";
+import { mkdir, unlink, stat } from "fs/promises";
 import { createWriteStream } from "fs";
 import path from "path";
+import os from "os";
 import { randomBytes } from "crypto";
 import { spawn, execFile, type ChildProcess } from "child_process";
 import { Readable } from "stream";
@@ -296,79 +297,106 @@ export async function POST(request: NextRequest) {
       const expectedSize = parseInt(fields.expectedSize || "0", 10) || 0;
       const ftp = await getFtpConfig(mode);
       if (ftp) {
-        // ─── FTP streaming pass-through ───
-        // 폴더 패턴:
-        //   realtime (다시보기, 예배자료) → {root}/{YYYY}/{MM}/<파일>
-        //   general  (일반 참고자료)      → {root}/files/{boardSlug}/{YYYY}/{MM}/<파일>
+        // ─── A 안: 디스크 임시 저장 후 curl -T file 모드로 NAS 업로드 ───
+        // streaming pipe (busboy → curl stdin) 가 32KB 단위 byte loss 를 일으키는
+        // 문제 확인됨. file 모드는 STOR 시 정확한 size 전달 + curl 의 file 처리가
+        // byte 무결성 보장.
         const remoteRel =
           mode === "realtime"
             ? `${yyyy}/${mm}/${storedName}`
             : `files/${boardSlug}/${yyyy}/${mm}/${storedName}`;
         const remoteUrl = `ftp://${ftp.host}:${ftp.port}${ftp.remoteRoot}/${remoteRel}`;
-        const child: ChildProcess = spawn("curl", [
-          "-T", "-",
-          remoteUrl,
-          "--user", `${ftp.user}:${ftp.password}`,
-          "--ftp-create-dirs",
-          "--connect-timeout", "30",
-          "--max-time", "1800",
-          "-s", "-S",
-        ]);
-        let stderr = "";
-        let succeeded = false;
-        child.stderr?.on("data", (c) => { stderr += c.toString(); });
-        child.on("error", (err) => {
-          // spawn 자체 실패 — NAS 에 아무것도 못 갔을 가능성. 정리 시도.
-          cleanupRemoteBestEffort(remoteRel, ftp);
-          respond(NextResponse.json({ message: `FTP 업로드 오류: ${err.message}` }, { status: 500 }));
+        const tmpPath = path.join(os.tmpdir(), `mup_${rand}${ext}`);
+
+        // 1단계: busboy fileStream → 디스크 임시 파일
+        const writeStream = createWriteStream(tmpPath);
+        let writeFailed = false;
+        writeStream.on("error", (err) => {
+          writeFailed = true;
+          unlink(tmpPath).catch(() => {});
+          respond(NextResponse.json({ message: `임시 저장 실패: ${err.message}` }, { status: 500 }));
         });
-        child.on("close", (code) => {
-          if (code !== 0) {
-            cleanupRemoteBestEffort(remoteRel, ftp);
-            respond(
-              NextResponse.json(
-                { message: `FTP 업로드 실패: ${stderr || `curl exit ${code}`}` },
-                { status: 500 }
-              )
-            );
+        fileStream.on("error", (err) => {
+          writeFailed = true;
+          writeStream.destroy();
+          unlink(tmpPath).catch(() => {});
+          respond(NextResponse.json({ message: err.message }, { status: 500 }));
+        });
+        writeStream.on("finish", async () => {
+          if (writeFailed) return;
+
+          // ─── byte 검증 1: client → server (디스크 size 와 expectedSize) ───
+          let tmpSize = 0;
+          try {
+            tmpSize = (await stat(tmpPath)).size;
+          } catch {
+            unlink(tmpPath).catch(() => {});
+            respond(NextResponse.json({ message: "임시 파일 정보 조회 실패" }, { status: 500 }));
             return;
           }
-          // ─── byte 검증 1: client → server ───
-          if (expectedSize > 0 && totalReceived !== expectedSize) {
-            cleanupRemoteBestEffort(remoteRel, ftp);
+          if (expectedSize > 0 && tmpSize !== expectedSize) {
+            unlink(tmpPath).catch(() => {});
             respond(
               NextResponse.json(
                 {
-                  message: `업로드 byte 불일치 (client→server) — 보내신 ${expectedSize} bytes 중 ${totalReceived} bytes 만 도착. 통신 끊김 가능성.`,
+                  message: `업로드 byte 불일치 (client→server) — 보내신 ${expectedSize} bytes 중 ${tmpSize} bytes 만 도착. 통신 끊김.`,
                 },
                 { status: 500 }
               )
             );
             return;
           }
-          // ─── byte 검증 2: server → NAS (curl 종료 후 NAS 측 파일 크기) ───
-          // server 수신 byte 와 NAS 저장 byte 비교 — 일치 안 하면 NAS 측 손상.
-          getRemoteFileSize(remoteRel, ftp).then((remoteSize) => {
-            if (remoteSize > 0 && remoteSize !== totalReceived) {
+
+          // 2단계: curl -T tmpPath 로 NAS 업로드 (파일 모드)
+          const child: ChildProcess = spawn("curl", [
+            "-T", tmpPath,
+            remoteUrl,
+            "--user", `${ftp.user}:${ftp.password}`,
+            "--ftp-create-dirs",
+            "--connect-timeout", "30",
+            "--max-time", "1800",
+            "-s", "-S",
+          ]);
+          let stderr = "";
+          child.stderr?.on("data", (c) => { stderr += c.toString(); });
+          child.on("error", (err) => {
+            unlink(tmpPath).catch(() => {});
+            cleanupRemoteBestEffort(remoteRel, ftp);
+            respond(NextResponse.json({ message: `FTP 업로드 오류: ${err.message}` }, { status: 500 }));
+          });
+          child.on("close", async (code) => {
+            // 임시 파일은 항상 정리
+            unlink(tmpPath).catch(() => {});
+            if (code !== 0) {
+              cleanupRemoteBestEffort(remoteRel, ftp);
+              respond(
+                NextResponse.json(
+                  { message: `FTP 업로드 실패: ${stderr || `curl exit ${code}`}` },
+                  { status: 500 }
+                )
+              );
+              return;
+            }
+            // ─── byte 검증 2: server → NAS (NAS 측 SIZE) ───
+            const remoteSize = await getRemoteFileSize(remoteRel, ftp);
+            if (remoteSize > 0 && remoteSize !== tmpSize) {
               cleanupRemoteBestEffort(remoteRel, ftp);
               respond(
                 NextResponse.json(
                   {
-                    message: `업로드 byte 불일치 (server→NAS) — 서버는 ${totalReceived} bytes 받았는데 NAS 에 ${remoteSize} bytes 저장됨. 다시 시도해 주세요.`,
+                    message: `업로드 byte 불일치 (server→NAS) — 서버 ${tmpSize} bytes / NAS ${remoteSize} bytes. 다시 시도해 주세요.`,
                   },
                   { status: 500 }
                 )
               );
               return;
             }
-            // remoteSize === -1 (SIZE 명령 실패) 인 경우는 검증 통과로 처리 (Best-effort).
-            succeeded = true;
             const publicUrl = `${ftp.publicBase}${remoteRel}`;
             respond(
               NextResponse.json({
                 url: publicUrl,
                 kind: isVideo ? "video" : "audio",
-                size: totalReceived,
+                size: tmpSize,
                 remoteSize,
                 name: storedName,
                 remote: true,
@@ -376,21 +404,7 @@ export async function POST(request: NextRequest) {
             );
           });
         });
-        fileStream.on("error", (err) => {
-          child.kill("SIGTERM");
-          if (!succeeded) cleanupRemoteBestEffort(remoteRel, ftp);
-          respond(NextResponse.json({ message: err.message }, { status: 500 }));
-        });
-        // 클라이언트 끊김 → request body close → busboy 가 file stream 종료를
-        // 정상 'end' 처럼 emit. 이 경우 byte 가 모자라면 서버는 부분 파일 알 수 없음.
-        // 보호: file stream 종료 시점에 totalReceived 가 Content-Length 와 다른지 추후
-        // 검증 가능. 지금은 정상 'close' 후 totalReceived 검증 생략 (curl exit 0 이면
-        // NAS 에 partial 이라도 그대로 정상 응답으로 마무리됨).
-        if (child.stdin) {
-          fileStream.pipe(child.stdin);
-        } else {
-          respond(NextResponse.json({ message: "curl stdin 사용 불가" }, { status: 500 }));
-        }
+        fileStream.pipe(writeStream);
       } else {
         // ─── 로컬 저장 streaming ───
         const subPath =
