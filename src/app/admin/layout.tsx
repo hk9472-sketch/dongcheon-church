@@ -9,6 +9,7 @@ const ADMIN_MENU: { label: string; href: string; icon: string; external?: boolea
   { label: "대시보드", href: "/admin", icon: "📊" },
   { label: "게시판 관리", href: "/admin/boards", icon: "📋" },
   { label: "게시판 생성", href: "/admin/boards/create", icon: "➕" },
+  { label: "게시글 이동", href: "/admin/posts/move", icon: "🔀" },
   { label: "스킨 관리", href: "/admin/skins", icon: "🎨" },
   { label: "사이트 설정", href: "/admin/settings", icon: "🖌️" },
   { label: "회원 관리", href: "/admin/members", icon: "👥" },
