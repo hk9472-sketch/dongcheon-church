@@ -269,6 +269,7 @@ export async function POST(request: NextRequest) {
         );
       });
 
+      const expectedSize = parseInt(fields.expectedSize || "0", 10) || 0;
       const ftp = await getFtpConfig(mode);
       if (ftp) {
         // ─── FTP streaming pass-through ───
@@ -298,20 +299,7 @@ export async function POST(request: NextRequest) {
           respond(NextResponse.json({ message: `FTP 업로드 오류: ${err.message}` }, { status: 500 }));
         });
         child.on("close", (code) => {
-          if (code === 0) {
-            succeeded = true;
-            const publicUrl = `${ftp.publicBase}${remoteRel}`;
-            respond(
-              NextResponse.json({
-                url: publicUrl,
-                kind: isVideo ? "video" : "audio",
-                size: totalReceived,
-                name: storedName,
-                remote: true,
-              })
-            );
-          } else {
-            // 부분 파일 NAS 에 남았을 수 있음 — 삭제 시도.
+          if (code !== 0) {
             cleanupRemoteBestEffort(remoteRel, ftp);
             respond(
               NextResponse.json(
@@ -319,7 +307,33 @@ export async function POST(request: NextRequest) {
                 { status: 500 }
               )
             );
+            return;
           }
+          // ─── byte 검증: 사용자가 보낸 expectedSize 와 서버 수신 byte 일치 확인 ───
+          // 일치 안 하면 partial upload (도중 끊김) — NAS 부분 파일 삭제 + 에러.
+          if (expectedSize > 0 && totalReceived !== expectedSize) {
+            cleanupRemoteBestEffort(remoteRel, ftp);
+            respond(
+              NextResponse.json(
+                {
+                  message: `업로드 byte 불일치 — 보내신 ${expectedSize} bytes 중 ${totalReceived} bytes 만 도착했습니다. 통신 끊김 가능성. 다시 시도해 주세요.`,
+                },
+                { status: 500 }
+              )
+            );
+            return;
+          }
+          succeeded = true;
+          const publicUrl = `${ftp.publicBase}${remoteRel}`;
+          respond(
+            NextResponse.json({
+              url: publicUrl,
+              kind: isVideo ? "video" : "audio",
+              size: totalReceived,
+              name: storedName,
+              remote: true,
+            })
+          );
         });
         fileStream.on("error", (err) => {
           child.kill("SIGTERM");

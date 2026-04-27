@@ -566,9 +566,11 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       try {
         // 서버 (busboy) 가 fields 먼저 받고 file 이벤트 시점에 검증·인증 후 stream pipe.
         // 그래서 fields 를 file 보다 먼저 append.
+        // expectedSize: 서버가 받은 byte 와 비교해 partial upload 검출용.
         const fd = new FormData();
         fd.append("boardSlug", boardSlug);
         fd.append("mode", mode);
+        fd.append("expectedSize", String(file.size));
         if (dateBase) fd.append("dateBase", dateBase);
         fd.append("file", file);
         const { ok, status, data } = await xhrUpload(
