@@ -895,8 +895,9 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         open={mediaUrlOpen}
         onClose={() => setMediaUrlOpen(false)}
         onSubmit={handleMediaUrlSubmit}
-        onUpload={async (file, dateBase) => {
-          await uploadAndInsertMedia(file, "realtime", dateBase);
+        onUpload={async (file, dateBase, kind) => {
+          // kind: "realtime"(다시보기) / "general"(일반 참고자료) — 모달의 라디오로 선택
+          await uploadAndInsertMedia(file, kind, dateBase);
         }}
       />
       {/* 미디어 업로드 진행률 — 화면 정중앙 모달
