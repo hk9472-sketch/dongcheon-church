@@ -1259,19 +1259,8 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
           hidden
           onChange={handleImageInputChange}
         />
-        <TBtn onClick={addMediaFile} title="일반 미디어 업로드 — 원격 루트/{boardSlug}/{YYYYMMDD}/">
-          🎬
-        </TBtn>
-        <input
-          ref={mediaInputRef}
-          type="file"
-          accept="video/*,audio/*"
-          multiple
-          hidden
-          onChange={handleMediaInputChange}
-        />
-        <TBtn onClick={addMediaUrl} title="실시간 미디어 삽입 — 파일 업로드 또는 URL 입력 (한 다이얼로그에서 통합)">
-          🎙️
+        <TBtn onClick={addMediaUrl} title="동영상·음성 첨부 — 파일 업로드 또는 URL 입력 (모달에서 다시보기/일반 선택)">
+          📎
         </TBtn>
         <TBtn onClick={addMediaRow} title="이미지·미디어 여러 개 나란히 — 다중 선택 후 한 줄에 자동 배치">
           🔳
