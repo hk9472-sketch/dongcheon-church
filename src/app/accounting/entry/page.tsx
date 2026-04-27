@@ -141,20 +141,7 @@ export default function VoucherEntryPage() {
       .catch(() => setAccounts([]));
   }, [unitId]);
 
-  /* ---- fetch next voucher no ---- */
-  const fetchNextNo = useCallback(() => {
-    if (!unitId || !date) return;
-    fetch(`/api/accounting/vouchers/next-no?unitId=${unitId}&date=${date}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.voucherNo) setVoucherNo(d.voucherNo);
-      })
-      .catch(() => {});
-  }, [unitId, date]);
-
-  useEffect(() => {
-    if (!editingId) fetchNextNo();
-  }, [fetchNextNo, editingId]);
+  /* ---- 전표번호는 서버 저장 시점에 발급 — 사전 조회 없음 (동시 입력 충돌 방지) ---- */
 
   /* ---- fetch today's vouchers ---- */
   const fetchTodayVouchers = useCallback(() => {
@@ -280,9 +267,9 @@ export default function VoucherEntryPage() {
   function resetForm() {
     setEditingId(null);
     setHeaderDesc("");
+    setVoucherNo("");
     setItems([emptyItem()]);
     setMessage(null);
-    fetchNextNo();
   }
 
   /* ---- populate form for editing ---- */
@@ -355,12 +342,17 @@ export default function VoucherEntryPage() {
         throw new Error(err.error || "저장에 실패했습니다.");
       }
 
-      setMessage({
-        type: "ok",
-        text: editingId ? "전표가 수정되었습니다." : "전표가 저장되었습니다.",
-      });
+      const saved = await res.json().catch(() => ({}));
+      const issuedNo = saved?.voucherNo ? ` (전표번호 ${saved.voucherNo})` : "";
+      const wasEditing = editingId;
       resetForm();
       fetchTodayVouchers();
+      setMessage({
+        type: "ok",
+        text: wasEditing
+          ? `전표가 수정되었습니다.${issuedNo}`
+          : `전표가 저장되었습니다.${issuedNo}`,
+      });
     } catch (e: unknown) {
       setMessage({ type: "err", text: e instanceof Error ? e.message : "오류가 발생했습니다." });
     } finally {
@@ -598,43 +590,9 @@ export default function VoucherEntryPage() {
           </div>
         )}
 
-        {/* header fields */}
+        {/* header fields — 입력 순서: 전표일자 → 회계단위 → 전표적요 → 전표번호 */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* 회계단위 */}
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              회계단위
-            </label>
-            <select
-              value={unitId ?? ""}
-              onChange={(e) => {
-                setUnitId(Number(e.target.value));
-                if (!editingId) resetForm();
-              }}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-            >
-              {units.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 전표번호 */}
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              전표번호
-            </label>
-            <input
-              type="text"
-              readOnly
-              value={voucherNo}
-              className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-500"
-            />
-          </div>
-
-          {/* 거래일자 */}
+          {/* 전표일자 */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
               전표일자
@@ -645,6 +603,27 @@ export default function VoucherEntryPage() {
               onChange={(e) => setDate(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
             />
+          </div>
+
+          {/* 회계단위 */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              회계단위
+            </label>
+            <select
+              value={unitId ?? ""}
+              onChange={(e) => {
+                setUnitId(Number(e.target.value));
+                resetForm();
+              }}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+            >
+              {units.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* 전표적요 */}
@@ -658,6 +637,20 @@ export default function VoucherEntryPage() {
               onChange={(e) => setHeaderDesc(e.target.value)}
               placeholder="전표 전체에 대한 적요"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+            />
+          </div>
+
+          {/* 전표번호 (저장 시 자동 발급) */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              전표번호
+            </label>
+            <input
+              type="text"
+              readOnly
+              value={voucherNo}
+              placeholder={editingId ? "" : "저장 시 자동 발급"}
+              className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-500"
             />
           </div>
         </div>
