@@ -16,8 +16,6 @@ function cleanupRemoteBestEffort(
   cfg: { host: string; port: string; user: string; password: string; remoteRoot: string }
 ): void {
   const remoteUrl = `ftp://${cfg.host}:${cfg.port}${cfg.remoteRoot}/${remoteRel}`;
-  // FTP DELE 는 curl 에서 -Q "DELE filename" + 디렉터리 URL 형태가 표준.
-  // 단순화 위해 curl --request "DELE filename" url 로 처리.
   const dirUrl = remoteUrl.substring(0, remoteUrl.lastIndexOf("/") + 1);
   const fileName = remoteUrl.substring(remoteUrl.lastIndexOf("/") + 1);
   execFile(
@@ -32,6 +30,32 @@ function cleanupRemoteBestEffort(
     ],
     () => { /* 결과 무시 */ }
   );
+}
+
+// FTP SIZE 명령으로 NAS 의 파일 크기 조회. 실패 시 -1.
+function getRemoteFileSize(
+  remoteRel: string,
+  cfg: { host: string; port: string; user: string; password: string; remoteRoot: string }
+): Promise<number> {
+  const remoteUrl = `ftp://${cfg.host}:${cfg.port}${cfg.remoteRoot}/${remoteRel}`;
+  return new Promise((resolve) => {
+    execFile(
+      "curl",
+      [
+        "-sI",
+        "--user", `${cfg.user}:${cfg.password}`,
+        "--connect-timeout", "10",
+        "--max-time", "30",
+        remoteUrl,
+      ],
+      { encoding: "utf8" },
+      (_err, stdout) => {
+        const m = (stdout || "").match(/Content-Length:\s*(\d+)/i);
+        if (m) resolve(parseInt(m[1], 10));
+        else resolve(-1);
+      }
+    );
+  });
 }
 
 // ────────────────────────────────────────────────────────────
@@ -309,31 +333,48 @@ export async function POST(request: NextRequest) {
             );
             return;
           }
-          // ─── byte 검증: 사용자가 보낸 expectedSize 와 서버 수신 byte 일치 확인 ───
-          // 일치 안 하면 partial upload (도중 끊김) — NAS 부분 파일 삭제 + 에러.
+          // ─── byte 검증 1: client → server ───
           if (expectedSize > 0 && totalReceived !== expectedSize) {
             cleanupRemoteBestEffort(remoteRel, ftp);
             respond(
               NextResponse.json(
                 {
-                  message: `업로드 byte 불일치 — 보내신 ${expectedSize} bytes 중 ${totalReceived} bytes 만 도착했습니다. 통신 끊김 가능성. 다시 시도해 주세요.`,
+                  message: `업로드 byte 불일치 (client→server) — 보내신 ${expectedSize} bytes 중 ${totalReceived} bytes 만 도착. 통신 끊김 가능성.`,
                 },
                 { status: 500 }
               )
             );
             return;
           }
-          succeeded = true;
-          const publicUrl = `${ftp.publicBase}${remoteRel}`;
-          respond(
-            NextResponse.json({
-              url: publicUrl,
-              kind: isVideo ? "video" : "audio",
-              size: totalReceived,
-              name: storedName,
-              remote: true,
-            })
-          );
+          // ─── byte 검증 2: server → NAS (curl 종료 후 NAS 측 파일 크기) ───
+          // server 수신 byte 와 NAS 저장 byte 비교 — 일치 안 하면 NAS 측 손상.
+          getRemoteFileSize(remoteRel, ftp).then((remoteSize) => {
+            if (remoteSize > 0 && remoteSize !== totalReceived) {
+              cleanupRemoteBestEffort(remoteRel, ftp);
+              respond(
+                NextResponse.json(
+                  {
+                    message: `업로드 byte 불일치 (server→NAS) — 서버는 ${totalReceived} bytes 받았는데 NAS 에 ${remoteSize} bytes 저장됨. 다시 시도해 주세요.`,
+                  },
+                  { status: 500 }
+                )
+              );
+              return;
+            }
+            // remoteSize === -1 (SIZE 명령 실패) 인 경우는 검증 통과로 처리 (Best-effort).
+            succeeded = true;
+            const publicUrl = `${ftp.publicBase}${remoteRel}`;
+            respond(
+              NextResponse.json({
+                url: publicUrl,
+                kind: isVideo ? "video" : "audio",
+                size: totalReceived,
+                remoteSize,
+                name: storedName,
+                remote: true,
+              })
+            );
+          });
         });
         fileStream.on("error", (err) => {
           child.kill("SIGTERM");
