@@ -115,7 +115,6 @@ function xhrUpload(
       try {
         data = JSON.parse(xhr.responseText);
       } catch {
-        // JSON 아닌 응답 (nginx 413 등) — message 에 일부 노출
         data = { message: xhr.responseText.slice(0, 200) || `HTTP ${xhr.status}` };
       }
       resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data });
@@ -124,6 +123,87 @@ function xhrUpload(
     xhr.onabort = () => reject(new Error("업로드 취소됨"));
     xhr.send(formData);
   });
+}
+
+// 청크 업로드 — 큰 미디어 파일을 5MB 단위로 분할 + chunk 별 retry.
+// init → chunk*N → finalize. byte loss 또는 통신 끊김 시 chunk 만 자동 재시도 (3회).
+type ChunkedResult =
+  | { ok: true; url: string; kind: "video" | "audio" }
+  | { ok: false; message: string };
+
+async function chunkedMediaUpload(
+  file: File,
+  opts: { mode: "general" | "realtime"; dateBase?: string; boardSlug: string },
+  onProgress: (loaded: number, total: number, phase: "upload" | "processing") => void
+): Promise<ChunkedResult> {
+  const isVideo = file.type.startsWith("video/");
+  const isAudio = file.type.startsWith("audio/");
+  if (!isVideo && !isAudio) return { ok: false, message: "동영상·음성 파일만 가능" };
+
+  const initRes = await fetch("/api/board/media-upload/init", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fileName: file.name,
+      expectedSize: file.size,
+      boardSlug: opts.boardSlug,
+      mode: opts.mode,
+      dateBase: opts.dateBase || "",
+    }),
+  });
+  if (!initRes.ok) {
+    const d = await initRes.json().catch(() => ({}));
+    return { ok: false, message: d.message || `업로드 시작 실패 (${initRes.status})` };
+  }
+  const { uploadId, chunkSize } = (await initRes.json()) as {
+    uploadId: string;
+    chunkSize: number;
+  };
+
+  const total = Math.ceil(file.size / chunkSize);
+  for (let i = 0; i < total; i++) {
+    const start = i * chunkSize;
+    const end = Math.min(start + chunkSize, file.size);
+    const blob = file.slice(start, end);
+
+    let success = false;
+    let lastError = "";
+    for (let attempt = 0; attempt < 3 && !success; attempt++) {
+      try {
+        const fd = new FormData();
+        fd.append("uploadId", uploadId);
+        fd.append("chunkIndex", String(i));
+        fd.append("file", blob, file.name);
+        const res = await fetch("/api/board/media-upload/chunk", { method: "POST", body: fd });
+        if (res.ok) {
+          const data = (await res.json()) as { received: number; expected: number };
+          onProgress(data.received, data.expected, "upload");
+          success = true;
+          break;
+        }
+        const data = await res.json().catch(() => ({}));
+        lastError = data.message || `chunk 실패 (${res.status})`;
+        if (res.status >= 400 && res.status < 500) break;
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : String(e);
+      }
+      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+    }
+    if (!success) return { ok: false, message: `chunk ${i + 1}/${total} 실패: ${lastError}` };
+  }
+
+  onProgress(file.size, file.size, "processing");
+  const finalRes = await fetch("/api/board/media-upload/finalize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ uploadId }),
+  });
+  if (!finalRes.ok) {
+    const d = await finalRes.json().catch(() => ({}));
+    return { ok: false, message: d.message || `완료 실패 (${finalRes.status})` };
+  }
+  const data = (await finalRes.json()) as { url: string };
+  return { ok: true, url: data.url, kind: isVideo ? "video" : "audio" };
 }
 
 // ─── 색상 팔레트 ───
@@ -564,35 +644,33 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       if (!isVideo && !isAudio) return false;
       setUploadProgress({ name: file.name, loaded: 0, total: file.size, startTime: Date.now(), processingStartTime: null });
       try {
-        // 서버 (busboy) 가 fields 먼저 받고 file 이벤트 시점에 검증·인증 후 stream pipe.
-        // 그래서 fields 를 file 보다 먼저 append.
-        // expectedSize: 서버가 받은 byte 와 비교해 partial upload 검출용.
-        const fd = new FormData();
-        fd.append("boardSlug", boardSlug);
-        fd.append("mode", mode);
-        fd.append("expectedSize", String(file.size));
-        if (dateBase) fd.append("dateBase", dateBase);
-        fd.append("file", file);
-        const { ok, status, data } = await xhrUpload(
-          "/api/board/media-upload",
-          fd,
-          (loaded, total) =>
+        const result = await chunkedMediaUpload(
+          file,
+          { mode, dateBase, boardSlug },
+          (loaded, total, phase) =>
             setUploadProgress((prev) => {
               if (!prev) {
-                return { name: file.name, loaded, total, startTime: Date.now(), processingStartTime: null };
+                return {
+                  name: file.name,
+                  loaded,
+                  total,
+                  startTime: Date.now(),
+                  processingStartTime: phase === "processing" ? Date.now() : null,
+                };
               }
-              const justFinished =
-                loaded >= total && total > 0 && prev.loaded < prev.total && prev.processingStartTime === null;
               return {
                 ...prev,
                 loaded,
                 total,
-                processingStartTime: justFinished ? Date.now() : prev.processingStartTime,
+                processingStartTime:
+                  phase === "processing" && prev.processingStartTime === null
+                    ? Date.now()
+                    : prev.processingStartTime,
               };
             })
         );
-        if (!ok) {
-          alert(`미디어 업로드 실패: ${data.message || status}`);
+        if (!result.ok) {
+          alert(`미디어 업로드 실패: ${result.message}`);
           return false;
         }
         editor
@@ -601,10 +679,10 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
           .insertContent({
             type: "media",
             attrs: {
-              src: data.url,
-              kind: isVideo ? "video" : "audio",
+              src: result.url,
+              kind: result.kind,
               title: file.name,
-              width: isVideo ? "60%" : "400px",
+              width: result.kind === "video" ? "60%" : "400px",
               align: "left",
             },
           })
@@ -673,34 +751,36 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       if (!isVideo && !isAudio) return null;
       setUploadProgress({ name: file.name, loaded: 0, total: file.size, startTime: Date.now(), processingStartTime: null });
       try {
-        // fields 먼저, file 마지막 (busboy 가 fields 모이면 file 처리 시작)
-        const fd = new FormData();
-        fd.append("boardSlug", boardSlug);
-        fd.append("expectedSize", String(file.size));
-        fd.append("file", file);
-        const { ok, status, data } = await xhrUpload(
-          "/api/board/media-upload",
-          fd,
-          (loaded, total) =>
+        const result = await chunkedMediaUpload(
+          file,
+          { mode: "general", boardSlug },
+          (loaded, total, phase) =>
             setUploadProgress((prev) => {
               if (!prev) {
-                return { name: file.name, loaded, total, startTime: Date.now(), processingStartTime: null };
+                return {
+                  name: file.name,
+                  loaded,
+                  total,
+                  startTime: Date.now(),
+                  processingStartTime: phase === "processing" ? Date.now() : null,
+                };
               }
-              const justFinished =
-                loaded >= total && total > 0 && prev.loaded < prev.total && prev.processingStartTime === null;
               return {
                 ...prev,
                 loaded,
                 total,
-                processingStartTime: justFinished ? Date.now() : prev.processingStartTime,
+                processingStartTime:
+                  phase === "processing" && prev.processingStartTime === null
+                    ? Date.now()
+                    : prev.processingStartTime,
               };
             })
         );
-        if (!ok) {
-          alert(`미디어 업로드 실패: ${data.message || status}`);
+        if (!result.ok) {
+          alert(`미디어 업로드 실패: ${result.message}`);
           return null;
         }
-        return { url: data.url as string, kind: isVideo ? "video" : "audio" };
+        return { url: result.url, kind: result.kind };
       } catch (e) {
         alert(`미디어 업로드 실패: ${e instanceof Error ? e.message : String(e)}`);
         return null;
