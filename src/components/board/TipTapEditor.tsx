@@ -624,13 +624,8 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     imageInputRef.current?.click();
   }, []);
 
-  // 툴바 미디어 버튼 — 파일 선택창 열기 (일반 모드)
-  const mediaInputRef = useRef<HTMLInputElement>(null);
-  const addMediaFile = useCallback(() => {
-    mediaInputRef.current?.click();
-  }, []);
-
-  // (실시간 미디어 / URL 입력은 통합 모달 MediaUrlDialog 로 대체됨)
+  // (모든 미디어 업로드/URL 은 통합 모달 MediaUrlDialog 하나로 처리.
+  //  일반/다시보기는 모달 안의 "자료 종류" 라디오로 선택.)
 
   // 툴바 "여러 개 나란히" 버튼 — 이미지+미디어 다중 선택해 MediaRow 한 덩어리로 삽입.
   const rowInputRef = useRef<HTMLInputElement>(null);
@@ -745,16 +740,6 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         .run();
     },
     [editor, uploadImageOnly, uploadMediaOnly]
-  );
-  const handleMediaInputChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files || []);
-      for (const f of files) {
-        await uploadAndInsertMedia(f, "general");
-      }
-      e.target.value = "";
-    },
-    [uploadAndInsertMedia]
   );
   // 툴바 미디어 URL 버튼 — 외부 mp3/mp4 또는 YouTube 링크 삽입.
   // 미디어 URL 삽입 — React 모달(MediaUrlDialog)로 대체.

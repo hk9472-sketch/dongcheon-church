@@ -9,11 +9,16 @@ import { useEffect, useState } from "react";
 //   2) URL 입력 — 기존 base+path 또는 raw URL. 외부 YouTube/Vimeo/mp4 등.
 //      → onSubmit(url) 콜백.
 
+// kind:
+//   "realtime" — 예배자료(다시보기). NAS 의 {root}/{yyyy}/{MM}/ 에 저장.
+//   "general"  — 일반 참고자료. NAS 의 {root}/files/{boardSlug}/{yyyy}/{MM}/ 에 저장.
+type UploadKind = "realtime" | "general";
+
 interface MediaUrlDialogProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (fullUrl: string) => void;
-  onUpload?: (file: File, dateBase: string) => Promise<void>;
+  onUpload?: (file: File, dateBase: string, kind: UploadKind) => Promise<void>;
 }
 
 const LS_RECENT_KEY = "mediaUrlDialog.recent";
@@ -53,6 +58,7 @@ type Mode = "upload" | "url";
 export default function MediaUrlDialog({ open, onClose, onSubmit, onUpload }: MediaUrlDialogProps) {
   const [mode, setMode] = useState<Mode>(onUpload ? "upload" : "url");
   const [dateBase, setDateBase] = useState<string>(todayIso());
+  const [uploadKind, setUploadKind] = useState<UploadKind>("realtime");
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -78,6 +84,7 @@ export default function MediaUrlDialog({ open, onClose, onSubmit, onUpload }: Me
     } catch {}
     setMode(onUpload ? "upload" : "url");
     setDateBase(todayIso());
+    setUploadKind("realtime");
     setFile(null);
     setDragOver(false);
     setPath("");
@@ -109,7 +116,7 @@ export default function MediaUrlDialog({ open, onClose, onSubmit, onUpload }: Me
     if (!canSubmitUpload || !file || !onUpload) return;
     onClose();
     // onClose 후 진행률 모달은 부모에서 자체 표시
-    await onUpload(file, dateBase);
+    await onUpload(file, dateBase, uploadKind);
   }
 
   return (
@@ -164,19 +171,55 @@ export default function MediaUrlDialog({ open, onClose, onSubmit, onUpload }: Me
         <div className="px-5 py-4 space-y-3">
           {mode === "upload" && (
             <>
-              {/* 기준일자 */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  기준일자 (등록일자)
-                  <span className="ml-1 text-[11px] text-gray-400">— 이 날짜의 YYYY/MM 폴더로 저장됨</span>
-                </label>
-                <input
-                  type="date"
-                  value={dateBase}
-                  onChange={(e) => setDateBase(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-                />
+              {/* 기준일자 + 자료 종류 (라디오) */}
+              <div className="flex gap-3 items-end">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    기준일자 (등록일자)
+                    <span className="ml-1 text-[11px] text-gray-400">— YYYY/MM 폴더로 저장</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={dateBase}
+                    onChange={(e) => setDateBase(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">자료 종류</label>
+                  <div className="flex gap-1 border border-gray-300 rounded overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setUploadKind("realtime")}
+                      className={`px-3 py-2 text-sm transition-colors ${
+                        uploadKind === "realtime"
+                          ? "bg-blue-600 text-white font-semibold"
+                          : "bg-white text-gray-600 hover:bg-gray-50"
+                      }`}
+                      title="예배자료 — realtime/YYYY/MM 폴더"
+                    >
+                      📡 다시보기
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUploadKind("general")}
+                      className={`px-3 py-2 text-sm transition-colors ${
+                        uploadKind === "general"
+                          ? "bg-blue-600 text-white font-semibold"
+                          : "bg-white text-gray-600 hover:bg-gray-50"
+                      }`}
+                      title="참고자료 — files/{게시판}/YYYY/MM 폴더"
+                    >
+                      📁 일반
+                    </button>
+                  </div>
+                </div>
               </div>
+              <p className="text-[11px] text-gray-500 -mt-2">
+                {uploadKind === "realtime"
+                  ? "다시보기 (예배자료): NAS 의 realtime/YYYY/MM/ 에 저장"
+                  : "일반 (참고자료): NAS 의 files/{게시판}/YYYY/MM/ 에 저장"}
+              </p>
 
               {/* dropzone */}
               <label

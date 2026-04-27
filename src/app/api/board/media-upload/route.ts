@@ -272,10 +272,13 @@ export async function POST(request: NextRequest) {
       const ftp = await getFtpConfig(mode);
       if (ftp) {
         // ─── FTP streaming pass-through ───
+        // 폴더 패턴:
+        //   realtime (다시보기, 예배자료) → {root}/{YYYY}/{MM}/<파일>
+        //   general  (일반 참고자료)      → {root}/files/{boardSlug}/{YYYY}/{MM}/<파일>
         const remoteRel =
           mode === "realtime"
             ? `${yyyy}/${mm}/${storedName}`
-            : `${boardSlug}/${yyyy}/${mm}/${storedName}`;
+            : `files/${boardSlug}/${yyyy}/${mm}/${storedName}`;
         const remoteUrl = `ftp://${ftp.host}:${ftp.port}${ftp.remoteRoot}/${remoteRel}`;
         const child: ChildProcess = spawn("curl", [
           "-T", "-",
@@ -335,7 +338,10 @@ export async function POST(request: NextRequest) {
         }
       } else {
         // ─── 로컬 저장 streaming ───
-        const subPath = `${boardSlug}/inline/${yyyy}/${mm}`;
+        const subPath =
+          mode === "realtime"
+            ? `realtime/${yyyy}/${mm}`
+            : `files/${boardSlug}/${yyyy}/${mm}`;
         const dir = getUploadDir(subPath);
         await mkdir(dir, { recursive: true });
         const fullPath = path.join(dir, storedName);
