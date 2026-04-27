@@ -4,6 +4,16 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { sanitizeHtml } from "@/lib/sanitize";
+
+// 댓글 본문이 비어 있는지 검증.
+// TipTap 은 빈 입력에서도 <p></p> 를 반환해서 단순 trim 만으로는 부족.
+// 미디어 태그 (video/audio/iframe/img) 가 있으면 비어 있지 않은 것으로 처리 —
+// 사용자가 텍스트 없이 동영상만 첨부하는 케이스 지원.
+function hasComposedContent(html: string): boolean {
+  if (/<(video|audio|iframe|img)\b/i.test(html)) return true;
+  const stripped = html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+  return stripped.length > 0;
+}
 import CaptchaField from "@/components/CaptchaField";
 
 const TipTapEditor = dynamic(() => import("@/components/board/TipTapEditor"), {
@@ -283,8 +293,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
       alert("비밀번호를 입력하세요.");
       return;
     }
-    const stripped = editContent.replace(/<[^>]*>/g, "").trim();
-    if (!stripped) {
+    if (!hasComposedContent(editContent)) {
       alert("내용을 입력하세요.");
       return;
     }
