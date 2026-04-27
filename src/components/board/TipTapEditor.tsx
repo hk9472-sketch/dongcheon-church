@@ -1260,7 +1260,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
           onChange={handleImageInputChange}
         />
         <TBtn onClick={addMediaUrl} title="동영상·음성 첨부 — 파일 업로드 또는 URL 입력 (모달에서 다시보기/일반 선택)">
-          📎
+          🎬
         </TBtn>
         <TBtn onClick={addMediaRow} title="이미지·미디어 여러 개 나란히 — 다중 선택 후 한 줄에 자동 배치">
           🔳
