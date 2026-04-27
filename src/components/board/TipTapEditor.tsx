@@ -676,6 +676,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         // fields 먼저, file 마지막 (busboy 가 fields 모이면 file 처리 시작)
         const fd = new FormData();
         fd.append("boardSlug", boardSlug);
+        fd.append("expectedSize", String(file.size));
         fd.append("file", file);
         const { ok, status, data } = await xhrUpload(
           "/api/board/media-upload",

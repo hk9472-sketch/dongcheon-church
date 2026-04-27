@@ -366,6 +366,19 @@ export async function POST(request: NextRequest) {
           respond(NextResponse.json({ message: err.message }, { status: 500 }));
         });
         writeStream.on("finish", () => {
+          // byte 검증 (로컬 저장 분기)
+          if (expectedSize > 0 && totalReceived !== expectedSize) {
+            unlink(fullPath).catch(() => {});
+            respond(
+              NextResponse.json(
+                {
+                  message: `업로드 byte 불일치 — ${expectedSize} bytes 중 ${totalReceived} bytes 만 도착. 다시 시도해 주세요.`,
+                },
+                { status: 500 }
+              )
+            );
+            return;
+          }
           succeeded = true;
           const rel = getRelUploadPath(subPath, storedName);
           const url = `/api/board/media?path=${encodeURIComponent(rel)}`;
