@@ -147,8 +147,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
   }
 
   async function handleReplySubmit(parentId: number) {
-    const stripped = replyContent.replace(/<[^>]*>/g, "").trim();
-    if (!stripped) {
+    if (!hasComposedContent(replyContent)) {
       alert("내용을 입력하세요.");
       return;
     }
@@ -196,9 +195,8 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // TipTap 은 빈 내용일 때 <p></p> 를 반환하므로 태그 제거 후 확인
-    const stripped = content.replace(/<[^>]*>/g, "").trim();
-    if (!stripped) {
+    // 빈 본문 검증 — 미디어/이미지/iframe 만 있어도 통과해야 댓글 작성 가능
+    if (!hasComposedContent(content)) {
       alert("내용을 입력하세요.");
       return;
     }

@@ -98,7 +98,15 @@ export function sanitizeHtml(dirty: string | null | undefined): string {
     return srcUrl;
   }
 
-  const withDownload = withEmptyP.replace(
+  // 입력에 이미 박혀 있는 media-download-link 모두 제거 — sanitize 가 다시 정확히
+  // 한 번 추가. 사용자가 본문에 다운로드 링크 직접 작성한 경우 + 자동 추가가
+  // 중복되어 두 개 표시되던 문제 방지.
+  const withoutOldDownload = withEmptyP.replace(
+    /<a\b[^>]*class=["'][^"']*media-download-link[^"']*["'][^>]*>[\s\S]*?<\/a>/gi,
+    ""
+  );
+
+  const withDownload = withoutOldDownload.replace(
     /<(video|audio)\b([^>]*)>([\s\S]*?)<\/\1>/gi,
     (_full, tag, attrs, inner) => {
       // 외곽 태그 src 추출 (다운로드 링크용 원본 URL 보존)
