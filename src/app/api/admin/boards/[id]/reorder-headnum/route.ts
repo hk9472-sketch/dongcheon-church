@@ -4,8 +4,8 @@ import { backupPostsByBoard } from "@/lib/operationBackup";
 
 // 게시판 단위 headnum 일괄 재정렬.
 // · 트리(같은 headnum 공유) 단위 보존
-// · 트리 안 가장 오래된 글의 createdAt DESC → 최신 트리가 가장 작은 음수(=위)
-// · 새 headnum: -1 (최신) ~ -N (가장 오래된 트리)
+// · 사용자가 미리보기에서 정한 정렬 순서대로 새 headnum 부여
+// · 새 headnum: -1 (맨 아래) ~ -N (맨 위 = ASC 정렬 시 가장 작은 음수)
 // · 두 단계 UPDATE — 충돌 회피 (임시 양수 영역 → 최종 음수)
 
 const TEMP_OFFSET = 100_000_000;
@@ -23,11 +23,12 @@ async function requireAdmin(request: NextRequest) {
 interface TreeRow {
   headnum: number;
   tree_oldest: Date;
+  tree_newest: Date;
   tree_count: bigint;
   root_subject: string | null;
 }
 
-// GET — 미리보기 (실제 변경 X). 상위 30개 트리 반환.
+// GET — 게시판의 모든 트리 반환. 클라이언트가 정렬·매핑 계산.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -47,54 +48,40 @@ export async function GET(
     return NextResponse.json({ message: "게시판이 없습니다." }, { status: 404 });
   }
 
-  const trees = await prisma.$queryRaw<TreeRow[]>`
+  const rows = await prisma.$queryRaw<TreeRow[]>`
     SELECT
       headnum,
       MIN(createdAt) AS tree_oldest,
+      MAX(createdAt) AS tree_newest,
       COUNT(*) AS tree_count,
       MAX(CASE WHEN depth = 0 THEN subject END) AS root_subject
     FROM posts
     WHERE boardId = ${boardId}
     GROUP BY headnum
-    ORDER BY MIN(createdAt) DESC, MIN(id) DESC
+    ORDER BY headnum ASC
   `;
 
-  const totalTrees = trees.length;
-  const totalPosts = trees.reduce((s, t) => s + Number(t.tree_count), 0);
-
-  // 위젯·목록 정렬은 headnum ASC (작을수록 최신).
-  // 최신 트리(rank=1)에 가장 작은 음수(-N) 부여 → ASC 시 맨 위.
-  // 오래된 트리(rank=N)에 -1 부여 → ASC 시 맨 아래.
-
-  // 모든 트리의 매핑 계산 (변경 여부 판정 + 변경되는 트리 우선 표시용)
-  const allMapped = trees.map((t, i) => ({
-    rank: i + 1,
+  const trees = rows.map((t) => ({
     oldHeadnum: t.headnum,
-    newHeadnum: -(totalTrees - i),
     treeOldest: t.tree_oldest,
+    treeNewest: t.tree_newest,
     treeCount: Number(t.tree_count),
     rootSubject: t.root_subject,
-    changed: t.headnum !== -(totalTrees - i),
   }));
-
-  const changedCount = allMapped.filter((r) => r.changed).length;
-
-  // 미리보기 50개 — 변경되는 트리 우선, 그 다음 변경 없는 트리
-  const changed = allMapped.filter((r) => r.changed);
-  const unchanged = allMapped.filter((r) => !r.changed);
-  const preview = [...changed, ...unchanged].slice(0, 50);
 
   return NextResponse.json({
     boardId,
     boardTitle: board.title,
-    totalTrees,
-    totalPosts,
-    changedCount,
-    preview,
+    totalTrees: trees.length,
+    totalPosts: trees.reduce((s, t) => s + t.treeCount, 0),
+    trees,
   });
 }
 
-// POST — 실제 재정렬 실행.
+// POST — 사용자가 정한 순서대로 재정렬 실행.
+// body: { orderedHeadnums: number[] }
+//   배열의 i 번째(0-based) 헤드넘이 rank=i+1 → newHeadnum = -(totalTrees - i)
+//   즉 배열 첫 번째 = 맨 위 (가장 작은 음수), 마지막 = 맨 아래 (-1).
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -114,44 +101,68 @@ export async function POST(
     return NextResponse.json({ message: "게시판이 없습니다." }, { status: 404 });
   }
 
-  const trees = await prisma.$queryRaw<TreeRow[]>`
-    SELECT headnum, MIN(createdAt) AS tree_oldest, COUNT(*) AS tree_count
-    FROM posts
-    WHERE boardId = ${boardId}
-    GROUP BY headnum
-    ORDER BY MIN(createdAt) DESC, MIN(id) DESC
-  `;
+  const body = await request.json().catch(() => ({}));
+  const orderedHeadnums: number[] = Array.isArray(body?.orderedHeadnums)
+    ? (body.orderedHeadnums as unknown[])
+        .map((v) => Number(v))
+        .filter((n) => Number.isFinite(n))
+    : [];
 
-  if (trees.length === 0) {
-    return NextResponse.json({ message: "글이 없습니다.", treeCount: 0 }, { status: 200 });
+  if (orderedHeadnums.length === 0) {
+    return NextResponse.json(
+      { message: "orderedHeadnums 배열이 필요합니다." },
+      { status: 400 }
+    );
   }
 
-  // 작업 직전 백업 — 게시판의 모든 글 snapshot
+  // 검증: 게시판의 distinct headnum 집합과 일치하는지
+  const existing = await prisma.$queryRaw<{ headnum: number }[]>`
+    SELECT DISTINCT headnum FROM posts WHERE boardId = ${boardId}
+  `;
+  const existingSet = new Set(existing.map((r) => r.headnum));
+  const orderedSet = new Set(orderedHeadnums);
+
+  if (existingSet.size !== orderedSet.size) {
+    return NextResponse.json(
+      {
+        message: `트리 수 불일치 — 게시판: ${existingSet.size}, 요청: ${orderedSet.size}`,
+      },
+      { status: 400 }
+    );
+  }
+  if (orderedHeadnums.length !== orderedSet.size) {
+    return NextResponse.json(
+      { message: "orderedHeadnums 에 중복된 값이 있습니다." },
+      { status: 400 }
+    );
+  }
+  for (const h of existingSet) {
+    if (!orderedSet.has(h)) {
+      return NextResponse.json(
+        { message: `요청 배열에 누락된 headnum: ${h}` },
+        { status: 400 }
+      );
+    }
+  }
+
+  // 작업 직전 백업
   const backup = await backupPostsByBoard(
     "headnum-reorder",
-    `게시판 "${board.title}" 헤드넘 createdAt 재정렬`,
+    `게시판 "${board.title}" 헤드넘 사용자 지정 순서 재정렬`,
     boardId,
     admin.userId
   );
 
-  // 트랜잭션: 단계 1) 모든 headnum 을 임시 양수로
-  //          단계 2) 트리별로 최종 음수 부여
-  //
-  // 위젯·목록 정렬은 headnum ASC (작을수록 최신).
-  // 최신 트리(i=0)에 가장 작은 음수 -N 부여 → ASC 정렬 시 맨 위.
-  // 가장 오래된 트리(i=N-1)에 -1 부여 → ASC 시 맨 아래.
-  // 새 글이 추가되면 MIN(-N) - 1 = -(N+1) 부여되어 자연스럽게 시퀀스 연장.
-  const totalTrees = trees.length;
+  // 두 단계 UPDATE: 1) 임시 양수 → 2) 최종 음수
+  const totalTrees = orderedHeadnums.length;
   await prisma.$transaction(
     async (tx) => {
-      // 단계 1
       await tx.$executeRaw`
         UPDATE posts SET headnum = headnum + ${TEMP_OFFSET}
         WHERE boardId = ${boardId}
       `;
-      // 단계 2
-      for (let i = 0; i < trees.length; i++) {
-        const oldH = trees[i].headnum;
+      for (let i = 0; i < totalTrees; i++) {
+        const oldH = orderedHeadnums[i];
         const newH = -(totalTrees - i);
         await tx.$executeRaw`
           UPDATE posts SET headnum = ${newH}
@@ -166,7 +177,7 @@ export async function POST(
     success: true,
     boardId,
     boardTitle: board.title,
-    treeCount: trees.length,
+    treeCount: totalTrees,
     backupId: backup.id,
   });
 }
