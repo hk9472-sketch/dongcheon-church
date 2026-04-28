@@ -14,6 +14,8 @@ interface PreviewRow {
   newHeadnum: number;
   treeOldest: string;
   treeCount: number;
+  rootSubject: string | null;
+  changed: boolean;
 }
 
 interface PreviewData {
@@ -21,6 +23,7 @@ interface PreviewData {
   boardTitle: string;
   totalTrees: number;
   totalPosts: number;
+  changedCount: number;
   preview: PreviewRow[];
 }
 
@@ -153,39 +156,75 @@ export default function BoardReorderPage() {
                 트리 <span className="font-bold">{preview.totalTrees}</span>개 / 글{" "}
                 <span className="font-bold">{preview.totalPosts}</span>건
               </span>
+              <span className="text-gray-600 ml-3">
+                위치 변경 트리{" "}
+                <span
+                  className={`font-bold ${
+                    preview.changedCount > 0 ? "text-amber-700" : "text-emerald-600"
+                  }`}
+                >
+                  {preview.changedCount}
+                </span>
+                개
+              </span>
             </div>
             <button
               onClick={handleExecute}
-              disabled={executing || preview.totalTrees === 0}
+              disabled={executing || preview.totalTrees === 0 || preview.changedCount === 0}
               className="px-4 py-1.5 text-sm bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 font-medium"
             >
-              {executing ? "재정렬 중..." : "재정렬 실행"}
+              {executing
+                ? "재정렬 중..."
+                : preview.changedCount === 0
+                ? "재정렬 불필요"
+                : "재정렬 실행"}
             </button>
           </div>
 
+          {preview.changedCount === 0 && (
+            <div className="px-4 py-3 bg-emerald-50 border-b border-emerald-200 text-sm text-emerald-700">
+              이 게시판은 현재 headnum 순서가 createdAt 순서와 일치해 — 재정렬해도 글 순서가
+              바뀌지 않습니다. 실행할 필요 없음.
+            </div>
+          )}
+
           <div className="p-4">
             <div className="text-xs text-gray-500 mb-2">
-              상위 {preview.preview.length}개 트리 미리보기 (createdAt DESC 순)
+              미리보기 상위 {preview.preview.length}개 — 위치 변경되는 트리 우선, 그 다음 변경 없는 트리.
+              변경 되는 행은 노란색 배경.
             </div>
             <div className="overflow-x-auto max-h-[55vh]">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 sticky top-0">
                   <tr className="text-gray-600 text-xs">
                     <th className="px-2 py-2 text-right font-medium w-12">#</th>
+                    <th className="px-2 py-2 text-left font-medium">제목</th>
                     <th className="px-2 py-2 text-right font-medium w-24">현재 headnum</th>
                     <th className="px-2 py-2 text-right font-medium w-24">새 headnum</th>
                     <th className="px-2 py-2 text-left font-medium w-40">트리 작성일</th>
-                    <th className="px-2 py-2 text-right font-medium w-20">글 수</th>
+                    <th className="px-2 py-2 text-right font-medium w-16">글 수</th>
                   </tr>
                 </thead>
                 <tbody>
                   {preview.preview.map((r) => (
-                    <tr key={r.rank} className="border-b border-gray-100">
+                    <tr
+                      key={r.rank}
+                      className={`border-b border-gray-100 ${
+                        r.changed ? "bg-amber-50" : ""
+                      }`}
+                    >
                       <td className="px-2 py-1.5 text-right text-gray-500">{r.rank}</td>
+                      <td className="px-2 py-1.5 text-gray-700 truncate max-w-xs">
+                        {r.rootSubject || <span className="text-gray-400">(제목 없음)</span>}
+                      </td>
                       <td className="px-2 py-1.5 text-right font-mono text-gray-500">
                         {r.oldHeadnum}
                       </td>
-                      <td className="px-2 py-1.5 text-right font-mono text-blue-700 font-bold">
+                      <td
+                        className={`px-2 py-1.5 text-right font-mono font-bold ${
+                          r.changed ? "text-amber-700" : "text-gray-400"
+                        }`}
+                      >
                         {r.newHeadnum}
                       </td>
                       <td className="px-2 py-1.5 text-gray-600 text-xs">

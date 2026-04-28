@@ -24,6 +24,7 @@ interface TreeRow {
   headnum: number;
   tree_oldest: Date;
   tree_count: bigint;
+  root_subject: string | null;
 }
 
 // GET — 미리보기 (실제 변경 X). 상위 30개 트리 반환.
@@ -47,7 +48,11 @@ export async function GET(
   }
 
   const trees = await prisma.$queryRaw<TreeRow[]>`
-    SELECT headnum, MIN(createdAt) AS tree_oldest, COUNT(*) AS tree_count
+    SELECT
+      headnum,
+      MIN(createdAt) AS tree_oldest,
+      COUNT(*) AS tree_count,
+      MAX(CASE WHEN depth = 0 THEN subject END) AS root_subject
     FROM posts
     WHERE boardId = ${boardId}
     GROUP BY headnum
@@ -60,19 +65,31 @@ export async function GET(
   // 위젯·목록 정렬은 headnum ASC (작을수록 최신).
   // 최신 트리(rank=1)에 가장 작은 음수(-N) 부여 → ASC 시 맨 위.
   // 오래된 트리(rank=N)에 -1 부여 → ASC 시 맨 아래.
-  const preview = trees.slice(0, 30).map((t, i) => ({
+
+  // 모든 트리의 매핑 계산 (변경 여부 판정 + 변경되는 트리 우선 표시용)
+  const allMapped = trees.map((t, i) => ({
     rank: i + 1,
     oldHeadnum: t.headnum,
     newHeadnum: -(totalTrees - i),
     treeOldest: t.tree_oldest,
     treeCount: Number(t.tree_count),
+    rootSubject: t.root_subject,
+    changed: t.headnum !== -(totalTrees - i),
   }));
+
+  const changedCount = allMapped.filter((r) => r.changed).length;
+
+  // 미리보기 50개 — 변경되는 트리 우선, 그 다음 변경 없는 트리
+  const changed = allMapped.filter((r) => r.changed);
+  const unchanged = allMapped.filter((r) => !r.changed);
+  const preview = [...changed, ...unchanged].slice(0, 50);
 
   return NextResponse.json({
     boardId,
     boardTitle: board.title,
     totalTrees,
     totalPosts,
+    changedCount,
     preview,
   });
 }
