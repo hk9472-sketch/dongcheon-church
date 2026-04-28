@@ -75,7 +75,7 @@ export default function BoardReorderPage() {
       if (!res.ok) throw new Error(data.message || "실행 실패");
       setMessage({
         type: "ok",
-        text: `"${data.boardTitle}" 의 ${data.treeCount}개 트리를 재정렬했습니다.`,
+        text: `"${data.boardTitle}" 의 ${data.treeCount}개 트리를 재정렬했습니다. 백업 ID: ${data.backupId} (관리메뉴 → 작업 백업/복원에서 되돌릴 수 있음)`,
       });
       setPreview(null);
     } catch (e: unknown) {

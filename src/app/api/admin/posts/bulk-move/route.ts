@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { backupPosts } from "@/lib/operationBackup";
 
 // POST /api/admin/posts/bulk-move
 // body: { postIds: number[], targetBoardId: number, targetCategoryId?: number | null }
@@ -109,6 +110,17 @@ export async function POST(request: NextRequest) {
   });
   const baseMin = targetMin._min.headnum ?? 0;
 
+  // 5.5) 작업 직전 백업 — 영향받는 모든 트리 멤버의 현재 상태 snapshot
+  const allMemberIds = allMembers.map((m) => m.id);
+  const backup = await backupPosts(
+    "bulk-move",
+    `${allMemberIds.length}건 → 게시판 "${target.title}"${
+      targetCategoryId ? ` (카테고리 ${targetCategoryId})` : ""
+    }`,
+    allMemberIds,
+    admin.userId
+  );
+
   // 6) 트랜잭션 — raw SQL 로 일괄 (updatedAt 보존)
   await prisma.$transaction(async (tx) => {
     for (let i = 0; i < treesSorted.length; i++) {
@@ -140,5 +152,6 @@ export async function POST(request: NextRequest) {
     movedCount: allMembers.length,
     targetSlug: target.slug,
     targetTitle: target.title,
+    backupId: backup.id,
   });
 }

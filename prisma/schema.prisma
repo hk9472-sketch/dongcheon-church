@@ -515,6 +515,26 @@ model BackupHistory {
 }
 
 // ============================================================
+// 운영 작업 백업 (일괄이동, 헤드넘 재정렬 등)
+//   작업 직전 영향받는 행의 snapshot 을 JSON 으로 저장.
+//   복원 시 snapshot 의 값으로 다시 UPDATE.
+// ============================================================
+model OperationBackup {
+  id          Int      @id @default(autoincrement())
+  operation   String   @db.VarChar(64)    // "bulk-move" | "headnum-reorder"
+  description String   @db.VarChar(255)
+  rowCount    Int                            // 영향 행 수
+  snapshot    Json                           // [{id, boardId, headnum, ...}, ...]
+  restoredAt  DateTime?                      // 복원 시각 (null = 미복원)
+  createdBy   String?  @db.VarChar(64)
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([operation])
+  @@map("operation_backups")
+}
+
+// ============================================================
 // 방문 로그 (방문 경로 기록)
 // ============================================================
 model VisitLog {

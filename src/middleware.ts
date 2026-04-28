@@ -51,10 +51,38 @@ function buildUrl(path: string, qs: string, base: string): URL {
   return new URL(qs ? `${path}?${qs}` : path, base);
 }
 
+// ZB 공격 패턴 — redirect 안 주고 즉시 404 (봇에게 "여기 ZB 살아있다" 시그널 차단)
+//   · *_ok.php (write_ok, modify_ok, delete_ok, comment_ok 등 form action)
+//   · delete.php, del_comment.php (SQL injection 단골 표적)
+//   · admin*.php (admin_setup, admin_sendmail 등)
+//   · install.php, chmod.php, sendmail.php
+//   · view.php / write.php / login.php / admin.php / zboard.php 는 SEO 자산이라 redirect 유지
+const ATTACK_PHP_PATTERN =
+  /\/(?:[a-z_]+_ok|delete|del_comment|admin_[a-z]+|install|chmod|sendmail|setup|info)\.php(\/|$)/i;
+
+// 그 외 모든 PHP — ZB 매칭되지 않으면 redirect 도 안 주고 404
+//   matcher 가 *.php 만 잡고 들어왔을 때 처리
+const ANY_PHP = /\.php(\/|$)/i;
+
+function block(): NextResponse {
+  return new NextResponse(null, {
+    status: 404,
+    headers: {
+      "Cache-Control": "no-store",
+      "X-Robots-Tag": "noindex, nofollow",
+    },
+  });
+}
+
 export function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
 
-  // ---- 제로보드 레거시 리다이렉트 ----
+  // ---- 봇 공격 패턴 우선 차단 ----
+  if (ATTACK_PHP_PATTERN.test(pathname)) {
+    return block();
+  }
+
+  // ---- 제로보드 레거시 리다이렉트 (정상 사용자 SEO 자산) ----
 
   // zboard.php → /board/[boardId]
   // 예: /bbs/zboard.php?id=DcNotice&page=2&keyword=감사
@@ -122,6 +150,11 @@ export function middleware(request: NextRequest) {
   // admin.php → /admin
   if (pathname.endsWith("/admin.php") || pathname.endsWith("/admin.php/")) {
     return NextResponse.redirect(new URL("/admin", request.url), 301);
+  }
+
+  // 위 SEO redirect 에 매칭되지 않은 *.php 요청은 다 봇으로 간주 — 404
+  if (ANY_PHP.test(pathname)) {
+    return block();
   }
 
   return NextResponse.next();

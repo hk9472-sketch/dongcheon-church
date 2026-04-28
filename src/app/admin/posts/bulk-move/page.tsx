@@ -164,7 +164,7 @@ export default function BulkMovePage() {
       if (!res.ok) throw new Error(data.message || "이동 실패");
       setMessage({
         type: "ok",
-        text: `${data.treeCount}개 트리(글 ${data.movedCount}건)를 "${data.targetTitle}" 으로 이동했습니다.`,
+        text: `${data.treeCount}개 트리(글 ${data.movedCount}건)를 "${data.targetTitle}" 으로 이동했습니다. 백업 ID: ${data.backupId} (관리메뉴 → 작업 백업/복원에서 되돌릴 수 있음)`,
       });
       // 목록 재조회
       fetchPosts();

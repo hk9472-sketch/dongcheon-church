@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { backupPostsByBoard } from "@/lib/operationBackup";
 
 // 게시판 단위 headnum 일괄 재정렬.
 // · 트리(같은 headnum 공유) 단위 보존
@@ -105,6 +106,14 @@ export async function POST(
     return NextResponse.json({ message: "글이 없습니다.", treeCount: 0 }, { status: 200 });
   }
 
+  // 작업 직전 백업 — 게시판의 모든 글 snapshot
+  const backup = await backupPostsByBoard(
+    "headnum-reorder",
+    `게시판 "${board.title}" 헤드넘 createdAt 재정렬`,
+    boardId,
+    admin.userId
+  );
+
   // 트랜잭션: 단계 1) 모든 headnum 을 임시 양수로
   //          단계 2) 트리별로 최종 음수 부여
   await prisma.$transaction(
@@ -132,5 +141,6 @@ export async function POST(
     boardId,
     boardTitle: board.title,
     treeCount: trees.length,
+    backupId: backup.id,
   });
 }
