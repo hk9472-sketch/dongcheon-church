@@ -66,13 +66,6 @@
     font-family: inherit;
   }
   .btn:hover { background: #1d4ed8; }
-  .countdown {
-    display: inline-block;
-    min-width: 1.5em;
-    font-variant-numeric: tabular-nums;
-    color: #2563eb;
-    font-weight: 600;
-  }
 </style>
 </head>
 <body>
@@ -85,20 +78,11 @@
   <p>잠시만 기다려 주세요.</p>
   <p>보통 <strong>30초 ~ 2분</strong> 안에 완료됩니다.</p>
   <button class="btn" type="button" onclick="location.reload()">새로 고침</button>
-  <p class="small"><span class="countdown" id="cd">5</span>초 후 자동 새로 고침</p>
+  <p class="small">점검이 끝나면 자동으로 다시 표시됩니다.</p>
 </div>
 <script>
-  // 5초 카운트다운 후 자동 reload — 점검 끝나면 정상 페이지로 복귀
-  var sec = 5;
-  var el = document.getElementById('cd');
-  var timer = setInterval(function() {
-    sec -= 1;
-    if (el) el.textContent = sec;
-    if (sec <= 0) {
-      clearInterval(timer);
-      location.reload();
-    }
-  }, 1000);
+  // 백그라운드에서 5초마다 silent 재시도 — 끝나면 자동 복귀, 사용자에게 카운트는 숨김
+  setInterval(function() { location.reload(); }, 5000);
 </script>
 </body>
 </html>
