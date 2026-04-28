@@ -506,12 +506,15 @@ function BoardWidget({ board, rows }: {
                   </span>
                   <PostBadge createdAt={post.createdAt} updatedAt={post.updatedAt} />
                   {post.totalComment > 0 && (
-                    <span className="inline-block ml-1 text-[10px] sm:text-xs text-red-500 font-bold align-middle">
+                    <span
+                      className={`inline-block ml-1 text-[10px] sm:text-xs font-bold align-middle ${
+                        post.hasRecentComment
+                          ? "text-red-500"
+                          : "text-gray-400"
+                      }`}
+                    >
                       [{post.totalComment}]
                     </span>
-                  )}
-                  {post.hasRecentComment && (
-                    <span className="text-red-500 text-[10px] ml-0.5 font-bold">[c]</span>
                   )}
                 </span>
               </Link>
@@ -536,14 +539,14 @@ function PostBadge({ createdAt, updatedAt }: { createdAt: Date; updatedAt: Date 
 
   if (isRecentUpdate) {
     return (
-      <span className="inline-block ml-1.5 px-1 py-0.5 text-[10px] font-bold leading-none text-orange-600 bg-orange-100 rounded align-middle">
+      <span className="inline-block ml-1.5 px-1.5 py-0.5 text-[11px] sm:text-xs font-extrabold leading-none text-white bg-orange-500 rounded shadow-sm align-middle">
         U
       </span>
     );
   }
   if (isNew) {
     return (
-      <span className="inline-block ml-1.5 px-1 py-0.5 text-[10px] font-bold leading-none text-red-600 bg-red-100 rounded align-middle">
+      <span className="inline-block ml-1.5 px-1.5 py-0.5 text-[11px] sm:text-xs font-extrabold leading-none text-white bg-red-500 rounded shadow-sm align-middle">
         N
       </span>
     );
@@ -605,9 +608,6 @@ function RecentPostsWidget({ posts, rows }: { posts: RecentPost[]; rows: number 
                   {post.isSecret && <span className="text-[10px] sm:text-xs mr-0.5 align-middle" title="비밀글">🔒</span>}
                   {post.subject}
                   {post.hasAttachment && <FloppyIcon className="ml-1 w-3.5 h-3.5 text-blue-600" />}
-                  {post.hasRecentComment && (
-                    <span className="text-red-500 text-[10px] ml-0.5 font-bold">[c]</span>
-                  )}
                   {" "}
                   <span style={{ fontFamily: "var(--skin-widget-author-font)", fontSize: "var(--skin-widget-author-size)", color: "var(--skin-widget-author-color)", fontWeight: "var(--skin-widget-author-weight)" as never }}>
                     [{post.authorName}]

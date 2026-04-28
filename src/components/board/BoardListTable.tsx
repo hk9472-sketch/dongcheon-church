@@ -229,12 +229,13 @@ export default function BoardListTable({
                     )}
                     {post.subject}
                     {post.totalComment > 0 && (
-                      <span className="ml-1.5 text-xs text-orange-500 font-bold">
+                      <span
+                        className={`ml-1.5 text-xs font-bold ${
+                          post.hasRecentComment ? "text-red-500" : "text-gray-400"
+                        }`}
+                      >
                         [{post.totalComment}]
                       </span>
-                    )}
-                    {post.hasRecentComment && (
-                      <span className="text-red-500 text-[10px] ml-0.5 font-bold">[c]</span>
                     )}
                     {post.isSecret && (
                       <span className="ml-1 text-xs text-gray-400" title="비밀글">🔒</span>
@@ -291,12 +292,13 @@ export default function BoardListTable({
                         )}
                         {subjectText}
                         {post.totalComment > 0 && (
-                          <span className="ml-1.5 text-xs text-orange-500 font-bold">
+                          <span
+                            className={`ml-1.5 text-xs font-bold ${
+                              post.hasRecentComment ? "text-red-500" : "text-gray-400"
+                            }`}
+                          >
                             [{post.totalComment}]
                           </span>
-                        )}
-                        {post.hasRecentComment && (
-                          <span className="text-red-500 text-[10px] ml-0.5 font-bold">[c]</span>
                         )}
                         {post.isSecret && (
                           <span className="ml-1 text-xs text-gray-400" title="비밀글">🔒</span>
