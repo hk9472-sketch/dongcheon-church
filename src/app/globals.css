@@ -452,39 +452,42 @@ html {
   100% { left: 100%; }
 }
 
+/* Tailwind preflight (@layer base) 가 ul/ol 의 list-style 을 none 으로 reset 하므로
+   본문 영역에서는 명시적으로 되살린다. !important 로 layer 우선순위 무관하게 보장. */
 .tiptap-editor .ProseMirror ul,
 .prose ul {
-  list-style-type: disc;
+  list-style-type: disc !important;
   padding-left: 1.6em;
   margin: 0.5em 0;
 }
 .tiptap-editor .ProseMirror ol,
 .prose ol {
-  list-style-type: decimal;
+  list-style-type: decimal !important;
   padding-left: 1.8em;
   margin: 0.5em 0;
 }
 .tiptap-editor .ProseMirror li,
 .prose li {
   margin: 0.2em 0;
+  display: list-item !important;
 }
 
 /* 다양한 마커 종류 — 에디터 툴바에서 ul/ol 의 data-style 속성으로 선택 */
 .tiptap-editor .ProseMirror ul[data-style="circle"],
-.prose ul[data-style="circle"] { list-style-type: circle; }
+.prose ul[data-style="circle"] { list-style-type: circle !important; }
 .tiptap-editor .ProseMirror ul[data-style="square"],
-.prose ul[data-style="square"] { list-style-type: square; }
+.prose ul[data-style="square"] { list-style-type: square !important; }
 
 .tiptap-editor .ProseMirror ol[data-style="lower-alpha"],
-.prose ol[data-style="lower-alpha"] { list-style-type: lower-alpha; }
+.prose ol[data-style="lower-alpha"] { list-style-type: lower-alpha !important; }
 .tiptap-editor .ProseMirror ol[data-style="upper-alpha"],
-.prose ol[data-style="upper-alpha"] { list-style-type: upper-alpha; }
+.prose ol[data-style="upper-alpha"] { list-style-type: upper-alpha !important; }
 .tiptap-editor .ProseMirror ol[data-style="lower-roman"],
-.prose ol[data-style="lower-roman"] { list-style-type: lower-roman; }
+.prose ol[data-style="lower-roman"] { list-style-type: lower-roman !important; }
 .tiptap-editor .ProseMirror ol[data-style="upper-roman"],
-.prose ol[data-style="upper-roman"] { list-style-type: upper-roman; }
+.prose ol[data-style="upper-roman"] { list-style-type: upper-roman !important; }
 .tiptap-editor .ProseMirror ol[data-style="decimal-zero"],
-.prose ol[data-style="decimal-zero"] { list-style-type: decimal-leading-zero; }
+.prose ol[data-style="decimal-zero"] { list-style-type: decimal-leading-zero !important; }
 
 /* 9) — 숫자 + 우괄호. CSS counter 로 처리 (표준 list-style 에 없음) */
 .tiptap-editor .ProseMirror ol[data-style="paren"],

@@ -36,6 +36,7 @@ interface TipTapEditorProps {
 const StyledBulletList = BulletList.extend({
   addAttributes() {
     return {
+      ...this.parent?.(),
       dataStyle: {
         default: null,
         parseHTML: (el) => el.getAttribute("data-style"),
