@@ -37,12 +37,12 @@ if [ ! -d .git ]; then
   exit 1
 fi
 
-# ── 점검 플래그 — nginx 가 이 파일이 있으면 503 + maintenance.html 응답 ──
-MAINT_FLAG=/tmp/pkistdc-maintenance
-maint_on()  { touch "$MAINT_FLAG"; }
-maint_off() { rm -f "$MAINT_FLAG"; }
-# 스크립트 종료(성공·실패·중단) 시 항상 플래그 제거
-trap maint_off EXIT
+# 점검 플래그(/tmp/pkistdc-maintenance) 는 dcup 가 자동으로 안 켬.
+# 이미 페이지 보고 있는 사용자에게는 영향 없고, pm2 재시작 5~30초 동안 새 요청 보낸
+# 사용자만 nginx 의 error_page 502/503/504 = @maintenance 로 자연 fallback.
+# 강제 점검 필요 시 (DB 큰 작업 등) 사용자가 직접:
+#   sudo touch /tmp/pkistdc-maintenance   # 모든 사용자 점검 페이지로
+#   sudo rm   /tmp/pkistdc-maintenance    # 정상 복귀
 
 PREV=$(git rev-parse HEAD 2>/dev/null || echo "")
 
@@ -83,11 +83,6 @@ if echo "$CHANGED_FILES" | grep -q "^prisma/schema.prisma$"; then
   npx prisma db push
 fi
 
-# ── 여기서부터 사용자 트래픽 영향 구간 — 점검 페이지 ON ──
-echo ""
-echo "=== 점검 페이지 ON ==="
-maint_on
-
 # 5) 빌드
 echo ""
 echo "=== 5) build ==="
@@ -115,11 +110,6 @@ done
 if [ "$HEALTHY" != "1" ]; then
   echo "  WARN: 30초 안에 origin 응답 없음 — pm2 logs 확인 필요"
 fi
-
-# 점검 페이지 OFF (trap 으로도 자동 제거됨, 명시적으로 한 번 더)
-maint_off
-echo ""
-echo "=== 점검 페이지 OFF ==="
 
 echo ""
 echo "=== pm2 status ==="
