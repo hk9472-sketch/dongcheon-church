@@ -66,6 +66,34 @@
     font-family: inherit;
   }
   .btn:hover { background: #1d4ed8; }
+  .beam {
+    position: relative;
+    width: 80%;
+    height: 4px;
+    background: rgba(37, 99, 235, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+    margin: 1.75rem auto 0.5rem;
+  }
+  .beam::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    height: 100%;
+    width: 35%;
+    background: linear-gradient(90deg,
+      transparent,
+      rgba(37, 99, 235, 0.5) 35%,
+      #2563eb 50%,
+      rgba(37, 99, 235, 0.5) 65%,
+      transparent);
+    border-radius: 999px;
+    animation: dc-beam 2.4s ease-in-out infinite alternate;
+  }
+  @keyframes dc-beam {
+    0%   { left: -35%; }
+    100% { left: 100%; }
+  }
 </style>
 </head>
 <body>
@@ -78,6 +106,7 @@
   <p>잠시만 기다려 주세요.</p>
   <p>보통 <strong>30초 ~ 2분</strong> 안에 완료됩니다.</p>
   <button class="btn" type="button" onclick="location.reload()">새로 고침</button>
+  <div class="beam" aria-hidden="true"></div>
   <p class="small">점검이 끝나면 자동으로 다시 표시됩니다.</p>
 </div>
 <script>
