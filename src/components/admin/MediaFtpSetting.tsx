@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 /**
  * 미디어 FTP 서버 설정 — /admin/settings 페이지에 임베드.
- * 설정되면 /api/board/media-upload 가 로컬 저장 대신 FTP 로 업로드하고
+ * 설정되면 청크 업로드(finalize) 가 로컬 저장 대신 FTP 로 업로드하고
  * media_base_url 과 조합한 공개 URL 을 반환한다.
  * 설정 해제 시 로컬 저장 모드로 복귀.
  */

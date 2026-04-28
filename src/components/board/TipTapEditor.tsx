@@ -625,7 +625,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     [editor, boardSlug]
   );
 
-  // 미디어(동영상/오디오) 업로드 — /api/board/media-upload (XHR + 진행률)
+  // 미디어(동영상/오디오) 업로드 — chunked (init → chunk×N → finalize)
   // dateBase: "YYYY-MM-DD" — 통합 모달에서 사용자가 지정한 기준일자.
   //          이 값이 있으면 폴더가 그 날짜의 YYYY/MM 으로 결정.
   const uploadAndInsertMedia = useCallback(
