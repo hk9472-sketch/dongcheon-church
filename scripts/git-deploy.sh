@@ -37,6 +37,13 @@ if [ ! -d .git ]; then
   exit 1
 fi
 
+# ── 점검 플래그 — nginx 가 이 파일이 있으면 503 + maintenance.html 응답 ──
+MAINT_FLAG=/tmp/pkistdc-maintenance
+maint_on()  { touch "$MAINT_FLAG"; }
+maint_off() { rm -f "$MAINT_FLAG"; }
+# 스크립트 종료(성공·실패·중단) 시 항상 플래그 제거
+trap maint_off EXIT
+
 PREV=$(git rev-parse HEAD 2>/dev/null || echo "")
 
 echo "=== 1) git fetch ==="
@@ -76,6 +83,11 @@ if echo "$CHANGED_FILES" | grep -q "^prisma/schema.prisma$"; then
   npx prisma db push
 fi
 
+# ── 여기서부터 사용자 트래픽 영향 구간 — 점검 페이지 ON ──
+echo ""
+echo "=== 점검 페이지 ON ==="
+maint_on
+
 # 5) 빌드
 echo ""
 echo "=== 5) build ==="
@@ -88,10 +100,29 @@ echo "=== 6) pm2 restart ==="
 pm2 restart pkistdc
 pm2 flush
 
-# 7) 헬스 체크
-sleep 5
+# 7) 헬스 체크 — origin 응답할 때까지 최대 30초 대기
 echo ""
-echo "=== 7) pm2 status ==="
+echo "=== 7) 헬스 체크 ==="
+HEALTHY=0
+for i in $(seq 1 30); do
+  if curl -sSf -m 2 -o /dev/null http://127.0.0.1:3000/ 2>/dev/null; then
+    echo "  origin 응답 OK (${i}초)"
+    HEALTHY=1
+    break
+  fi
+  sleep 1
+done
+if [ "$HEALTHY" != "1" ]; then
+  echo "  WARN: 30초 안에 origin 응답 없음 — pm2 logs 확인 필요"
+fi
+
+# 점검 페이지 OFF (trap 으로도 자동 제거됨, 명시적으로 한 번 더)
+maint_off
+echo ""
+echo "=== 점검 페이지 OFF ==="
+
+echo ""
+echo "=== pm2 status ==="
 pm2 list | grep -E "pkistdc|name" || pm2 list
 
 echo ""
