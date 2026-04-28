@@ -539,14 +539,14 @@ function PostBadge({ createdAt, updatedAt }: { createdAt: Date; updatedAt: Date 
 
   if (isRecentUpdate) {
     return (
-      <span className="inline-block ml-1.5 px-1 py-0.5 text-[10px] font-bold leading-none text-white bg-orange-500 rounded shadow-sm align-middle">
+      <span className="inline-block ml-1.5 px-1 py-px text-[9px] font-bold leading-none text-white bg-orange-500 rounded shadow-sm align-middle">
         U
       </span>
     );
   }
   if (isNew) {
     return (
-      <span className="inline-block ml-1.5 px-1 py-0.5 text-[10px] font-bold leading-none text-white bg-red-500 rounded shadow-sm align-middle">
+      <span className="inline-block ml-1.5 px-1 py-px text-[9px] font-bold leading-none text-white bg-red-500 rounded shadow-sm align-middle">
         N
       </span>
     );

@@ -57,10 +57,13 @@ export async function GET(
   const totalTrees = trees.length;
   const totalPosts = trees.reduce((s, t) => s + Number(t.tree_count), 0);
 
+  // 위젯·목록 정렬은 headnum ASC (작을수록 최신).
+  // 최신 트리(rank=1)에 가장 작은 음수(-N) 부여 → ASC 시 맨 위.
+  // 오래된 트리(rank=N)에 -1 부여 → ASC 시 맨 아래.
   const preview = trees.slice(0, 30).map((t, i) => ({
     rank: i + 1,
     oldHeadnum: t.headnum,
-    newHeadnum: -(i + 1),
+    newHeadnum: -(totalTrees - i),
     treeOldest: t.tree_oldest,
     treeCount: Number(t.tree_count),
   }));
@@ -116,6 +119,12 @@ export async function POST(
 
   // 트랜잭션: 단계 1) 모든 headnum 을 임시 양수로
   //          단계 2) 트리별로 최종 음수 부여
+  //
+  // 위젯·목록 정렬은 headnum ASC (작을수록 최신).
+  // 최신 트리(i=0)에 가장 작은 음수 -N 부여 → ASC 정렬 시 맨 위.
+  // 가장 오래된 트리(i=N-1)에 -1 부여 → ASC 시 맨 아래.
+  // 새 글이 추가되면 MIN(-N) - 1 = -(N+1) 부여되어 자연스럽게 시퀀스 연장.
+  const totalTrees = trees.length;
   await prisma.$transaction(
     async (tx) => {
       // 단계 1
@@ -126,7 +135,7 @@ export async function POST(
       // 단계 2
       for (let i = 0; i < trees.length; i++) {
         const oldH = trees[i].headnum;
-        const newH = -(i + 1);
+        const newH = -(totalTrees - i);
         await tx.$executeRaw`
           UPDATE posts SET headnum = ${newH}
           WHERE boardId = ${boardId} AND headnum = ${oldH + TEMP_OFFSET}
