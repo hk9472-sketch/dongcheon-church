@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/db";
 import { backupPostsByBoard } from "@/lib/operationBackup";
 
 // 게시판 단위 headnum 일괄 재정렬.
-// · 트리(같은 headnum 공유) 단위 보존
-// · 사용자가 미리보기에서 정한 정렬 순서대로 새 headnum 부여
-// · 새 headnum: -1 (맨 아래) ~ -N (맨 위 = ASC 정렬 시 가장 작은 음수)
-// · 두 단계 UPDATE — 충돌 회피 (임시 양수 영역 → 최종 음수)
-
-const TEMP_OFFSET = 100_000_000;
+//
+// 트리 식별 규칙:
+//   · depth=0 인 root post 의 id 를 트리 ID 로 사용
+//   · 답글은 parentId 체인 따라 root_id 결정 (recursive CTE)
+//   · parentId 체인 끊긴 orphan 글은 자기 자신을 root 로 처리
+//   · headnum 중복(마이그레이션 사고)이 있어도 root_id 로 분리되어 안전
+//
+// 새 headnum:
+//   · 사용자가 정한 정렬 순서대로 -(totalTrees - i) 부여 (i=0 → -N, i=N-1 → -1)
+//   · 위젯·목록 정렬은 headnum ASC = 작을수록 최신.
+//   · 트리 멤버 (root + 답글들) 모두 같은 새 headnum 부여.
 
 async function requireAdmin(request: NextRequest) {
   const sessionToken = request.cookies.get("dc_session")?.value;
@@ -20,15 +26,21 @@ async function requireAdmin(request: NextRequest) {
   return user;
 }
 
-interface TreeRow {
-  headnum: number;
+interface TreeAggRow {
+  root_id: number;
+  root_headnum: number;
+  root_subject: string | null;
   tree_oldest: Date;
   tree_newest: Date;
   tree_count: bigint;
-  root_subject: string | null;
 }
 
-// GET — 게시판의 모든 트리 반환. 클라이언트가 정렬·매핑 계산.
+interface LineageRow {
+  id: number;
+  root_id: number;
+}
+
+// GET — 게시판의 모든 트리 (root_id 기준 그룹) 반환.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -48,40 +60,68 @@ export async function GET(
     return NextResponse.json({ message: "게시판이 없습니다." }, { status: 404 });
   }
 
-  const rows = await prisma.$queryRaw<TreeRow[]>`
+  const rows = await prisma.$queryRaw<TreeAggRow[]>`
+    WITH RECURSIVE tree_lineage AS (
+      SELECT id, id AS root_id
+      FROM posts
+      WHERE boardId = ${boardId} AND depth = 0
+
+      UNION ALL
+
+      SELECT p.id, t.root_id
+      FROM posts p
+      JOIN tree_lineage t ON p.parentId = t.id
+      WHERE p.boardId = ${boardId}
+    ),
+    post_with_root AS (
+      SELECT
+        p.id,
+        p.createdAt,
+        COALESCE(tl.root_id, p.id) AS root_id
+      FROM posts p
+      LEFT JOIN tree_lineage tl ON tl.id = p.id
+      WHERE p.boardId = ${boardId}
+    )
     SELECT
-      headnum,
-      MIN(createdAt) AS tree_oldest,
-      MAX(createdAt) AS tree_newest,
-      COUNT(*) AS tree_count,
-      MAX(CASE WHEN depth = 0 THEN subject END) AS root_subject
-    FROM posts
-    WHERE boardId = ${boardId}
-    GROUP BY headnum
-    ORDER BY headnum ASC
+      pwr.root_id,
+      r.headnum AS root_headnum,
+      r.subject AS root_subject,
+      MIN(pwr.createdAt) AS tree_oldest,
+      MAX(pwr.createdAt) AS tree_newest,
+      COUNT(*) AS tree_count
+    FROM post_with_root pwr
+    JOIN posts r ON r.id = pwr.root_id
+    GROUP BY pwr.root_id, r.headnum, r.subject
+    ORDER BY r.headnum ASC
   `;
 
   const trees = rows.map((t) => ({
-    oldHeadnum: t.headnum,
+    rootId: t.root_id,
+    rootHeadnum: t.root_headnum,
+    rootSubject: t.root_subject,
     treeOldest: t.tree_oldest,
     treeNewest: t.tree_newest,
     treeCount: Number(t.tree_count),
-    rootSubject: t.root_subject,
   }));
+
+  // headnum 중복 검사 (마이그레이션 사고 등으로 같은 headnum 의 별개 트리 다수 존재)
+  const headnumSet = new Set(trees.map((t) => t.rootHeadnum));
+  const dupHeadnumCount = trees.length - headnumSet.size;
 
   return NextResponse.json({
     boardId,
     boardTitle: board.title,
     totalTrees: trees.length,
     totalPosts: trees.reduce((s, t) => s + t.treeCount, 0),
+    dupHeadnumCount,
     trees,
   });
 }
 
-// POST — 사용자가 정한 순서대로 재정렬 실행.
-// body: { orderedHeadnums: number[] }
-//   배열의 i 번째(0-based) 헤드넘이 rank=i+1 → newHeadnum = -(totalTrees - i)
-//   즉 배열 첫 번째 = 맨 위 (가장 작은 음수), 마지막 = 맨 아래 (-1).
+// POST — 사용자가 정한 순서로 재정렬.
+// body: { orderedRootIds: number[] }
+//   배열 첫 번째 = rank 1 = newHeadnum -N (가장 작은 음수, ASC 시 맨 위)
+//   배열 마지막 = rank N = newHeadnum -1
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -102,44 +142,71 @@ export async function POST(
   }
 
   const body = await request.json().catch(() => ({}));
-  const orderedHeadnums: number[] = Array.isArray(body?.orderedHeadnums)
-    ? (body.orderedHeadnums as unknown[])
+  const orderedRootIds: number[] = Array.isArray(body?.orderedRootIds)
+    ? (body.orderedRootIds as unknown[])
         .map((v) => Number(v))
         .filter((n) => Number.isFinite(n))
     : [];
 
-  if (orderedHeadnums.length === 0) {
+  if (orderedRootIds.length === 0) {
     return NextResponse.json(
-      { message: "orderedHeadnums 배열이 필요합니다." },
+      { message: "orderedRootIds 배열이 필요합니다." },
       { status: 400 }
     );
   }
 
-  // 검증: 게시판의 distinct headnum 집합과 일치하는지
-  const existing = await prisma.$queryRaw<{ headnum: number }[]>`
-    SELECT DISTINCT headnum FROM posts WHERE boardId = ${boardId}
-  `;
-  const existingSet = new Set(existing.map((r) => r.headnum));
-  const orderedSet = new Set(orderedHeadnums);
+  // 게시판의 모든 (post_id, root_id) 매핑
+  const lineage = await prisma.$queryRaw<LineageRow[]>`
+    WITH RECURSIVE tree_lineage AS (
+      SELECT id, id AS root_id
+      FROM posts
+      WHERE boardId = ${boardId} AND depth = 0
 
-  if (existingSet.size !== orderedSet.size) {
+      UNION ALL
+
+      SELECT p.id, t.root_id
+      FROM posts p
+      JOIN tree_lineage t ON p.parentId = t.id
+      WHERE p.boardId = ${boardId}
+    )
+    SELECT
+      p.id,
+      COALESCE(tl.root_id, p.id) AS root_id
+    FROM posts p
+    LEFT JOIN tree_lineage tl ON tl.id = p.id
+    WHERE p.boardId = ${boardId}
+  `;
+
+  // 트리 ID 별 멤버 ID 모음
+  const membersByRoot = new Map<number, number[]>();
+  for (const row of lineage) {
+    const arr = membersByRoot.get(row.root_id) ?? [];
+    arr.push(row.id);
+    membersByRoot.set(row.root_id, arr);
+  }
+
+  // 검증: orderedRootIds 가 실제 트리 ID 집합과 일치
+  const existingRootIds = new Set(membersByRoot.keys());
+  const orderedSet = new Set(orderedRootIds);
+
+  if (existingRootIds.size !== orderedSet.size) {
     return NextResponse.json(
       {
-        message: `트리 수 불일치 — 게시판: ${existingSet.size}, 요청: ${orderedSet.size}`,
+        message: `트리 수 불일치 — 게시판: ${existingRootIds.size}, 요청: ${orderedSet.size}`,
       },
       { status: 400 }
     );
   }
-  if (orderedHeadnums.length !== orderedSet.size) {
+  if (orderedRootIds.length !== orderedSet.size) {
     return NextResponse.json(
-      { message: "orderedHeadnums 에 중복된 값이 있습니다." },
+      { message: "orderedRootIds 에 중복된 값이 있습니다." },
       { status: 400 }
     );
   }
-  for (const h of existingSet) {
-    if (!orderedSet.has(h)) {
+  for (const r of existingRootIds) {
+    if (!orderedSet.has(r)) {
       return NextResponse.json(
-        { message: `요청 배열에 누락된 headnum: ${h}` },
+        { message: `요청 배열에 누락된 root id: ${r}` },
         { status: 400 }
       );
     }
@@ -148,29 +215,27 @@ export async function POST(
   // 작업 직전 백업
   const backup = await backupPostsByBoard(
     "headnum-reorder",
-    `게시판 "${board.title}" 헤드넘 사용자 지정 순서 재정렬`,
+    `게시판 "${board.title}" 헤드넘 사용자 지정 순서 재정렬 (root id 기반)`,
     boardId,
     admin.userId
   );
 
-  // 두 단계 UPDATE: 1) 임시 양수 → 2) 최종 음수
-  const totalTrees = orderedHeadnums.length;
+  // 트랜잭션: 트리 단위로 새 headnum 부여 (id IN 으로 멤버 일괄 update).
+  // id 가 unique 라 충돌 없음 — 2-step 임시 영역 불필요.
+  const totalTrees = orderedRootIds.length;
   await prisma.$transaction(
     async (tx) => {
-      await tx.$executeRaw`
-        UPDATE posts SET headnum = headnum + ${TEMP_OFFSET}
-        WHERE boardId = ${boardId}
-      `;
       for (let i = 0; i < totalTrees; i++) {
-        const oldH = orderedHeadnums[i];
-        const newH = -(totalTrees - i);
+        const rootId = orderedRootIds[i];
+        const newHeadnum = -(totalTrees - i);
+        const memberIds = membersByRoot.get(rootId)!;
         await tx.$executeRaw`
-          UPDATE posts SET headnum = ${newH}
-          WHERE boardId = ${boardId} AND headnum = ${oldH + TEMP_OFFSET}
+          UPDATE posts SET headnum = ${newHeadnum}
+          WHERE boardId = ${boardId} AND id IN (${Prisma.join(memberIds)})
         `;
       }
     },
-    { timeout: 120_000, maxWait: 10_000 }
+    { timeout: 180_000, maxWait: 10_000 }
   );
 
   return NextResponse.json({

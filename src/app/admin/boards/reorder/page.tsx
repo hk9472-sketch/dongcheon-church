@@ -9,11 +9,12 @@ interface Board {
 }
 
 interface Tree {
-  oldHeadnum: number;
+  rootId: number;
+  rootHeadnum: number;
+  rootSubject: string | null;
   treeOldest: string;
   treeNewest: string;
   treeCount: number;
-  rootSubject: string | null;
 }
 
 interface BoardData {
@@ -21,10 +22,11 @@ interface BoardData {
   boardTitle: string;
   totalTrees: number;
   totalPosts: number;
+  dupHeadnumCount: number;
   trees: Tree[];
 }
 
-type SortKey = "rootSubject" | "treeOldest" | "treeNewest" | "oldHeadnum" | "treeCount";
+type SortKey = "rootSubject" | "treeOldest" | "treeNewest" | "rootHeadnum" | "treeCount";
 type SortDir = "asc" | "desc";
 
 export default function BoardReorderPage() {
@@ -78,8 +80,8 @@ export default function BoardReorderPage() {
         case "treeNewest":
           cmp = new Date(a.treeNewest).getTime() - new Date(b.treeNewest).getTime();
           break;
-        case "oldHeadnum":
-          cmp = a.oldHeadnum - b.oldHeadnum;
+        case "rootHeadnum":
+          cmp = a.rootHeadnum - b.rootHeadnum;
           break;
         case "treeCount":
           cmp = a.treeCount - b.treeCount;
@@ -92,7 +94,7 @@ export default function BoardReorderPage() {
       ...t,
       rank: i + 1,
       newHeadnum: -(total - i),
-      changed: t.oldHeadnum !== -(total - i),
+      changed: t.rootHeadnum !== -(total - i),
     }));
   }, [data, sortKey, sortDir]);
 
@@ -130,11 +132,11 @@ export default function BoardReorderPage() {
     setExecuting(true);
     setMessage(null);
     try {
-      const orderedHeadnums = sortedTrees.map((t) => t.oldHeadnum);
+      const orderedRootIds = sortedTrees.map((t) => t.rootId);
       const res = await fetch(`/api/admin/boards/${boardId}/reorder-headnum`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderedHeadnums }),
+        body: JSON.stringify({ orderedRootIds }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.message || "실행 실패");
@@ -260,6 +262,15 @@ export default function BoardReorderPage() {
             </button>
           </div>
 
+          {data.dupHeadnumCount > 0 && (
+            <div className="px-4 py-3 bg-rose-50 border-b border-rose-200 text-sm text-rose-700">
+              ⚠ <strong>headnum 중복 감지</strong> — 게시판에 같은 headnum 을 가진 별개 트리가{" "}
+              <strong>{data.dupHeadnumCount}쌍</strong> 있습니다. 마이그레이션 사고 등으로 추정.
+              현재 도구는 <strong>root post id</strong> 로 트리를 분리해 안전하게 처리하니, 재정렬
+              실행 시 각 트리에 고유한 새 headnum 이 부여돼 중복이 자동 해소됩니다.
+            </div>
+          )}
+
           {changedCount === 0 && (
             <div className="px-4 py-3 bg-emerald-50 border-b border-emerald-200 text-sm text-emerald-700">
               현재 정렬 기준에선 모든 트리의 headnum 이 이미 정확한 위치에 있습니다 — 재정렬할
@@ -279,7 +290,7 @@ export default function BoardReorderPage() {
                   <SortHeader keyName="rootSubject" label="제목" />
                   <SortHeader keyName="treeOldest" label="작성일" />
                   <SortHeader keyName="treeNewest" label="최근활동" />
-                  <SortHeader keyName="oldHeadnum" label="현재 headnum" align="right" />
+                  <SortHeader keyName="rootHeadnum" label="현재 headnum" align="right" />
                   <th className="px-2 py-2 text-right text-gray-600 font-medium w-24">새 headnum</th>
                   <SortHeader keyName="treeCount" label="글 수" align="right" />
                 </tr>
@@ -287,7 +298,7 @@ export default function BoardReorderPage() {
               <tbody>
                 {sortedTrees.map((r) => (
                   <tr
-                    key={r.oldHeadnum}
+                    key={r.rootId}
                     className={`border-b border-gray-100 ${
                       r.changed ? "bg-amber-50" : ""
                     }`}
@@ -307,7 +318,7 @@ export default function BoardReorderPage() {
                       {fmtDate(r.treeNewest)}
                     </td>
                     <td className="px-2 py-1 text-right font-mono text-gray-500">
-                      {r.oldHeadnum}
+                      {r.rootHeadnum}
                     </td>
                     <td
                       className={`px-2 py-1 text-right font-mono font-bold ${
@@ -336,7 +347,7 @@ function labelOf(k: SortKey): string {
       return "작성일";
     case "treeNewest":
       return "최근활동";
-    case "oldHeadnum":
+    case "rootHeadnum":
       return "현재 headnum";
     case "treeCount":
       return "글 수";
