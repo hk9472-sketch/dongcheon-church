@@ -18,7 +18,6 @@ const SLUG_PRESETS = [
   { slug: "admin-dashboard", label: "관리자 - 대시보드" },
   { slug: "admin-boards", label: "관리자 - 게시판 관리" },
   { slug: "admin-boards-create", label: "관리자 - 게시판 생성" },
-  { slug: "admin-skins", label: "관리자 - 스킨 관리" },
   { slug: "admin-settings", label: "관리자 - 사이트 설정" },
   { slug: "admin-members", label: "관리자 - 회원 관리" },
   { slug: "admin-db", label: "관리자 - DB 관리" },
