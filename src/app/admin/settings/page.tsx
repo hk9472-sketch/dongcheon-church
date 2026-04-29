@@ -177,7 +177,7 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<"theme" | "skin" | "editor">("theme");
+  const [activeTab, setActiveTab] = useState<"theme" | "widget" | "write" | "editor" | "other">("theme");
   // 미리보기 ↔ 설정 필드 양방향 hover 매칭용 키
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
 
@@ -303,40 +303,27 @@ export default function AdminSettingsPage() {
       </div>
 
       {/* 탭 */}
-      <div className="flex border-b border-gray-200">
-        <button
-          type="button"
-          onClick={() => setActiveTab("theme")}
-          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "theme"
-              ? "border-blue-600 text-blue-700"
-              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-          }`}
-        >
-          사이트 색상
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("skin")}
-          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "skin"
-              ? "border-blue-600 text-blue-700"
-              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-          }`}
-        >
-          위젯/글쓰기 스킨
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("editor")}
-          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "editor"
-              ? "border-blue-600 text-blue-700"
-              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-          }`}
-        >
-          에디터
-        </button>
+      <div className="flex border-b border-gray-200 flex-wrap">
+        {[
+          { key: "theme", label: "사이트 색상" },
+          { key: "widget", label: "위젯" },
+          { key: "write", label: "글쓰기" },
+          { key: "editor", label: "에디터" },
+          { key: "other", label: "기타" },
+        ].map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setActiveTab(t.key as typeof activeTab)}
+            className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === t.key
+                ? "border-blue-600 text-blue-700"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {/* ==================== 사이트 색상 탭 ==================== */}
@@ -462,62 +449,14 @@ export default function AdminSettingsPage() {
             </div>
           </div>
 
-          {/* 미리보기 */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
-              <h2 className="text-sm font-semibold text-gray-700">미리보기</h2>
-            </div>
-            <div className="p-5 space-y-3">
-              <div>
-                <p className="text-xs text-gray-400 mb-1">메뉴바</p>
-                <div
-                  className="h-10 rounded-lg flex items-center px-4 gap-4"
-                  style={{ background: `linear-gradient(to right, ${values.theme_nav_from || "#1d4ed8"}, ${values.theme_nav_to || "#4338ca"})` }}
-                >
-                  {["공지사항", "자유게시판", "갤러리", "성경공부"].map((item) => (
-                    <span
-                      key={item}
-                      className="hover:text-white"
-                      style={{
-                        fontFamily: values.theme_nav_font || "inherit",
-                        fontSize: values.theme_nav_font_size || "14px",
-                        color: values.theme_nav_font_color || "#dbeafe",
-                      }}
-                    >
-                      {item}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-gray-400 mb-1">버튼</p>
-                <div className="flex gap-2">
-                  {["글쓰기", "로그인"].map((lbl) => (
-                    <button key={lbl} type="button" className="px-4 py-2 text-sm text-white rounded-lg" style={{ backgroundColor: values.theme_primary || "#2563eb" }}>
-                      {lbl}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-gray-400 mb-1">푸터</p>
-                <div
-                  className="h-12 rounded-lg flex items-center px-4"
-                  style={{ background: `linear-gradient(to right, ${values.theme_footer_from || "#2563eb"}, ${values.theme_footer_to || "#4338ca"})` }}
-                >
-                  <span className="text-sm text-blue-100">동천교회 · 부산광역시 동구 범일1동</span>
-                </div>
-              </div>
-            </div>
-          </div>
         </>
       )}
 
-      {/* ==================== 위젯/글쓰기 스킨 탭 ==================== */}
-      {activeTab === "skin" && (
+      {/* ==================== 위젯 탭 ==================== */}
+      {activeTab === "widget" && (
         <>
-          {/* 설정 섹션들 */}
-          {SKIN_SECTIONS.map((section) => (
+          {/* 위젯 관련 섹션만 (위젯 레이아웃 + 위젯 외관) */}
+          {SKIN_SECTIONS.filter((s) => s.title.includes("위젯")).map((section) => (
             <div key={section.title} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
               <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
                 <h2 className="text-sm font-semibold text-gray-700">{section.title}</h2>
@@ -730,147 +669,65 @@ export default function AdminSettingsPage() {
             </div>
           </div>
 
-          {/* 위젯 미리보기 */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
-              <h2 className="text-sm font-semibold text-gray-700">위젯 미리보기</h2>
-            </div>
-            <div className="p-5">
-              <div
-                className="rounded-lg overflow-hidden max-w-sm"
-                style={{
-                  border: `${sv("skin_widget_border_width")}px solid ${sv("skin_widget_border_color")}`,
-                  height: sv("skin_widget_height") || "12rem",
-                }}
-              >
-                {/* 위젯 헤더 */}
-                <div
-                  className="flex items-center justify-between px-4"
-                  style={{
-                    backgroundColor: sv("skin_widget_header_bg"),
-                    borderBottom: `${sv("skin_widget_divider_width")}px solid ${sv("skin_widget_divider_color")}`,
-                    padding: sv("skin_widget_header_padding") || "4px 0",
-                    paddingLeft: "1rem",
-                    paddingRight: "1rem",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontFamily: sv("skin_widget_name_font") || "inherit",
-                      fontSize: sv("skin_widget_name_size"),
-                      color: sv("skin_widget_name_color"),
-                      fontWeight: sv("skin_widget_name_weight") || "bold",
-                      textDecoration: sv("skin_widget_name_decoration") || "none",
-                      fontStyle: sv("skin_widget_name_style") || "normal",
-                    }}
-                  >
-                    행정실
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: sv("skin_widget_more_font") || "inherit",
-                      fontSize: sv("skin_widget_more_size"),
-                      color: sv("skin_widget_more_color"),
-                      fontWeight: sv("skin_widget_more_weight") || "normal",
-                      textDecoration: sv("skin_widget_more_decoration") || "none",
-                      fontStyle: sv("skin_widget_more_style") || "normal",
-                    }}
-                  >
-                    더보기 &rsaquo;
-                  </span>
-                </div>
-                {/* 위젯 게시글 목록 */}
-                {[
-                  { date: "03/01", title: "교회 총회 안내", author: "관리자" },
-                  { date: "02/28", title: "주일학교 일정 변경", author: "교육부" },
-                  { date: "02/27", title: "성경공부 자료 공유", author: "연구실" },
-                  { date: "02/26", title: "찬양대 모집", author: "찬양대" },
-                  { date: "02/25", title: "교회 청소 봉사", author: "봉사부" },
-                ].map((item, i) => (
+        </>
+      )}
+
+      {/* ==================== 글쓰기 탭 ==================== */}
+      {activeTab === "write" && (
+        <>
+          {SKIN_SECTIONS.filter((s) => s.title.includes("글쓰기")).map((section) => (
+            <div key={section.title} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+                <h2 className="text-sm font-semibold text-gray-700">{section.title}</h2>
+              </div>
+              <div className="p-5 space-y-4">
+                {section.fields.map((field) => (
                   <div
-                    key={i}
-                    className="px-4 py-1 border-b border-gray-100 last:border-b-0 flex items-center gap-2"
+                    key={field.key}
+                    onMouseEnter={() => setHighlightKey(field.key)}
+                    onMouseLeave={() => setHighlightKey(null)}
+                    className={`flex items-center gap-4 px-2 py-1 rounded transition-colors ${
+                      highlightKey === field.key ? "bg-amber-50 ring-1 ring-amber-300" : ""
+                    }`}
                   >
-                    <span
-                      className="flex-shrink-0 font-mono"
-                      style={{
-                        fontFamily: sv("skin_widget_date_font") || "inherit",
-                        fontSize: sv("skin_widget_date_size"),
-                        color: sv("skin_widget_date_color"),
-                        fontWeight: sv("skin_widget_date_weight") || "normal",
-                        textDecoration: sv("skin_widget_date_decoration") || "none",
-                        fontStyle: sv("skin_widget_date_style") || "normal",
-                      }}
-                    >
-                      {item.date}
-                    </span>
-                    <span
-                      className="truncate flex-1"
-                      style={{
-                        fontFamily: sv("skin_widget_post_font") || "inherit",
-                        fontSize: sv("skin_widget_post_size"),
-                        color: sv("skin_widget_post_color"),
-                        fontWeight: sv("skin_widget_post_weight") || "normal",
-                        textDecoration: sv("skin_widget_post_decoration") || "none",
-                        fontStyle: sv("skin_widget_post_style") || "normal",
-                      }}
-                    >
-                      {item.title}
-                    </span>
-                    <span
-                      className="flex-shrink-0"
-                      style={{
-                        fontFamily: sv("skin_widget_author_font") || "inherit",
-                        fontSize: sv("skin_widget_author_size"),
-                        color: sv("skin_widget_author_color"),
-                        fontWeight: sv("skin_widget_author_weight") || "normal",
-                        textDecoration: sv("skin_widget_author_decoration") || "none",
-                        fontStyle: sv("skin_widget_author_style") || "normal",
-                      }}
-                    >
-                      [{item.author}]
-                    </span>
+                    <label className="w-36 shrink-0 text-sm font-medium text-gray-700">
+                      {field.label}
+                    </label>
+                    {field.type === "color" && (
+                      <div className="flex items-center gap-3">
+                        <input type="color" value={sv(field.key) || "#000000"} onChange={(e) => handleChange(field.key, e.target.value)} className="w-10 h-10 rounded cursor-pointer border border-gray-300" />
+                        <input type="text" value={sv(field.key)} onChange={(e) => handleChange(field.key, e.target.value)} className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded-lg font-mono" placeholder="#000000" />
+                        <ResetBtn fieldKey={field.key} />
+                      </div>
+                    )}
+                    {field.type === "font" && (
+                      <div className="flex items-center gap-3">
+                        <select value={sv(field.key)} onChange={(e) => handleChange(field.key, e.target.value)} className="w-52 px-3 py-1.5 text-sm border border-gray-300 rounded-lg">
+                          {FONT_OPTIONS.map((f) => (
+                            <option key={f.value} value={f.value} style={{ fontFamily: f.value || "inherit" }}>{f.label}</option>
+                          ))}
+                        </select>
+                        <ResetBtn fieldKey={field.key} />
+                      </div>
+                    )}
+                    {field.type === "size" && (
+                      <div className="flex items-center gap-2">
+                        <input type="text" value={sv(field.key)} onChange={(e) => handleChange(field.key, e.target.value)} className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded-lg font-mono" placeholder={SKIN_DEFAULTS[field.key] || "14px"} />
+                        <span className="text-xs text-gray-400">예: 12px, 14px, 16px</span>
+                        <ResetBtn fieldKey={field.key} />
+                      </div>
+                    )}
+                    {field.type === "number" && (
+                      <div className="flex items-center gap-3">
+                        <input type="number" min={0} max={10} value={sv(field.key)} onChange={(e) => handleChange(field.key, e.target.value)} className="w-20 px-3 py-1.5 text-sm border border-gray-300 rounded-lg" />
+                        <ResetBtn fieldKey={field.key} />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
-          </div>
-
-          {/* 글쓰기 페이지 미리보기 */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
-              <h2 className="text-sm font-semibold text-gray-700">글쓰기 페이지 미리보기</h2>
-            </div>
-            <div className="p-5">
-              <div
-                className="rounded-lg p-4 max-w-sm"
-                style={{ border: `1px solid ${sv("skin_write_border_color")}` }}
-              >
-                <div
-                  style={{
-                    fontFamily: sv("skin_write_font") || "inherit",
-                    fontSize: sv("skin_write_font_size"),
-                    color: sv("skin_write_font_color"),
-                  }}
-                >
-                  <div className="mb-2 font-medium">제목</div>
-                  <div
-                    className="rounded px-3 py-2 mb-3"
-                    style={{ border: `1px solid ${sv("skin_write_border_color")}` }}
-                  >
-                    게시글 제목 입력
-                  </div>
-                  <div className="mb-2 font-medium">내용</div>
-                  <div
-                    className="rounded px-3 py-2 h-20"
-                    style={{ border: `1px solid ${sv("skin_write_border_color")}` }}
-                  >
-                    본문 내용을 입력합니다...
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          ))}
         </>
       )}
 
@@ -880,6 +737,14 @@ export default function AdminSettingsPage() {
           value={values.editor_fonts ?? "[]"}
           onChange={(v) => handleChange("editor_fonts", v)}
         />
+      )}
+
+      {/* ==================== 기타 탭 ==================== */}
+      {activeTab === "other" && (
+        <div className="space-y-4">
+          <MediaBaseUrlSetting />
+          <MediaFtpSetting />
+        </div>
       )}
 
       {/* 공통: 메시지 + 저장/초기화 버튼 */}
@@ -904,12 +769,6 @@ export default function AdminSettingsPage() {
         </button>
       </div>
 
-      {/* 기타 설정 — 탭 무관하게 항상 표시 */}
-      <div className="pt-6 border-t border-gray-200 space-y-4">
-        <h2 className="text-sm font-bold text-gray-700">기타 설정</h2>
-        <MediaBaseUrlSetting />
-        <MediaFtpSetting />
-      </div>
     </div>
   );
 }

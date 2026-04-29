@@ -12,7 +12,7 @@
 import React from "react";
 
 interface Props {
-  type: "theme" | "skin" | "editor";
+  type: "theme" | "widget" | "write" | "editor" | "other";
   highlightKey: string | null;
   onRegionHover?: (key: string | null) => void;
   values: Record<string, string>;
@@ -147,18 +147,12 @@ export default function SettingsPreview({ type, highlightKey, onRegionHover, val
     );
   }
 
-  if (type === "skin") {
-    // 위젯 미니어처 + 글쓰기 영역 미니어처
+  if (type === "widget") {
     const borderColor = v("skin_widget_border_color", "#d1d5db");
     const borderWidth = px("skin_widget_border_width", "2");
     const dividerColor = v("skin_widget_divider_color", "#d1d5db");
     const dividerWidth = px("skin_widget_divider_width", "2");
     const headerBg = v("skin_widget_header_bg", "#eff6ff");
-
-    const writeBorder = v("skin_write_border_color", "#d1d5db");
-    const writeFont = v("skin_write_font", "");
-    const writeFontSize = v("skin_write_font_size", "14px");
-    const writeFontColor = v("skin_write_font_color", "#1f2937");
 
     const sample = [
       { date: "04/29", subject: "주일 예배 안내", author: "관리자" },
@@ -169,8 +163,6 @@ export default function SettingsPreview({ type, highlightKey, onRegionHover, val
 
     return (
       <div className="space-y-3">
-        {/* 위젯 미리보기 */}
-        <div className="text-xs font-medium text-gray-500">위젯 (메인 페이지)</div>
         <Region
           fieldKey="skin_widget_border_color"
           match={["skin_widget_border_width"]}
@@ -324,40 +316,56 @@ export default function SettingsPreview({ type, highlightKey, onRegionHover, val
           </ul>
         </Region>
 
-        {/* 글쓰기 미리보기 */}
-        <div className="text-xs font-medium text-gray-500 mt-4">글쓰기 페이지</div>
-        <Region
-          fieldKey="skin_write_border_color"
-          match={["skin_write_font", "skin_write_font_size", "skin_write_font_color"]}
-          highlightKey={highlightKey}
-          onRegionHover={onRegionHover}
-          className="bg-white rounded-lg p-3 inline-block w-full max-w-md"
-          style={{ border: `1px solid ${writeBorder}` }}
-        >
-          <input
-            value="글 제목"
-            readOnly
-            className="w-full px-2 py-1.5 mb-2 rounded outline-none"
-            style={{
-              border: `1px solid ${writeBorder}`,
-              fontFamily: writeFont || "inherit",
-              fontSize: writeFontSize,
-              color: writeFontColor,
-            }}
-          />
-          <textarea
-            value="본문이 여기에 표시됩니다.&#10;글꼴/크기/색상 설정이 적용된 미리보기입니다."
-            readOnly
-            rows={3}
-            className="w-full px-2 py-1.5 rounded outline-none resize-none"
-            style={{
-              border: `1px solid ${writeBorder}`,
-              fontFamily: writeFont || "inherit",
-              fontSize: writeFontSize,
-              color: writeFontColor,
-            }}
-          />
-        </Region>
+      </div>
+    );
+  }
+
+  if (type === "write") {
+    const writeBorder = v("skin_write_border_color", "#d1d5db");
+    const writeFont = v("skin_write_font", "");
+    const writeFontSize = v("skin_write_font_size", "14px");
+    const writeFontColor = v("skin_write_font_color", "#1f2937");
+
+    return (
+      <Region
+        fieldKey="skin_write_border_color"
+        match={["skin_write_font", "skin_write_font_size", "skin_write_font_color"]}
+        highlightKey={highlightKey}
+        onRegionHover={onRegionHover}
+        className="bg-white rounded-lg p-3 inline-block w-full max-w-md"
+        style={{ border: `1px solid ${writeBorder}` }}
+      >
+        <input
+          value="글 제목"
+          readOnly
+          className="w-full px-2 py-1.5 mb-2 rounded outline-none"
+          style={{
+            border: `1px solid ${writeBorder}`,
+            fontFamily: writeFont || "inherit",
+            fontSize: writeFontSize,
+            color: writeFontColor,
+          }}
+        />
+        <textarea
+          value="본문이 여기에 표시됩니다.&#10;글꼴/크기/색상 설정이 적용된 미리보기입니다."
+          readOnly
+          rows={3}
+          className="w-full px-2 py-1.5 rounded outline-none resize-none"
+          style={{
+            border: `1px solid ${writeBorder}`,
+            fontFamily: writeFont || "inherit",
+            fontSize: writeFontSize,
+            color: writeFontColor,
+          }}
+        />
+      </Region>
+    );
+  }
+
+  if (type === "other") {
+    return (
+      <div className="text-xs text-gray-500 italic">
+        외부 미디어 서버·기타 인프라 설정 — 시각 미리보기 없음.
       </div>
     );
   }
