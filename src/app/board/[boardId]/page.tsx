@@ -150,6 +150,7 @@ export default async function BoardListPage({ params, searchParams }: PageProps)
       subject: p.subject,
       authorName: p.authorName,
       createdAt: p.createdAt.toISOString(),
+      updatedAt: p.updatedAt.toISOString(),
       hit: p.hit,
       vote: p.vote,
       totalComment: p.totalComment,

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import prisma from "@/lib/db";
 import { sanitizeHtml } from "@/lib/sanitize";
 import FloppyIcon from "@/components/icons/FloppyIcon";
+import PostBadge from "@/components/board/PostBadge";
 
 
 // 게시판별 아이콘 매핑 (기본값: 📋)
@@ -528,31 +529,6 @@ function BoardWidget({ board, rows }: {
   );
 }
 
-/* New / Update 뱃지 */
-function PostBadge({ createdAt, updatedAt }: { createdAt: Date; updatedAt: Date }) {
-  const now = Date.now();
-  const created = new Date(createdAt).getTime();
-  const updated = new Date(updatedAt).getTime();
-  const isUpdated = updated - created > 60000; // 작성 후 1분 이상 차이나면 수정된 글
-  const isNew = now - created < FIVE_DAYS_MS;
-  const isRecentUpdate = isUpdated && now - updated < FIVE_DAYS_MS;
-
-  if (isRecentUpdate) {
-    return (
-      <span className="inline-block ml-1.5 px-1 py-px text-[9px] font-bold leading-none text-white bg-orange-500 rounded shadow-sm align-middle">
-        U
-      </span>
-    );
-  }
-  if (isNew) {
-    return (
-      <span className="inline-block ml-1.5 px-1 py-px text-[9px] font-bold leading-none text-white bg-red-500 rounded shadow-sm align-middle">
-        N
-      </span>
-    );
-  }
-  return null;
-}
 
 /* 새글/수정글 위젯 */
 function RecentPostsWidget({ posts, rows }: { posts: RecentPost[]; rows: number }) {

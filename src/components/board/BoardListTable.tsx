@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import FloppyIcon from "@/components/icons/FloppyIcon";
+import PostBadge from "@/components/board/PostBadge";
 
 interface PostItem {
   id: number;
   subject: string;
   authorName: string | null;
   createdAt: string; // ISO string
+  updatedAt: string; // ISO string
   hit: number;
   vote: number;
   totalComment: number;
@@ -228,6 +230,7 @@ export default function BoardListTable({
                       <span className="text-xs text-blue-600 font-normal mr-1.5">[{post.categoryName}]</span>
                     )}
                     {post.subject}
+                    <PostBadge createdAt={post.createdAt} updatedAt={post.updatedAt} />
                     {post.totalComment > 0 && (
                       <span
                         className={`ml-1.5 text-xs font-bold ${
@@ -291,6 +294,7 @@ export default function BoardListTable({
                           <span className="text-xs text-blue-600 mr-1.5">[{post.categoryName}]</span>
                         )}
                         {subjectText}
+                        <PostBadge createdAt={post.createdAt} updatedAt={post.updatedAt} />
                         {post.totalComment > 0 && (
                           <span
                             className={`ml-1.5 text-xs font-bold ${
