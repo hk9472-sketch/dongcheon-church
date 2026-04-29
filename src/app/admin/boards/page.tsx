@@ -33,7 +33,6 @@ export default async function AdminBoardsPage() {
               <th className="py-2.5 px-4 text-left font-medium">ID</th>
               <th className="py-2.5 px-4 text-left font-medium">게시판명</th>
               <th className="py-2.5 px-4 text-center font-medium">유형</th>
-              <th className="py-2.5 px-4 text-center font-medium">스킨</th>
               <th className="py-2.5 px-4 text-center font-medium">그룹</th>
               <th className="py-2.5 px-4 text-center font-medium">글 수</th>
               <th className="py-2.5 px-4 text-center font-medium">생성일</th>
@@ -53,9 +52,6 @@ export default async function AdminBoardsPage() {
                   <span className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-600">
                     {b.boardType}
                   </span>
-                </td>
-                <td className="py-2.5 px-4 text-center text-xs text-gray-500">
-                  {b.skinName || "기본"}
                 </td>
                 <td className="py-2.5 px-4 text-center text-xs text-gray-500">
                   {b.group.name}

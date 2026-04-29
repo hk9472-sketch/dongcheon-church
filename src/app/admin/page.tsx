@@ -14,7 +14,7 @@ export default async function AdminDashboard() {
   const recentBoards = await prisma.board.findMany({
     orderBy: { createdAt: "desc" },
     take: 10,
-    select: { id: true, slug: true, title: true, boardType: true, totalPosts: true, skinName: true, createdAt: true },
+    select: { id: true, slug: true, title: true, boardType: true, totalPosts: true, createdAt: true },
   });
 
   const stats = [
@@ -68,7 +68,6 @@ export default async function AdminDashboard() {
               <th className="py-2 px-4 text-left font-medium">ID (slug)</th>
               <th className="py-2 px-4 text-left font-medium">제목</th>
               <th className="py-2 px-4 text-center font-medium">유형</th>
-              <th className="py-2 px-4 text-center font-medium">스킨</th>
               <th className="py-2 px-4 text-center font-medium">글 수</th>
               <th className="py-2 px-4 text-center font-medium">관리</th>
             </tr>
@@ -82,9 +81,6 @@ export default async function AdminDashboard() {
                   <span className="inline-block px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-600">
                     {b.boardType}
                   </span>
-                </td>
-                <td className="py-2 px-4 text-center text-xs text-gray-500">
-                  {b.skinName || "기본"}
                 </td>
                 <td className="py-2 px-4 text-center text-gray-600">{b.totalPosts}</td>
                 <td className="py-2 px-4 text-center">

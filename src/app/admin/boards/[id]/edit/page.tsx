@@ -2,8 +2,6 @@
 
 import { useRouter, useParams } from "next/navigation";
 import { useState, useEffect } from "react";
-import { SKINS, getSkinTypeLabel } from "@/lib/skins";
-import type { SkinConfig } from "@/lib/skins";
 
 export default function AdminBoardEditPage() {
   const router = useRouter();
@@ -14,7 +12,6 @@ export default function AdminBoardEditPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [selectedSkin, setSelectedSkin] = useState<SkinConfig | null>(null);
   const [form, setForm] = useState<Record<string, unknown>>({});
   const [categoryList, setCategoryList] = useState<{ id?: number; name: string }[]>([]);
   const [newCategory, setNewCategory] = useState("");
@@ -24,10 +21,6 @@ export default function AdminBoardEditPage() {
       .then((r) => r.json())
       .then((data) => {
         setForm(data);
-        if (data.skinName) {
-          const skin = SKINS.find((s) => s.id === data.skinName);
-          if (skin) setSelectedSkin(skin);
-        }
         if (data.categories && Array.isArray(data.categories)) {
           setCategoryList(data.categories.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })));
         }
@@ -45,11 +38,6 @@ export default function AdminBoardEditPage() {
     } else {
       setForm({ ...form, [name]: value });
     }
-  }
-
-  function selectSkin(skin: SkinConfig | null) {
-    setSelectedSkin(skin);
-    setForm({ ...form, skinName: skin?.id || "" });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -185,31 +173,6 @@ export default function AdminBoardEditPage() {
                 className="rounded border-gray-300 text-orange-600" />
               로그인 시에만 표시
             </label>
-          </div>
-        </section>
-
-        {/* 스킨 변경 */}
-        <section className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-            <h2 className="text-sm font-bold text-gray-700">
-              스킨: {selectedSkin ? selectedSkin.name : "기본"}
-            </h2>
-          </div>
-          <div className="p-4 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-            <button type="button" onClick={() => selectSkin(null)}
-              className={`p-2 rounded border-2 text-center text-xs ${!selectedSkin ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"}`}>
-              기본
-            </button>
-            {SKINS.map((skin) => (
-              <button key={skin.id} type="button" onClick={() => selectSkin(skin)}
-                className={`p-2 rounded border-2 text-center transition-all ${selectedSkin?.id === skin.id ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"}`}>
-                <div className="w-full h-6 rounded mb-1 flex">
-                  <div className="flex-1" style={{ backgroundColor: skin.styles.headerBg }} />
-                  <div className="flex-1" style={{ backgroundColor: skin.styles.primaryColor }} />
-                </div>
-                <p className="text-xs text-gray-700 truncate">{skin.name}</p>
-              </button>
-            ))}
           </div>
         </section>
 

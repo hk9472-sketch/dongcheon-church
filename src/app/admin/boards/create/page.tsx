@@ -2,8 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { SKINS, getSkinTypeLabel } from "@/lib/skins";
-import type { SkinConfig } from "@/lib/skins";
 import HelpButton from "@/components/HelpButton";
 
 type BoardType = "BBS" | "GALLERY" | "DOWNLOAD" | "MUSIC" | "VOTE";
@@ -12,8 +10,6 @@ export default function AdminBoardCreatePage() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [selectedSkin, setSelectedSkin] = useState<SkinConfig | null>(null);
-  const [skinFilter, setSkinFilter] = useState<string>("all");
   const [categoryList, setCategoryList] = useState<string[]>([]);
   const [newCategory, setNewCategory] = useState("");
 
@@ -21,7 +17,6 @@ export default function AdminBoardCreatePage() {
     slug: "",
     title: "",
     boardType: "BBS" as BoardType,
-    skinName: "",
     postsPerPage: 15,
     pagesPerBlock: 8,
     useCategory: false,
@@ -58,16 +53,6 @@ export default function AdminBoardCreatePage() {
       setForm({ ...form, [name]: value });
     }
   }
-
-  function selectSkin(skin: SkinConfig) {
-    setSelectedSkin(skin);
-    setForm({ ...form, skinName: skin.id });
-  }
-
-  // 스킨 필터링
-  const filteredSkins = skinFilter === "all"
-    ? SKINS
-    : SKINS.filter((s) => s.type === skinFilter);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -252,136 +237,6 @@ export default function AdminBoardCreatePage() {
           </div>
         </section>
 
-        {/* 스킨 선택 */}
-        <section className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-gray-700">
-              스킨 선택
-              {selectedSkin && (
-                <span className="ml-2 font-normal text-blue-600">
-                  — {selectedSkin.name}
-                </span>
-              )}
-            </h2>
-            <div className="flex gap-1">
-              {[
-                { value: "all", label: "전체" },
-                { value: "bbs", label: "BBS" },
-                { value: "gallery", label: "갤러리" },
-                { value: "music", label: "음악" },
-                { value: "download", label: "자료실" },
-                { value: "vote", label: "투표" },
-                { value: "web", label: "웹진" },
-              ].map((f) => (
-                <button
-                  key={f.value}
-                  type="button"
-                  onClick={() => setSkinFilter(f.value)}
-                  className={`px-2 py-0.5 text-xs rounded transition-colors ${
-                    skinFilter === f.value
-                      ? "bg-gray-700 text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="p-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {/* 기본 (스킨 없음) */}
-              <button
-                type="button"
-                onClick={() => { setSelectedSkin(null); setForm({ ...form, skinName: "" }); }}
-                className={`text-left p-3 rounded-lg border-2 transition-all ${
-                  !selectedSkin
-                    ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200"
-                    : "border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                <div className="w-full h-16 rounded bg-gray-100 flex items-center justify-center text-gray-400 text-xs mb-2">
-                  기본 스킨
-                </div>
-                <p className="text-sm font-medium text-gray-800">기본</p>
-                <p className="text-xs text-gray-500">Tailwind 기본 디자인</p>
-              </button>
-
-              {/* 스킨 목록 */}
-              {filteredSkins.map((skin) => (
-                <button
-                  key={skin.id}
-                  type="button"
-                  onClick={() => selectSkin(skin)}
-                  className={`text-left p-3 rounded-lg border-2 transition-all ${
-                    selectedSkin?.id === skin.id
-                      ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  {/* 색상 프리뷰 */}
-                  <div className="w-full h-16 rounded overflow-hidden mb-2 flex flex-col">
-                    <div
-                      className="h-4"
-                      style={{ backgroundColor: skin.styles.headerBg }}
-                    />
-                    <div
-                      className="flex-1 flex items-center justify-center"
-                      style={{ backgroundColor: skin.styles.bgColor }}
-                    >
-                      <div className="flex gap-1">
-                        <div className="w-6 h-1.5 rounded" style={{ backgroundColor: skin.styles.primaryColor }} />
-                        <div className="w-8 h-1.5 rounded" style={{ backgroundColor: skin.styles.borderColor }} />
-                        <div className="w-5 h-1.5 rounded" style={{ backgroundColor: skin.styles.accentColor }} />
-                      </div>
-                    </div>
-                    <div
-                      className="h-1"
-                      style={{ backgroundColor: skin.styles.borderColor }}
-                    />
-                  </div>
-                  <p className="text-sm font-medium text-gray-800 truncate">{skin.name}</p>
-                  <p className="text-xs text-gray-500 truncate">{getSkinTypeLabel(skin.type)}</p>
-                </button>
-              ))}
-            </div>
-
-            {/* 선택된 스킨 상세 */}
-            {selectedSkin && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="font-medium text-gray-800">{selectedSkin.name}</h3>
-                    <p className="text-sm text-gray-600 mt-1">{selectedSkin.description}</p>
-                    <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-                      <span>제작자: {selectedSkin.author}</span>
-                      <span>유형: {getSkinTypeLabel(selectedSkin.type)}</span>
-                      <span>ID: {selectedSkin.id}</span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="text-xs text-gray-500">지원 게시판:</span>
-                      {selectedSkin.supportedBoards.map((t) => (
-                        <span key={t} className="px-1.5 py-0.5 text-xs bg-gray-200 text-gray-600 rounded">
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex gap-1.5 shrink-0">
-                    {Object.entries(selectedSkin.styles).slice(0, 6).map(([key, val]) => (
-                      <div
-                        key={key}
-                        className="w-6 h-6 rounded border border-gray-300"
-                        style={{ backgroundColor: val as string }}
-                        title={`${key}: ${val}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
 
         {/* 기능 설정 */}
         <section className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
