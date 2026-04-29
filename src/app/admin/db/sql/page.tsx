@@ -770,27 +770,113 @@ export default function SqlManagementPage() {
                       </div>
                     )}
 
-                    {/* 페이지네이션 */}
+                    {/* 페이지네이션 — 1·끝 항상 표시 + 10페이지 단위 점프 */}
                     {dataTotalPages > 1 && (
-                      <div className="flex items-center justify-center gap-1 py-3 border-t border-gray-100">
-                        {dataPage > 1 && (
-                          <button onClick={() => selectedTable && loadData(selectedTable, dataPage - 1, dataLimit)}
-                            className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700">&lt;</button>
-                        )}
-                        {Array.from({ length: Math.min(9, dataTotalPages) }, (_, i) => {
-                          const start = Math.max(1, Math.min(dataPage - 4, dataTotalPages - 8));
-                          return start + i;
-                        }).filter((p) => p <= dataTotalPages).map((p) => (
+                      <div className="flex items-center justify-center gap-1 py-3 border-t border-gray-100 flex-wrap">
+                        {/* 첫 페이지 */}
+                        <button
+                          onClick={() => selectedTable && loadData(selectedTable, 1, dataLimit)}
+                          disabled={dataPage === 1}
+                          title="첫 페이지"
+                          className={`px-2 py-1 text-xs rounded font-mono ${
+                            dataPage === 1 ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+                          }`}
+                        >
+                          1
+                        </button>
+                        {dataPage > 6 && <span className="px-1 text-xs text-gray-400">…</span>}
+
+                        {/* -10 점프 */}
+                        {dataPage > 10 && (
                           <button
-                            key={p}
-                            onClick={() => selectedTable && loadData(selectedTable, p, dataLimit)}
-                            className={`px-2 py-1 text-xs rounded ${p === dataPage ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-gray-100"}`}
-                          >{p}</button>
-                        ))}
-                        {dataPage < dataTotalPages && (
-                          <button onClick={() => selectedTable && loadData(selectedTable, dataPage + 1, dataLimit)}
-                            className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700">&gt;</button>
+                            onClick={() => selectedTable && loadData(selectedTable, Math.max(1, dataPage - 10), dataLimit)}
+                            title="10페이지 앞"
+                            className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded"
+                          >
+                            «
+                          </button>
                         )}
+                        {/* -1 */}
+                        {dataPage > 1 && (
+                          <button
+                            onClick={() => selectedTable && loadData(selectedTable, dataPage - 1, dataLimit)}
+                            title="이전"
+                            className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded"
+                          >
+                            ‹
+                          </button>
+                        )}
+
+                        {/* 가운데 페이지 (현재 ±2) — 1, 끝 제외 */}
+                        {Array.from({ length: 5 }, (_, i) => dataPage - 2 + i)
+                          .filter((p) => p > 1 && p < dataTotalPages)
+                          .map((p) => (
+                            <button
+                              key={p}
+                              onClick={() => selectedTable && loadData(selectedTable, p, dataLimit)}
+                              className={`px-2 py-1 text-xs rounded font-mono ${
+                                p === dataPage ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-gray-100"
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          ))}
+
+                        {/* +1 */}
+                        {dataPage < dataTotalPages && (
+                          <button
+                            onClick={() => selectedTable && loadData(selectedTable, dataPage + 1, dataLimit)}
+                            title="다음"
+                            className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded"
+                          >
+                            ›
+                          </button>
+                        )}
+                        {/* +10 점프 */}
+                        {dataPage <= dataTotalPages - 10 && (
+                          <button
+                            onClick={() => selectedTable && loadData(selectedTable, Math.min(dataTotalPages, dataPage + 10), dataLimit)}
+                            title="10페이지 뒤"
+                            className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded"
+                          >
+                            »
+                          </button>
+                        )}
+
+                        {dataPage < dataTotalPages - 5 && (
+                          <span className="px-1 text-xs text-gray-400">…</span>
+                        )}
+                        {/* 마지막 페이지 */}
+                        {dataTotalPages > 1 && (
+                          <button
+                            onClick={() => selectedTable && loadData(selectedTable, dataTotalPages, dataLimit)}
+                            title="마지막 페이지"
+                            className={`px-2 py-1 text-xs rounded font-mono ${
+                              dataPage === dataTotalPages ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-gray-100"
+                            }`}
+                          >
+                            {dataTotalPages}
+                          </button>
+                        )}
+
+                        {/* 페이지 직접 이동 입력 */}
+                        <span className="ml-2 text-xs text-gray-500">이동</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={dataTotalPages}
+                          defaultValue={dataPage}
+                          key={dataPage}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              const v = Number((e.target as HTMLInputElement).value);
+                              if (Number.isFinite(v) && v >= 1 && v <= dataTotalPages && selectedTable) {
+                                loadData(selectedTable, v, dataLimit);
+                              }
+                            }
+                          }}
+                          className="w-14 px-1.5 py-0.5 text-xs border border-gray-300 rounded text-right font-mono"
+                        />
                       </div>
                     )}
                   </div>
