@@ -985,6 +985,27 @@ export default function SqlManagementPage() {
                       </div>
                     )}
 
+                    {/* 새 SQL 콘솔 팝업 — 별도 창에서 다중 탭으로 자유 테스트 */}
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          window.open(
+                            "/sql-console",
+                            "sql-console-" + Date.now(),
+                            "width=1100,height=720,resizable=yes,scrollbars=yes"
+                          )
+                        }
+                        className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 inline-flex items-center gap-1"
+                        title="새 창에서 SQL 콘솔 열기 (다중 탭 지원)"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                        새 콘솔 창 열기
+                      </button>
+                    </div>
+
                     {/* 쿼리 입력 */}
                     <div>
                       <textarea
