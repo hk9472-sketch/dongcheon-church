@@ -22,6 +22,15 @@ export default function VisitorTracker() {
       /^\/_next\//,
       /^\/favicon/,
       /^\/uploads\//,
+      // 봇 공격 path — 우리 앱에 없는 경로 → 100% 봇 (방문자 카운트 뻥튀기 방지)
+      /\.(php|asp|aspx|jsp|cgi|pl|sh|env|git|sql|bak)(\/|\?|$)/i,
+      /^\/wp-/i,
+      /^\/xmlrpc/i,
+      /^\/phpmyadmin/i,
+      /^\/\.env/i,
+      /^\/\.git/i,
+      /^\/admin\/setup/i,
+      /^\/cgi-bin/i,
     ];
 
     const skipExtensions = [

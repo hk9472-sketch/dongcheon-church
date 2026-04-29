@@ -13,6 +13,19 @@ function isBot(userAgent: string | null | undefined): boolean {
 }
 
 // ============================================================
+// 봇 공격 path 필터 — 우리 앱엔 PHP 가 없는데 .php 경로를 찌르는 건 100% 봇.
+// stealth Chromium 처럼 UA 를 위장한 봇이 JS 까지 실행해 POST 까지 보내는 경우
+// path 로 한 번 더 거름.
+// ============================================================
+const ATTACK_PATH_PATTERN =
+  /\.(php|asp|aspx|jsp|cgi|pl|sh|env|git|sql|bak)(\/|\?|$)|\/wp-|\/xmlrpc|\/phpmyadmin|\/\.env|\/\.git|\/admin\/setup|\/cgi-bin/i;
+
+function isAttackPath(path: string | null | undefined): boolean {
+  if (!path) return false;
+  return ATTACK_PATH_PATTERN.test(path);
+}
+
+// ============================================================
 // 한국 시간(KST, UTC+9) 기준 오늘/어제 날짜 계산
 // KST 자정 = UTC 전날 15:00 (UTC+9 보정)
 // ============================================================
@@ -131,9 +144,14 @@ export async function POST(request: NextRequest) {
       userId?: number;
     };
 
-    // 봇/크롤러 필터링
+    // 봇/크롤러 필터링 (UA 기반)
     if (isBot(userAgent)) {
       return NextResponse.json({ skipped: true, reason: "bot" });
+    }
+
+    // 봇 공격 path 필터링 (stealth Chromium 등 UA 위장 봇 우회용)
+    if (isAttackPath(path)) {
+      return NextResponse.json({ skipped: true, reason: "attack-path" });
     }
 
     // IP는 서버 헤더에서 추출
