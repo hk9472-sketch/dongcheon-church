@@ -1228,259 +1228,30 @@ export default function ReadingPage() {
                 </div>
               )}
 
-              {/* 오디오 플레이어 */}
+
+              {/* 듣기는 팝업 창에서 */}
               {selected.audioPath && (
-                <div className="sticky top-0 z-10 bg-white border-b shadow-sm p-3">
-                  <audio
-                    ref={audioRef}
-                    src={audioSrc || undefined}
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
-                    onTimeUpdate={handleTimeUpdate}
-                    onLoadedMetadata={handleLoadedMetadata}
-                    onEnded={() => { setIsPlaying(false); setActiveLine(null); }}
-                    onError={() => setAudioError(true)}
-                    preload="metadata"
-                  />
-
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
-                      {!isPlaying ? (
-                        <button onClick={handlePlay} disabled={audioError} className="flex items-center gap-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                          재생
-                        </button>
-                      ) : (
-                        <button onClick={handlePause} className="flex items-center gap-1 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 text-sm font-medium">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
-                          일시정지
-                        </button>
-                      )}
-                      {selected && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const startLine = activeLine ?? 0;
-                            window.open(
-                              `/reading-player/${selected.id}?startLine=${startLine}`,
-                              `reading-player-${selected.id}`,
-                              "width=900,height=700,resizable=yes,scrollbars=yes"
-                            );
-                          }}
-                          className="flex items-center gap-1 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm"
-                          title="별도 창에서 재생 (크기 조정·폰트·페이지 이동)"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                          </svg>
-                          팝업 재생
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-1">
-                        <label className="text-xs text-gray-600">속도:</label>
-                        <select value={playbackRate} onChange={(e) => handleRateChange(parseFloat(e.target.value))} className="text-xs border rounded px-1 py-1">
-                          <option value={0.5}>0.5x</option>
-                          <option value={0.75}>0.75x</option>
-                          <option value={1.0}>1.0x</option>
-                          <option value={1.25}>1.25x</option>
-                          <option value={1.5}>1.5x</option>
-                          <option value={2.0}>2.0x</option>
-                        </select>
-                      </div>
-                      <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
-                        <input type="checkbox" checked={lineSync} onChange={(e) => { setLineSync(e.target.checked); if (!e.target.checked) setActiveLine(null); }} className="rounded" />
-                        줄 동기화
-                      </label>
-                      <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
-                        <input type="checkbox" checked={continuous} onChange={(e) => setContinuous(e.target.checked)} className="rounded" />
-                        이어쓰기
-                      </label>
-                      {isAdmin && (
-                        <label className="flex items-center gap-1 text-xs text-amber-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={lineEditMode}
-                            onChange={(e) => setLineEditMode(e.target.checked)}
-                            className="rounded"
-                          />
-                          싱크 편집
-                        </label>
-                      )}
-                      {lineTimes.length > 0 && (
-                        <span className="text-[10px]">
-                          {(() => {
-                            const m = lineTimes.filter((l) => l.manuallyAdjusted).length;
-                            const a = lineTimes.length - m;
-                            return (
-                              <>
-                                (<span className="text-emerald-600">{lineTimes.length}건</span>
-                                {a > 0 && <span className="text-gray-500"> · 자동 {a}</span>}
-                                {m > 0 && <span className="text-amber-700"> · 수동 {m}</span>})
-                              </>
-                            );
-                          })()}
-                        </span>
-                      )}
-                    </div>
+                <div className="px-4 py-3 bg-indigo-50 border-b border-indigo-200 flex items-center justify-between gap-3">
+                  <div className="text-sm text-indigo-900">
+                    <span className="font-medium">음성 재생·싱크 편집</span>은 별도 팝업 창에서 진행됩니다.
                   </div>
-
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-xs text-gray-500 w-10 text-right">{formatTime(currentTime)}</span>
-                    <input type="range" min={0} max={duration || 0} step={0.1} value={currentTime} onChange={handleSeek} className="flex-1 h-1.5 accent-indigo-600" />
-                    <span className="text-xs text-gray-500 w-10">{formatTime(duration)}</span>
-                  </div>
-
-                  {audioError && (
-                    <div className="text-xs text-red-500 mt-1">음성 파일을 재생할 수 없습니다</div>
-                  )}
-
-                  <div className="text-[10px] text-gray-400 mt-1">
-                    줄을 클릭하면 해당 위치부터 재동기화됩니다
-                    {hasTimestamps && " (타임스탬프 동기화 활성)"}
-                  </div>
-
-                  {/* 줄-시간 편집 패널 */}
-                  {isAdmin && lineEditMode && (
-                    <div className="mt-3 p-3 border border-amber-200 bg-amber-50 rounded-lg space-y-2">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="text-xs font-bold text-amber-900">싱크 편집 (줄-시간 매핑)</div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={autoDistributeLineTimes}
-                            disabled={!duration || lines.length === 0}
-                            className="px-3 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-40"
-                            title="이 본문의 모든 줄을 글자 수 비율로 자동 분할 저장"
-                          >
-                            이 본문 자동 분할 저장 ({lines.length}줄)
-                          </button>
-                          {lineTimes.length > 0 && (
-                            <button
-                              onClick={clearAllLineTimes}
-                              className="px-2 py-1 text-xs text-red-600 hover:underline"
-                            >
-                              전체 초기화
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-[11px] text-amber-700">
-                        ① 위 버튼으로 자동 분할 (대략적 시작 시간)<br />
-                        ② 진행바를 정확한 위치로 옮기고 줄 선택 → 저장 (미세 조정)
-                      </div>
-                      <div className="flex items-center flex-wrap gap-2">
-                        <span className="text-xs text-gray-700">
-                          현재 위치: <strong className="font-mono">{formatTime(currentTime)}</strong>
-                          <span className="text-gray-400 ml-1">({currentTime.toFixed(1)}초)</span>
-                        </span>
-                        <select
-                          value={editLineIndex}
-                          onChange={(e) => setEditLineIndex(Number(e.target.value))}
-                          className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white max-w-md"
-                        >
-                          {lines.map((ln, i) => (
-                            <option key={i} value={i}>
-                              {i + 1}. {ln.length > 40 ? ln.slice(0, 40) + "…" : ln}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          onClick={saveLineTime}
-                          className="px-3 py-1 text-xs bg-amber-600 text-white rounded hover:bg-amber-700"
-                        >
-                          이 시각을 {editLineIndex + 1}번 줄 시작으로 저장
-                        </button>
-                      </div>
-                      {lineEditMsg && (
-                        <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">
-                          {lineEditMsg}
-                        </div>
-                      )}
-                      {lineTimes.length > 0 ? (
-                        <div className="mt-2">
-                          <button
-                            type="button"
-                            onClick={() => setShowLineMapping((s) => !s)}
-                            className="w-full flex items-center justify-between px-2 py-1 text-xs bg-amber-100 hover:bg-amber-200 text-amber-900 rounded border border-amber-200"
-                          >
-                            <span className="font-medium">
-                              저장된 매핑 ({lineTimes.length}건)
-                            </span>
-                            <span className="font-mono">{showLineMapping ? "▲ 접기" : "▼ 펼치기"}</span>
-                          </button>
-                          {showLineMapping && (
-                          <div className="max-h-32 overflow-y-auto bg-white rounded-b border-x border-b border-amber-200">
-                          <table className="w-full text-xs">
-                            <thead className="bg-gray-50 sticky top-0">
-                              <tr className="text-gray-600">
-                                <th className="px-2 py-1 text-left font-medium w-10">#</th>
-                                <th className="px-2 py-1 text-left font-medium">줄 (앞부분)</th>
-                                <th className="px-2 py-1 text-left font-medium w-20">시작</th>
-                                <th className="px-2 py-1 text-center font-medium w-12">상태</th>
-                                <th className="px-2 py-1 text-right font-medium w-24">동작</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {lineTimes.map((lt) => {
-                                const text = lines[lt.lineIndex] || "(줄 없음)";
-                                return (
-                                  <tr key={lt.lineIndex} className="border-t border-gray-100 hover:bg-amber-50">
-                                    <td className="px-2 py-1 font-mono">{lt.lineIndex + 1}</td>
-                                    <td className="px-2 py-1 text-gray-700 truncate max-w-md" title={text}>
-                                      {text.length > 50 ? text.slice(0, 50) + "…" : text}
-                                    </td>
-                                    <td className="px-2 py-1">
-                                      <button
-                                        onClick={() => seekToLineTime(lt.startSec)}
-                                        className="font-mono text-blue-600 hover:underline"
-                                        title="이 위치로 이동"
-                                      >
-                                        {formatTime(lt.startSec)}
-                                      </button>
-                                    </td>
-                                    <td className="px-2 py-1 text-center">
-                                      {lt.manuallyAdjusted ? (
-                                        <span className="inline-block px-1.5 py-px text-[10px] bg-amber-100 text-amber-800 rounded font-bold">
-                                          수동
-                                        </span>
-                                      ) : (
-                                        <span className="inline-block px-1.5 py-px text-[10px] bg-gray-100 text-gray-500 rounded">
-                                          자동
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td className="px-2 py-1 text-right space-x-1">
-                                      <button
-                                        onClick={() => {
-                                          setEditLineIndex(lt.lineIndex);
-                                          seekToLineTime(lt.startSec);
-                                        }}
-                                        className="text-[11px] text-gray-500 hover:underline"
-                                      >
-                                        편집
-                                      </button>
-                                      <button
-                                        onClick={() => deleteLineTime(lt.lineIndex)}
-                                        className="text-[11px] text-red-500 hover:underline"
-                                      >
-                                        삭제
-                                      </button>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                          </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-[11px] text-gray-500">저장된 매핑이 없습니다.</div>
-                      )}
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      window.open(
+                        `/reading-player/${selected.id}`,
+                        `reading-player-${selected.id}`,
+                        "width=900,height=720,resizable=yes,scrollbars=yes"
+                      )
+                    }
+                    className="flex items-center gap-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium"
+                    title="별도 창에서 재생 (크기 조정·폰트·페이지 이동·싱크 편집)"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                    팝업으로 듣기
+                  </button>
                 </div>
               )}
 
