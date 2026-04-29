@@ -92,6 +92,17 @@ export default function ReadingPage() {
 
   // 음성→텍스트 변환 상태
   const [transcribing, setTranscribing] = useState(false);
+  // 기존 업로드 파일 목록 (수정 폼에서 매핑용)
+  const [uploadList, setUploadList] = useState<
+    {
+      fileName: string;
+      audioPath: string;
+      size: number;
+      mtime: number;
+      linkedReadingId: number | null;
+      linkedReadingTitle: string | null;
+    }[]
+  >([]);
   const [transcribeModel, setTranscribeModel] = useState<"base" | "small">("base");
 
   // 텍스트 교정 에디터 상태
@@ -616,6 +627,23 @@ export default function ReadingPage() {
       const data = await res.json();
       if (data.audioPath) {
         setEditAudioPath(data.audioPath);
+        // 기존 자료 수정 모드면 업로드 즉시 DB 저장 (audioPath 가 disk-only 로 남는 사고 방지)
+        if (editId) {
+          try {
+            await fetch(`/api/council/reading/${editId}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ audioPath: data.audioPath }),
+            });
+            // 목록·상세 재로드 — 사용자가 폼 닫지 않아도 백그라운드 동기화
+            loadReadings();
+            if (selected?.id === editId) loadDetail(editId);
+          } catch {
+            // 저장 실패해도 클라이언트 state 는 유지 — 사용자가 "저장" 버튼으로 재시도
+          }
+        }
+        // orphan 목록도 갱신 (이미 매핑된 거니까 사라져야 함)
+        loadUploadList();
       } else {
         alert(data.error || "업로드 실패");
       }
@@ -623,6 +651,40 @@ export default function ReadingPage() {
       alert("업로드 중 오류 발생");
     } finally {
       setUploading(false);
+    }
+  };
+
+  const loadUploadList = async () => {
+    try {
+      const res = await fetch("/api/council/reading/upload/list");
+      const data = await res.json();
+      setUploadList(data.files || []);
+    } catch {
+      /* 무시 */
+    }
+  };
+
+  // 폼 열 때 orphan 파일 목록 로드
+  useEffect(() => {
+    if (showEditor && isAdmin) loadUploadList();
+  }, [showEditor, isAdmin]);
+
+  // 기존 파일 선택 매핑 (수정 모드 — 즉시 PUT)
+  const linkExistingAudio = async (audioPath: string) => {
+    setEditAudioPath(audioPath);
+    if (editId) {
+      try {
+        await fetch(`/api/council/reading/${editId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ audioPath }),
+        });
+        loadReadings();
+        if (selected?.id === editId) loadDetail(editId);
+        loadUploadList();
+      } catch {
+        /* 무시 */
+      }
     }
   };
 
@@ -918,6 +980,43 @@ export default function ReadingPage() {
                   className="text-sm"
                 />
                 {uploading && <span className="text-xs text-gray-500 ml-2">업로드 중...</span>}
+
+                {/* 기존 업로드된 파일 매핑 — orphan + 다른 자료에 연결된 파일까지 보임 */}
+                {uploadList.length > 0 && (
+                  <div className="mt-2 border border-amber-200 bg-amber-50 rounded p-2 space-y-1">
+                    <div className="text-[11px] text-amber-800 font-medium">
+                      서버에 이미 업로드된 파일에서 선택 (재업로드 없이 매핑)
+                    </div>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v) linkExistingAudio(v);
+                      }}
+                      className="w-full text-xs border border-gray-300 rounded px-2 py-1"
+                    >
+                      <option value="">— 선택하면 즉시 매핑됨 —</option>
+                      {uploadList.map((f) => {
+                        const date = new Date(f.mtime);
+                        const dateStr = `${date.getMonth() + 1}/${date.getDate()} ${String(
+                          date.getHours()
+                        ).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+                        const sizeKb = (f.size / 1024).toFixed(0);
+                        const linked = f.linkedReadingId
+                          ? `사용중: "${f.linkedReadingTitle?.slice(0, 20) || ""}"`
+                          : "(미연결 — orphan)";
+                        return (
+                          <option key={f.fileName} value={f.audioPath}>
+                            [{dateStr}] {f.fileName} ({sizeKb}KB) — {linked}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <div className="text-[10px] text-amber-700">
+                      orphan 파일이 있으면 — 옛날 업로드 후 저장 안 된 파일. 여기서 선택해 매핑.
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* 음성→텍스트 변환 */}
