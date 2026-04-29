@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import HelpButton from "@/components/HelpButton";
 import MediaBaseUrlSetting from "@/components/admin/MediaBaseUrlSetting";
 import MediaFtpSetting from "@/components/admin/MediaFtpSetting";
+import SettingsPreview from "@/components/admin/SettingsPreview";
 
 // ==================== 테마 (색상) ====================
 const THEME_FIELDS = [
@@ -177,6 +178,8 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [activeTab, setActiveTab] = useState<"theme" | "skin" | "editor">("theme");
+  // 미리보기 ↔ 설정 필드 양방향 hover 매칭용 키
+  const [highlightKey, setHighlightKey] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/settings")
@@ -277,6 +280,28 @@ export default function AdminSettingsPage() {
         <p className="text-sm text-gray-500 mt-1">색상, 위젯 스킨, 글쓰기 페이지 디자인을 관리합니다.</p>
       </div>
 
+      {/* 미리보기 — sticky, 설정 변경 시 즉시 반영 */}
+      <div className="sticky top-0 z-20 -mx-4 px-4 py-3 bg-gray-50/95 backdrop-blur border-b border-gray-200 mb-2 shadow-sm">
+        <div className="text-xs text-gray-500 mb-2 flex items-center gap-2">
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+          미리보기 — 설정 변경 시 페이지 전체와 아래 영역이 즉시 반영됩니다.
+          {highlightKey && (
+            <span className="ml-auto px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-mono">
+              hover: {highlightKey}
+            </span>
+          )}
+        </div>
+        <SettingsPreview
+          type={activeTab}
+          highlightKey={highlightKey}
+          onRegionHover={setHighlightKey}
+          values={values}
+        />
+      </div>
+
       {/* 탭 */}
       <div className="flex border-b border-gray-200">
         <button
@@ -347,7 +372,14 @@ export default function AdminSettingsPage() {
             </div>
             <div className="p-5 space-y-4">
               {THEME_FIELDS.map(({ key, label, desc }) => (
-                <div key={key} className="flex items-center gap-4">
+                <div
+                  key={key}
+                  onMouseEnter={() => setHighlightKey(key)}
+                  onMouseLeave={() => setHighlightKey(null)}
+                  className={`flex items-center gap-4 px-2 py-1 rounded transition-colors ${
+                    highlightKey === key ? "bg-amber-50 ring-1 ring-amber-300" : ""
+                  }`}
+                >
                   <label className="w-40 shrink-0">
                     <div className="text-sm font-medium text-gray-700">{label}</div>
                     <div className="text-xs text-gray-400 mt-0.5">{desc}</div>
@@ -492,7 +524,14 @@ export default function AdminSettingsPage() {
               </div>
               <div className="p-5 space-y-4">
                 {section.fields.map((field) => (
-                  <div key={field.key} className="flex items-center gap-4">
+                  <div
+                    key={field.key}
+                    onMouseEnter={() => setHighlightKey(field.key)}
+                    onMouseLeave={() => setHighlightKey(null)}
+                    className={`flex items-center gap-4 px-2 py-1 rounded transition-colors ${
+                      highlightKey === field.key ? "bg-amber-50 ring-1 ring-amber-300" : ""
+                    }`}
+                  >
                     <label className="w-36 shrink-0 text-sm font-medium text-gray-700">
                       {field.label}
                     </label>
@@ -591,7 +630,14 @@ export default function AdminSettingsPage() {
                 </thead>
                 <tbody>
                   {FONT_ROLES.map((role) => (
-                    <tr key={role.prefix}>
+                    <tr
+                      key={role.prefix}
+                      onMouseEnter={() => setHighlightKey(`${role.prefix}_color`)}
+                      onMouseLeave={() => setHighlightKey(null)}
+                      className={
+                        highlightKey?.startsWith(role.prefix) ? "bg-amber-50" : ""
+                      }
+                    >
                       <td className="border border-gray-200 px-2 py-1.5 font-medium text-gray-700 bg-gray-50/50">
                         {role.label}
                       </td>
@@ -599,7 +645,14 @@ export default function AdminSettingsPage() {
                         const key = `${role.prefix}_${attr.suffix}`;
                         const val = sv(key);
                         return (
-                          <td key={attr.suffix} className="border border-gray-200 px-1 py-1">
+                          <td
+                            key={attr.suffix}
+                            onMouseEnter={(e) => {
+                              e.stopPropagation();
+                              setHighlightKey(key);
+                            }}
+                            className="border border-gray-200 px-1 py-1"
+                          >
                             {attr.type === "font" && (
                               <select
                                 value={val}
