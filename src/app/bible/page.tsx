@@ -54,6 +54,8 @@ export default function BibleReaderPage() {
   const [editMode, setEditMode] = useState(false);
   const [editVerse, setEditVerse] = useState<number>(1);
   const [editMsg, setEditMsg] = useState<string | null>(null);
+  // 매핑 표 접기 (default 닫힘 — 본문 가림 방지)
+  const [showMapping, setShowMapping] = useState(false);
 
   // 검색 상태
   const [searchQuery, setSearchQuery] = useState("");
@@ -255,6 +257,11 @@ export default function BibleReaderPage() {
     if (!selectedBook) return;
     setEditMsg(null);
     try {
+      // 1) 이 절의 이전 시간 (있으면) — 뒤쪽 자동 절 shift 계산용
+      const prev = verseTimes.find((vt) => vt.verse === editVerse);
+      const delta = prev ? currentTime - prev.startSec : 0;
+
+      // 2) 이 절 저장 (수동)
       const res = await fetch(
         `/api/bible/${selectedBook.id}/${selectedChapter}/verse-times`,
         {
@@ -265,13 +272,43 @@ export default function BibleReaderPage() {
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "저장 실패");
-      // 목록 갱신
+
+      // 3) delta 가 있으면 뒤쪽 자동 절(이 절보다 verse 큰 + manuallyAdjusted=false)도 같이 shift
+      let shifted = 0;
+      if (Math.abs(delta) > 0.01) {
+        const targets = verseTimes.filter(
+          (vt) => vt.verse > editVerse && !vt.manuallyAdjusted
+        );
+        await Promise.all(
+          targets.map(async (vt) => {
+            const newSec = Math.max(0, vt.startSec + delta);
+            try {
+              await fetch(
+                `/api/bible/${selectedBook.id}/${selectedChapter}/verse-times`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ verse: vt.verse, startSec: newSec, manual: false }),
+                }
+              );
+              shifted++;
+            } catch {
+              /* skip */
+            }
+          })
+        );
+      }
+
+      // 4) 목록 갱신
       const tres = await fetch(
         `/api/bible/${selectedBook.id}/${selectedChapter}/verse-times`
       );
       const td = await tres.json();
       setVerseTimes(td.times || []);
-      setEditMsg(`${editVerse}절 시작 시간 ${formatTime(currentTime)} 저장됨`);
+      const shiftMsg = shifted > 0
+        ? ` · 뒤쪽 자동 ${shifted}절 ${delta > 0 ? "+" : ""}${delta.toFixed(1)}초 이동`
+        : "";
+      setEditMsg(`${editVerse}절 시작 시간 ${formatTime(currentTime)} 저장됨${shiftMsg}`);
     } catch (e) {
       setEditMsg(`오류: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -1101,11 +1138,23 @@ export default function BibleReaderPage() {
                   {editMsg}
                 </div>
               )}
-              {/* 저장된 매핑 목록 */}
+              {/* 저장된 매핑 목록 — collapse 가능 (default 닫힘 — 본문 가리지 않게) */}
               {verseTimes.length > 0 ? (
-                <div className="mt-2 max-h-40 overflow-y-auto bg-white rounded border border-amber-200">
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50 sticky top-0">
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowMapping((s) => !s)}
+                    className="w-full flex items-center justify-between px-2 py-1 text-xs bg-amber-100 hover:bg-amber-200 text-amber-900 rounded border border-amber-200"
+                  >
+                    <span className="font-medium">
+                      저장된 매핑 ({verseTimes.length}건)
+                    </span>
+                    <span className="font-mono">{showMapping ? "▲ 접기" : "▼ 펼치기"}</span>
+                  </button>
+                  {showMapping && (
+                    <div className="max-h-32 overflow-y-auto bg-white rounded-b border-x border-b border-amber-200">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-50 sticky top-0">
                       <tr className="text-gray-600">
                         <th className="px-2 py-1 text-left font-medium w-12">절</th>
                         <th className="px-2 py-1 text-left font-medium">시작</th>
@@ -1157,6 +1206,8 @@ export default function BibleReaderPage() {
                       ))}
                     </tbody>
                   </table>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-[11px] text-gray-500">저장된 매핑이 없습니다.</div>

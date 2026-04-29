@@ -77,6 +77,7 @@ export default function ReadingPage() {
   const [lineEditMode, setLineEditMode] = useState(false);
   const [editLineIndex, setEditLineIndex] = useState<number>(0);
   const [lineEditMsg, setLineEditMsg] = useState<string | null>(null);
+  const [showLineMapping, setShowLineMapping] = useState(false);
 
   // 관리자 상태
   const [isAdmin, setIsAdmin] = useState(false);
@@ -414,6 +415,10 @@ export default function ReadingPage() {
     if (!selected) return;
     setLineEditMsg(null);
     try {
+      // 이전 시간 → delta 계산 (뒤쪽 자동 줄 cascade shift 용)
+      const prev = lineTimes.find((lt) => lt.lineIndex === editLineIndex);
+      const delta = prev ? currentTime - prev.startSec : 0;
+
       const res = await fetch(`/api/council/reading/${selected.id}/line-times`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -425,10 +430,44 @@ export default function ReadingPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "저장 실패");
+
+      // 뒤쪽 자동 줄도 같은 delta 만큼 shift (수동 줄은 보존)
+      let shifted = 0;
+      if (Math.abs(delta) > 0.01) {
+        const targets = lineTimes.filter(
+          (lt) => lt.lineIndex > editLineIndex && !lt.manuallyAdjusted
+        );
+        await Promise.all(
+          targets.map(async (lt) => {
+            const newSec = Math.max(0, lt.startSec + delta);
+            try {
+              await fetch(`/api/council/reading/${selected.id}/line-times`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  lineIndex: lt.lineIndex,
+                  startSec: newSec,
+                  manual: false,
+                }),
+              });
+              shifted++;
+            } catch {
+              /* skip */
+            }
+          })
+        );
+      }
+
       const tres = await fetch(`/api/council/reading/${selected.id}/line-times`);
       const td = await tres.json();
       setLineTimes(td.times || []);
-      setLineEditMsg(`${editLineIndex + 1}번 줄 시작 시간 ${formatTime(currentTime)} 저장됨`);
+      const shiftMsg =
+        shifted > 0
+          ? ` · 뒤쪽 자동 ${shifted}줄 ${delta > 0 ? "+" : ""}${delta.toFixed(1)}초 이동`
+          : "";
+      setLineEditMsg(
+        `${editLineIndex + 1}번 줄 시작 시간 ${formatTime(currentTime)} 저장됨${shiftMsg}`
+      );
     } catch (e) {
       setLineEditMsg(`오류: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -1360,7 +1399,19 @@ export default function ReadingPage() {
                         </div>
                       )}
                       {lineTimes.length > 0 ? (
-                        <div className="mt-2 max-h-48 overflow-y-auto bg-white rounded border border-amber-200">
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowLineMapping((s) => !s)}
+                            className="w-full flex items-center justify-between px-2 py-1 text-xs bg-amber-100 hover:bg-amber-200 text-amber-900 rounded border border-amber-200"
+                          >
+                            <span className="font-medium">
+                              저장된 매핑 ({lineTimes.length}건)
+                            </span>
+                            <span className="font-mono">{showLineMapping ? "▲ 접기" : "▼ 펼치기"}</span>
+                          </button>
+                          {showLineMapping && (
+                          <div className="max-h-32 overflow-y-auto bg-white rounded-b border-x border-b border-amber-200">
                           <table className="w-full text-xs">
                             <thead className="bg-gray-50 sticky top-0">
                               <tr className="text-gray-600">
@@ -1422,6 +1473,8 @@ export default function ReadingPage() {
                               })}
                             </tbody>
                           </table>
+                          </div>
+                          )}
                         </div>
                       ) : (
                         <div className="text-[11px] text-gray-500">저장된 매핑이 없습니다.</div>
