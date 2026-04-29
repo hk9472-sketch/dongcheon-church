@@ -1217,6 +1217,26 @@ export default function ReadingPage() {
                           일시정지
                         </button>
                       )}
+                      {selected && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const startLine = activeLine ?? 0;
+                            window.open(
+                              `/reading-player/${selected.id}?startLine=${startLine}`,
+                              `reading-player-${selected.id}`,
+                              "width=900,height=700,resizable=yes,scrollbars=yes"
+                            );
+                          }}
+                          className="flex items-center gap-1 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm"
+                          title="별도 창에서 재생 (크기 조정·폰트·페이지 이동)"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                          </svg>
+                          팝업 재생
+                        </button>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-3">
