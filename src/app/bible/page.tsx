@@ -44,6 +44,15 @@ export default function BibleReaderPage() {
   const [activeVerse, setActiveVerse] = useState<number | null>(null);
   const [verseSync, setVerseSync] = useState(false);
 
+  // 절-시간 매핑 (저장된 verse → startSec). 자동 싱크의 정확도 결정.
+  const [verseTimes, setVerseTimes] = useState<{ verse: number; startSec: number }[]>([]);
+  // 관리자 여부 (편집 패널 표시)
+  const [isAdmin, setIsAdmin] = useState(false);
+  // 편집 패널 토글·상태
+  const [editMode, setEditMode] = useState(false);
+  const [editVerse, setEditVerse] = useState<number>(1);
+  const [editMsg, setEditMsg] = useState<string | null>(null);
+
   // 검색 상태
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -86,6 +95,14 @@ export default function BibleReaderPage() {
       });
   }, []);
 
+  // 관리자 여부 체크 (편집 패널 표시 결정)
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => setIsAdmin(!!(d.user && d.user.isAdmin <= 2)))
+      .catch(() => setIsAdmin(false));
+  }, []);
+
   // 장 변경 시 절 로드 + 오디오 리셋
   useEffect(() => {
     if (!selectedBook) return;
@@ -101,6 +118,12 @@ export default function BibleReaderPage() {
         setVerses(data.verses || []);
         setLoading(false);
       });
+
+    // 절-시간 매핑 동시 로드
+    fetch(`/api/bible/${selectedBook.id}/${selectedChapter}/verse-times`)
+      .then((r) => r.json())
+      .then((d) => setVerseTimes(d.times || []))
+      .catch(() => setVerseTimes([]));
 
     // 오디오 소스가 변경되었으므로 명시적으로 리로드
     if (audioRef.current) {
@@ -156,21 +179,33 @@ export default function BibleReaderPage() {
     const t = audioRef.current.currentTime;
     setCurrentTime(t);
 
-    // 절 동기화: 글자 수 비율로 현재 절 추정
+    // 절 동기화
     if (verseSync && verses.length > 0 && duration > 0) {
-      const ratio = t / duration;
-      const lengths = verses.map((v) => v.content.length);
-      const totalLen = lengths.reduce((a, b) => a + b, 0);
-      let cumLen = 0;
-      let found = verses[0].verse;
-      for (let i = 0; i < verses.length; i++) {
-        cumLen += lengths[i];
-        if (cumLen / totalLen >= ratio) {
-          found = verses[i].verse;
-          break;
+      // 1순위: 저장된 verse-times 가 있으면 그걸로 정확 결정
+      if (verseTimes.length > 0) {
+        // verseTimes 는 verse 오름차순. 현재 시각보다 작거나 같은 마지막 절을 찾음.
+        let found = verseTimes[0].verse;
+        for (const vt of verseTimes) {
+          if (vt.startSec <= t) found = vt.verse;
+          else break;
         }
+        setActiveVerse(found);
+      } else {
+        // 2순위 (fallback): 글자 수 비율로 추정
+        const ratio = t / duration;
+        const lengths = verses.map((v) => v.content.length);
+        const totalLen = lengths.reduce((a, b) => a + b, 0);
+        let cumLen = 0;
+        let found = verses[0].verse;
+        for (let i = 0; i < verses.length; i++) {
+          cumLen += lengths[i];
+          if (cumLen / totalLen >= ratio) {
+            found = verses[i].verse;
+            break;
+          }
+        }
+        setActiveVerse(found);
       }
-      setActiveVerse(found);
     }
   };
 
@@ -211,6 +246,127 @@ export default function BibleReaderPage() {
       audioRef.current.currentTime = time;
       setCurrentTime(time);
     }
+  };
+
+  // 절-시간 편집 핸들러 (관리자만)
+  const saveVerseTime = async () => {
+    if (!selectedBook) return;
+    setEditMsg(null);
+    try {
+      const res = await fetch(
+        `/api/bible/${selectedBook.id}/${selectedChapter}/verse-times`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ verse: editVerse, startSec: currentTime }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "저장 실패");
+      // 목록 갱신
+      const tres = await fetch(
+        `/api/bible/${selectedBook.id}/${selectedChapter}/verse-times`
+      );
+      const td = await tres.json();
+      setVerseTimes(td.times || []);
+      setEditMsg(`${editVerse}절 시작 시간 ${formatTime(currentTime)} 저장됨`);
+    } catch (e) {
+      setEditMsg(`오류: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  const deleteVerseTime = async (verse: number) => {
+    if (!selectedBook) return;
+    setEditMsg(null);
+    try {
+      const res = await fetch(
+        `/api/bible/${selectedBook.id}/${selectedChapter}/verse-times?verse=${verse}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.message || "삭제 실패");
+      }
+      setVerseTimes((prev) => prev.filter((vt) => vt.verse !== verse));
+      setEditMsg(`${verse}절 시간 삭제됨`);
+    } catch (e) {
+      setEditMsg(`오류: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  const seekToVerseTime = (sec: number) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = sec;
+      setCurrentTime(sec);
+    }
+  };
+
+  // 자동 분할 일괄 저장 — 글자 수 비율로 각 절 시작 시간 계산해서 저장.
+  // 이후 진행바로 절별 미세 조정.
+  const autoDistributeVerseTimes = async () => {
+    if (!selectedBook || verses.length === 0 || !duration || duration <= 0) {
+      setEditMsg("오디오가 로드되지 않았거나 절 데이터가 없습니다.");
+      return;
+    }
+    if (
+      !confirm(
+        `이 장의 ${verses.length}개 절을 글자 수 비율로 자동 분할해 저장합니다.\n` +
+          `(이미 저장된 시간이 있다면 덮어씁니다.)\n진행할까요?`
+      )
+    )
+      return;
+
+    // 각 절 시작 위치 계산: 누적 글자 비율 × 전체 길이
+    const lengths = verses.map((v) => v.content.length);
+    const totalLen = lengths.reduce((a, b) => a + b, 0);
+    if (totalLen === 0) {
+      setEditMsg("절 본문이 비어 있습니다.");
+      return;
+    }
+
+    let cumLen = 0;
+    const payloads: { verse: number; startSec: number }[] = [];
+    for (let i = 0; i < verses.length; i++) {
+      const startSec = (cumLen / totalLen) * duration;
+      payloads.push({ verse: verses[i].verse, startSec });
+      cumLen += lengths[i];
+    }
+
+    setEditMsg(`자동 분할 저장 중... 0 / ${payloads.length}`);
+    let done = 0;
+    let failed = 0;
+    // 병렬 POST (서버 부하 적음 — 절당 1 upsert)
+    await Promise.all(
+      payloads.map(async (p) => {
+        try {
+          const res = await fetch(
+            `/api/bible/${selectedBook.id}/${selectedChapter}/verse-times`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(p),
+            }
+          );
+          if (!res.ok) failed++;
+        } catch {
+          failed++;
+        }
+        done++;
+        setEditMsg(`자동 분할 저장 중... ${done} / ${payloads.length}`);
+      })
+    );
+
+    // 목록 갱신
+    const tres = await fetch(
+      `/api/bible/${selectedBook.id}/${selectedChapter}/verse-times`
+    );
+    const td = await tres.json();
+    setVerseTimes(td.times || []);
+    setEditMsg(
+      failed > 0
+        ? `저장 완료: 성공 ${done - failed} / 실패 ${failed}`
+        : `자동 분할 저장 완료 (${done}건). 진행바로 절별 미세 조정 가능.`
+    );
   };
 
   const formatTime = (sec: number) => {
@@ -812,7 +968,23 @@ export default function BibleReaderPage() {
                   className="rounded"
                 />
                 절 표시
+                {verseTimes.length > 0 && (
+                  <span className="text-emerald-600 text-[10px]">
+                    ({verseTimes.length}개 시간 저장됨)
+                  </span>
+                )}
               </label>
+              {isAdmin && (
+                <label className="flex items-center gap-1 text-xs text-amber-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editMode}
+                    onChange={(e) => setEditMode(e.target.checked)}
+                    className="rounded"
+                  />
+                  싱크 편집
+                </label>
+              )}
               {!audioError && selectedBook && (
                 <a
                   href={`/api/bible/audio/${selectedBook.id}/${selectedChapter}?dl=1`}
@@ -837,6 +1009,7 @@ export default function BibleReaderPage() {
               type="range"
               min={0}
               max={duration || 0}
+              step={0.1}
               value={currentTime}
               onChange={handleSeek}
               className="flex-1 h-1.5 accent-blue-600"
@@ -845,6 +1018,126 @@ export default function BibleReaderPage() {
               {formatTime(duration)}
             </span>
           </div>
+
+          {/* 절-시간 편집 패널 (관리자 + 편집 모드) */}
+          {isAdmin && editMode && (
+            <div className="mt-3 p-3 border border-amber-200 bg-amber-50 rounded-lg space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="text-xs font-bold text-amber-900">싱크 편집</div>
+                <button
+                  onClick={autoDistributeVerseTimes}
+                  disabled={!duration || verses.length === 0}
+                  className="px-3 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-40"
+                  title="이 장의 모든 절을 글자 수 비율로 자동 분할해 일괄 저장 (이후 진행바로 미세 조정)"
+                >
+                  이 장 자동 분할 저장 ({verses.length}절)
+                </button>
+              </div>
+              <div className="text-[11px] text-amber-700">
+                ① 위 버튼으로 장 단위 자동 분할 저장 (대략적 시작 시간 채움)<br />
+                ② 진행바를 절 시작 위치로 옮기고 아래 절 번호 선택 → 미세 조정 저장
+              </div>
+              <div className="flex items-center flex-wrap gap-2">
+                <span className="text-xs text-gray-700">
+                  현재 위치: <strong className="font-mono">{formatTime(currentTime)}</strong>
+                  <span className="text-gray-400 ml-1">({currentTime.toFixed(1)}초)</span>
+                </span>
+                <select
+                  value={editVerse}
+                  onChange={(e) => setEditVerse(Number(e.target.value))}
+                  className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white"
+                >
+                  {verses.map((v) => (
+                    <option key={v.verse} value={v.verse}>
+                      {v.verse}절
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={saveVerseTime}
+                  className="px-3 py-1 text-xs bg-amber-600 text-white rounded hover:bg-amber-700"
+                >
+                  이 시각을 {editVerse}절 시작으로 저장
+                </button>
+                {verseTimes.length > 0 && (
+                  <button
+                    onClick={async () => {
+                      if (!selectedBook) return;
+                      if (!confirm(`이 장의 모든 절-시간 매핑(${verseTimes.length}건) 을 삭제할까요?`)) return;
+                      const res = await fetch(
+                        `/api/bible/${selectedBook.id}/${selectedChapter}/verse-times?verse=all`,
+                        { method: "DELETE" }
+                      );
+                      if (res.ok) {
+                        setVerseTimes([]);
+                        setEditMsg("이 장 전체 매핑 삭제됨");
+                      }
+                    }}
+                    className="px-2 py-1 text-xs text-red-600 hover:underline ml-auto"
+                  >
+                    이 장 전체 초기화
+                  </button>
+                )}
+              </div>
+              {editMsg && (
+                <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">
+                  {editMsg}
+                </div>
+              )}
+              {/* 저장된 매핑 목록 */}
+              {verseTimes.length > 0 ? (
+                <div className="mt-2 max-h-40 overflow-y-auto bg-white rounded border border-amber-200">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr className="text-gray-600">
+                        <th className="px-2 py-1 text-left font-medium w-12">절</th>
+                        <th className="px-2 py-1 text-left font-medium">시작</th>
+                        <th className="px-2 py-1 text-right font-medium w-24">동작</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {verseTimes.map((vt) => (
+                        <tr key={vt.verse} className="border-t border-gray-100 hover:bg-amber-50">
+                          <td className="px-2 py-1 font-mono">{vt.verse}</td>
+                          <td className="px-2 py-1">
+                            <button
+                              onClick={() => seekToVerseTime(vt.startSec)}
+                              className="font-mono text-blue-600 hover:underline"
+                              title="이 위치로 이동"
+                            >
+                              {formatTime(vt.startSec)}
+                            </button>
+                            <span className="text-gray-400 ml-1">
+                              ({vt.startSec.toFixed(1)}초)
+                            </span>
+                          </td>
+                          <td className="px-2 py-1 text-right space-x-1">
+                            <button
+                              onClick={() => {
+                                setEditVerse(vt.verse);
+                                seekToVerseTime(vt.startSec);
+                              }}
+                              className="text-[11px] text-gray-500 hover:underline"
+                            >
+                              편집
+                            </button>
+                            <button
+                              onClick={() => deleteVerseTime(vt.verse)}
+                              className="text-[11px] text-red-500 hover:underline"
+                            >
+                              삭제
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-[11px] text-gray-500">저장된 매핑이 없습니다.</div>
+              )}
+            </div>
+          )}
 
           {selectedBook && (
             <div className="mt-1 text-xs text-gray-500 flex items-center justify-between">
