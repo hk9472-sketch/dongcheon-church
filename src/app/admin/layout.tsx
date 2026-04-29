@@ -14,7 +14,6 @@ const ADMIN_MENU: { label: string; href: string; icon: string; external?: boolea
   { label: "작업 백업/복원", href: "/admin/backup/operations", icon: "♻️" },
   { label: "사이트 설정", href: "/admin/settings", icon: "🎨" },
   { label: "회원 관리", href: "/admin/members", icon: "👥" },
-  { label: "DB 관리", href: "/admin/db", icon: "🗄️" },
   { label: "SQL 관리", href: "/admin/db/sql", icon: "💾" },
   { label: "도움말 관리", href: "/admin/help", icon: "❓" },
   { label: "백업", href: "/admin/backup", icon: "📦" },

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import HelpButton from "@/components/HelpButton";
+import { downloadSqlResultCsv } from "@/lib/sqlCsvDownload";
 
 // ============================================================
 // 타입 정의
@@ -1062,9 +1063,24 @@ export default function SqlManagementPage() {
                           <span className="text-xs font-bold text-gray-600">
                             {sqlResult.error ? "오류" : sqlResult.type === "select" ? `결과: ${sqlResult.rowCount}행` : `실행 완료: ${sqlResult.affectedRows}행 영향`}
                           </span>
-                          {!sqlResult.error && (
-                            <span className="text-xs text-gray-400">{sqlResult.executionTime}ms</span>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {!sqlResult.error && sqlResult.type === "select" && sqlResult.rows && sqlResult.rows.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => downloadSqlResultCsv(sqlResult, selectedTable || "query")}
+                                className="px-2 py-0.5 text-[11px] bg-emerald-600 text-white rounded hover:bg-emerald-700 inline-flex items-center gap-1"
+                                title="결과를 엑셀(.csv) 파일로 다운로드"
+                              >
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                엑셀 다운로드
+                              </button>
+                            )}
+                            {!sqlResult.error && (
+                              <span className="text-xs text-gray-400">{sqlResult.executionTime}ms</span>
+                            )}
+                          </div>
                         </div>
 
                         {sqlResult.error ? (

@@ -12,7 +12,7 @@
 import React from "react";
 
 interface Props {
-  type: "theme" | "widget" | "write" | "editor" | "other";
+  type: "theme" | "widget" | "write" | "editor" | "other" | "db";
   highlightKey: string | null;
   onRegionHover?: (key: string | null) => void;
   values: Record<string, string>;
@@ -366,6 +366,14 @@ export default function SettingsPreview({ type, highlightKey, onRegionHover, val
     return (
       <div className="text-xs text-gray-500 italic">
         외부 미디어 서버·기타 인프라 설정 — 시각 미리보기 없음.
+      </div>
+    );
+  }
+
+  if (type === "db") {
+    return (
+      <div className="text-xs text-gray-500 italic">
+        DB 데이터(방문자 통계·사이트 설정 raw·방문 로그) 직접 조회·수정 — 시각 미리보기 없음.
       </div>
     );
   }

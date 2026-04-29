@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { downloadSqlResultCsv } from "@/lib/sqlCsvDownload";
 
 // SQL 콘솔 팝업 — 메인 SQL 페이지에서 window.open 으로 띄워 별도 창에서 독립 실행.
 // 자체 권한 체크 (admin layout 이 wrap 하지만 popup 은 layout 밖이라 명시적 fetch).
@@ -231,9 +232,24 @@ function ConsolePanel({
                 ? `결과: ${tab.result.rowCount}행`
                 : `실행 완료: ${tab.result.affectedRows}행 영향`}
             </span>
-            {!tab.result.error && (
-              <span className="text-gray-400">{tab.result.executionTime}ms</span>
-            )}
+            <div className="flex items-center gap-2">
+              {!tab.result.error &&
+                tab.result.type === "select" &&
+                tab.result.rows &&
+                tab.result.rows.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => downloadSqlResultCsv(tab.result!, tab.title || "query")}
+                    className="px-2 py-0.5 text-[10px] bg-emerald-600 text-white rounded hover:bg-emerald-700 inline-flex items-center gap-1"
+                    title="결과를 CSV(엑셀) 파일로 다운로드"
+                  >
+                    엑셀 다운로드
+                  </button>
+                )}
+              {!tab.result.error && (
+                <span className="text-gray-400">{tab.result.executionTime}ms</span>
+              )}
+            </div>
           </div>
           {tab.result.error ? (
             <div className="p-3 text-xs text-red-600 bg-red-50 font-mono whitespace-pre-wrap">

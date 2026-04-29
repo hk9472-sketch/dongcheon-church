@@ -5,6 +5,7 @@ import HelpButton from "@/components/HelpButton";
 import MediaBaseUrlSetting from "@/components/admin/MediaBaseUrlSetting";
 import MediaFtpSetting from "@/components/admin/MediaFtpSetting";
 import SettingsPreview from "@/components/admin/SettingsPreview";
+import { AdminDbContent } from "@/app/admin/db/page";
 
 // ==================== 테마 (색상) ====================
 const THEME_FIELDS = [
@@ -177,7 +178,7 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<"theme" | "widget" | "write" | "editor" | "other">("theme");
+  const [activeTab, setActiveTab] = useState<"theme" | "widget" | "write" | "editor" | "other" | "db">("theme");
   // 미리보기 ↔ 설정 필드 양방향 hover 매칭용 키
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
 
@@ -310,6 +311,7 @@ export default function AdminSettingsPage() {
           { key: "write", label: "글쓰기" },
           { key: "editor", label: "에디터" },
           { key: "other", label: "기타" },
+          { key: "db", label: "DB" },
         ].map((t) => (
           <button
             key={t.key}
@@ -746,6 +748,9 @@ export default function AdminSettingsPage() {
           <MediaFtpSetting />
         </div>
       )}
+
+      {/* ==================== DB 탭 (방문자 통계 / 사이트 설정 raw / 방문 로그) ==================== */}
+      {activeTab === "db" && <AdminDbContent hideHeader />}
 
       {/* 공통: 메시지 + 저장/초기화 버튼 */}
       {message && (

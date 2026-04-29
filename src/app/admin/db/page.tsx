@@ -27,7 +27,11 @@ interface VisitLogEntry {
   createdAt: string;
 }
 
-export default function AdminDbPage() {
+export default function AdminDbPage(props: { hideHeader?: boolean } = {}) {
+  return <AdminDbContent {...props} />;
+}
+
+export function AdminDbContent({ hideHeader = false }: { hideHeader?: boolean } = {}) {
   const [tab, setTab] = useState<Tab>("visitor-stats");
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -167,7 +171,9 @@ export default function AdminDbPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">DB 관리 <HelpButton slug="admin-db" /></h1>
+      {!hideHeader && (
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">DB 관리 <HelpButton slug="admin-db" /></h1>
+      )}
 
       {message && (
         <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded text-sm">
