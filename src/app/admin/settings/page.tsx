@@ -281,30 +281,8 @@ export default function AdminSettingsPage() {
         <p className="text-sm text-gray-500 mt-1">색상, 위젯 스킨, 글쓰기 페이지 디자인을 관리합니다.</p>
       </div>
 
-      {/* 미리보기 — sticky, 설정 변경 시 즉시 반영 */}
-      <div className="sticky top-0 z-20 -mx-4 px-4 py-3 bg-gray-50/95 backdrop-blur border-b border-gray-200 mb-2 shadow-sm">
-        <div className="text-xs text-gray-500 mb-2 flex items-center gap-2">
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-          </svg>
-          미리보기 — 설정 변경 시 페이지 전체와 아래 영역이 즉시 반영됩니다.
-          {highlightKey && (
-            <span className="ml-auto px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-mono">
-              hover: {highlightKey}
-            </span>
-          )}
-        </div>
-        <SettingsPreview
-          type={activeTab}
-          highlightKey={highlightKey}
-          onRegionHover={setHighlightKey}
-          values={values}
-        />
-      </div>
-
-      {/* 탭 */}
-      <div className="flex border-b border-gray-200 flex-wrap">
+      {/* 탭 — 가장 위에 sticky 로 항상 보이게 */}
+      <div className="sticky top-0 z-30 -mx-4 px-4 bg-white border-b border-gray-200 flex flex-wrap">
         {[
           { key: "theme", label: "사이트 색상" },
           { key: "widget", label: "위젯" },
@@ -326,6 +304,28 @@ export default function AdminSettingsPage() {
             {t.label}
           </button>
         ))}
+      </div>
+
+      {/* 미리보기 — 탭 아래에 표시 (탭별로 내용 바뀜). 탭이 가려지지 않도록 sticky 제거 */}
+      <div className="-mx-4 px-4 py-3 bg-gray-50 border-b border-gray-200 mb-2">
+        <div className="text-xs text-gray-500 mb-2 flex items-center gap-2">
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+          미리보기 — 설정 변경 시 페이지 전체와 아래 영역이 즉시 반영됩니다.
+          {highlightKey && (
+            <span className="ml-auto px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-mono">
+              hover: {highlightKey}
+            </span>
+          )}
+        </div>
+        <SettingsPreview
+          type={activeTab}
+          highlightKey={highlightKey}
+          onRegionHover={setHighlightKey}
+          values={values}
+        />
       </div>
 
       {/* ==================== 사이트 색상 탭 ==================== */}
