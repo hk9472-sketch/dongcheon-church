@@ -45,7 +45,9 @@ export default function BibleReaderPage() {
   const [verseSync, setVerseSync] = useState(false);
 
   // 절-시간 매핑 (저장된 verse → startSec). 자동 싱크의 정확도 결정.
-  const [verseTimes, setVerseTimes] = useState<{ verse: number; startSec: number }[]>([]);
+  const [verseTimes, setVerseTimes] = useState<
+    { verse: number; startSec: number; manuallyAdjusted: boolean }[]
+  >([]);
   // 관리자 여부 (편집 패널 표시)
   const [isAdmin, setIsAdmin] = useState(false);
   // 편집 패널 토글·상태
@@ -258,7 +260,7 @@ export default function BibleReaderPage() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ verse: editVerse, startSec: currentTime }),
+          body: JSON.stringify({ verse: editVerse, startSec: currentTime, manual: true }),
         }
       );
       const data = await res.json();
@@ -344,7 +346,7 @@ export default function BibleReaderPage() {
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(p),
+              body: JSON.stringify({ ...p, manual: false }),
             }
           );
           if (!res.ok) failed++;
@@ -969,8 +971,23 @@ export default function BibleReaderPage() {
                 />
                 절 표시
                 {verseTimes.length > 0 && (
-                  <span className="text-emerald-600 text-[10px]">
-                    ({verseTimes.length}개 시간 저장됨)
+                  <span className="text-[10px]">
+                    {(() => {
+                      const manual = verseTimes.filter((v) => v.manuallyAdjusted).length;
+                      const auto = verseTimes.length - manual;
+                      return (
+                        <>
+                          (<span className="text-emerald-600">{verseTimes.length}건</span>
+                          {auto > 0 && (
+                            <span className="text-gray-500"> · 자동 {auto}</span>
+                          )}
+                          {manual > 0 && (
+                            <span className="text-amber-700"> · 수동 {manual}</span>
+                          )}
+                          )
+                        </>
+                      );
+                    })()}
                   </span>
                 )}
               </label>
@@ -1092,6 +1109,7 @@ export default function BibleReaderPage() {
                       <tr className="text-gray-600">
                         <th className="px-2 py-1 text-left font-medium w-12">절</th>
                         <th className="px-2 py-1 text-left font-medium">시작</th>
+                        <th className="px-2 py-1 text-center font-medium w-12">상태</th>
                         <th className="px-2 py-1 text-right font-medium w-24">동작</th>
                       </tr>
                     </thead>
@@ -1110,6 +1128,13 @@ export default function BibleReaderPage() {
                             <span className="text-gray-400 ml-1">
                               ({vt.startSec.toFixed(1)}초)
                             </span>
+                          </td>
+                          <td className="px-2 py-1 text-center">
+                            {vt.manuallyAdjusted ? (
+                              <span className="inline-block px-1.5 py-px text-[10px] bg-amber-100 text-amber-800 rounded font-bold">수동</span>
+                            ) : (
+                              <span className="inline-block px-1.5 py-px text-[10px] bg-gray-100 text-gray-500 rounded">자동</span>
+                            )}
                           </td>
                           <td className="px-2 py-1 text-right space-x-1">
                             <button

@@ -671,13 +671,14 @@ model BibleVerse {
 //   값이 없는 절은 글자 수 비율로 fallback.
 // ============================================================
 model BibleVerseTime {
-  id        Int      @id @default(autoincrement())
-  bookId    Int
-  chapter   Int
-  verse     Int
-  startSec  Float
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 Int      @id @default(autoincrement())
+  bookId             Int
+  chapter            Int
+  verse              Int
+  startSec           Float
+  manuallyAdjusted   Boolean  @default(false)   // true = 진행바로 미세 조정 / false = 자동 분할
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   @@unique([bookId, chapter, verse])
   @@index([bookId, chapter])

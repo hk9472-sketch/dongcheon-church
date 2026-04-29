@@ -31,7 +31,7 @@ export async function GET(
   if (!parsed) return NextResponse.json({ message: "잘못된 요청" }, { status: 400 });
   const times = await prisma.bibleVerseTime.findMany({
     where: { bookId: parsed.bookId, chapter: parsed.chapter },
-    select: { verse: true, startSec: true },
+    select: { verse: true, startSec: true, manuallyAdjusted: true },
     orderBy: { verse: "asc" },
   });
   return NextResponse.json({ times });
@@ -51,6 +51,8 @@ export async function POST(
   const body = await request.json().catch(() => ({}));
   const verse = Number(body?.verse);
   const startSec = Number(body?.startSec);
+  // manual: 진행바로 미세 조정한 경우 true, 자동 분할 일괄 저장은 false. 기본 true.
+  const manual = body?.manual === false ? false : true;
   if (!Number.isFinite(verse) || verse < 1 || !Number.isFinite(startSec) || startSec < 0) {
     return NextResponse.json({ message: "verse, startSec 가 필요합니다." }, { status: 400 });
   }
@@ -63,9 +65,15 @@ export async function POST(
         verse,
       },
     },
-    update: { startSec },
-    create: { bookId: parsed.bookId, chapter: parsed.chapter, verse, startSec },
-    select: { verse: true, startSec: true },
+    update: { startSec, manuallyAdjusted: manual },
+    create: {
+      bookId: parsed.bookId,
+      chapter: parsed.chapter,
+      verse,
+      startSec,
+      manuallyAdjusted: manual,
+    },
+    select: { verse: true, startSec: true, manuallyAdjusted: true },
   });
   return NextResponse.json({ saved });
 }
