@@ -867,8 +867,28 @@ model Reading {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  lineTimes ReadingLineTime[]
+
   @@index([sortOrder])
   @@map("readings")
+}
+
+// 재독듣기 줄-시작시간 매핑 (오디오 싱크).
+//   readingId + lineIndex (0-based) 로 식별. content 의 \n 분할 결과 인덱스.
+//   manuallyAdjusted: 자동 분할(false) vs 진행바 미세조정(true)
+model ReadingLineTime {
+  id               Int      @id @default(autoincrement())
+  readingId        Int
+  reading          Reading  @relation(fields: [readingId], references: [id], onDelete: Cascade)
+  lineIndex        Int
+  startSec         Float
+  manuallyAdjusted Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([readingId, lineIndex])
+  @@index([readingId])
+  @@map("reading_line_times")
 }
 
 // ============================================================

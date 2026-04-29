@@ -70,6 +70,14 @@ export default function ReadingPage() {
   const [visualLines, setVisualLines] = useState<VisualLine[]>([]);
   const textBoxRef = useRef<HTMLDivElement>(null);
 
+  // 줄-시간 매핑 (재독듣기 자동 싱크용). lineIndex = lines (content.split('\n')) 의 인덱스.
+  const [lineTimes, setLineTimes] = useState<
+    { lineIndex: number; startSec: number; manuallyAdjusted: boolean }[]
+  >([]);
+  const [lineEditMode, setLineEditMode] = useState(false);
+  const [editLineIndex, setEditLineIndex] = useState<number>(0);
+  const [lineEditMsg, setLineEditMsg] = useState<string | null>(null);
+
   // 관리자 상태
   const [isAdmin, setIsAdmin] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
@@ -144,6 +152,12 @@ export default function ReadingPage() {
       })
       .catch(() => {})
       .finally(() => setDetailLoading(false));
+
+    // 줄-시간 매핑 동시 로드
+    fetch(`/api/council/reading/${id}/line-times`)
+      .then((r) => r.json())
+      .then((d) => setLineTimes(d.times || []))
+      .catch(() => setLineTimes([]));
   };
 
   const audioSrc = selected?.audioPath
@@ -285,6 +299,34 @@ export default function ReadingPage() {
 
     const adjustedTime = t - userTimeOffsetRef.current;
 
+    // 1순위: 저장된 lineTimes 가 있으면 정확 매칭 (raw line 기준).
+    // visualLines 와 raw lines 가 1:1 인 경우(텍스트 wrap 없음) activeLine = activeRawLine.
+    // wrap 된 경우엔 raw line 의 text 와 visualLines 텍스트 prefix 매칭으로 첫 visual line 찾음.
+    if (lineTimes.length > 0) {
+      let activeRaw = lineTimes[0].lineIndex;
+      for (const lt of lineTimes) {
+        if (lt.startSec <= adjustedTime) activeRaw = lt.lineIndex;
+        else break;
+      }
+      // raw → visual 매핑
+      const rawText = lines[activeRaw];
+      if (rawText !== undefined) {
+        // 단순 케이스: visualLines 와 lines 길이가 같으면 동일 인덱스
+        if (visualLines.length === lines.length) {
+          setActiveLine(activeRaw);
+          return;
+        }
+        // wrap 된 경우: 첫 매칭 visual line
+        const idx = visualLines.findIndex((vl) =>
+          rawText.startsWith(vl.text) || vl.text.startsWith(rawText.substring(0, 10))
+        );
+        if (idx >= 0) {
+          setActiveLine(idx);
+          return;
+        }
+      }
+    }
+
     if (hasTimestamps && visualLines[0]?.startTime !== undefined) {
       // 타임스탬프 기반 동기화: 정확한 시간 매칭
       let found = 0;
@@ -358,6 +400,129 @@ export default function ReadingPage() {
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
     return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  // ===== 줄-시간 매핑 편집 (관리자만) =====
+  const seekToLineTime = (sec: number) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = sec;
+      setCurrentTime(sec);
+    }
+  };
+
+  const saveLineTime = async () => {
+    if (!selected) return;
+    setLineEditMsg(null);
+    try {
+      const res = await fetch(`/api/council/reading/${selected.id}/line-times`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lineIndex: editLineIndex,
+          startSec: currentTime,
+          manual: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "저장 실패");
+      const tres = await fetch(`/api/council/reading/${selected.id}/line-times`);
+      const td = await tres.json();
+      setLineTimes(td.times || []);
+      setLineEditMsg(`${editLineIndex + 1}번 줄 시작 시간 ${formatTime(currentTime)} 저장됨`);
+    } catch (e) {
+      setLineEditMsg(`오류: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  const deleteLineTime = async (lineIndex: number) => {
+    if (!selected) return;
+    setLineEditMsg(null);
+    try {
+      const res = await fetch(
+        `/api/council/reading/${selected.id}/line-times?lineIndex=${lineIndex}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.message || "삭제 실패");
+      }
+      setLineTimes((prev) => prev.filter((lt) => lt.lineIndex !== lineIndex));
+      setLineEditMsg(`${lineIndex + 1}번 줄 시간 삭제됨`);
+    } catch (e) {
+      setLineEditMsg(`오류: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  const autoDistributeLineTimes = async () => {
+    if (!selected || lines.length === 0 || !duration || duration <= 0) {
+      setLineEditMsg("오디오가 로드되지 않았거나 줄 데이터가 없습니다.");
+      return;
+    }
+    if (
+      !confirm(
+        `이 본문의 ${lines.length}개 줄을 글자 수 비율로 자동 분할해 저장합니다.\n` +
+          `(이미 저장된 시간이 있다면 덮어씁니다.)\n진행할까요?`
+      )
+    )
+      return;
+
+    const lengths = lines.map((l) => l.length);
+    const totalLen = lengths.reduce((a, b) => a + b, 0);
+    if (totalLen === 0) {
+      setLineEditMsg("줄 본문이 비어 있습니다.");
+      return;
+    }
+
+    let cumLen = 0;
+    const payloads: { lineIndex: number; startSec: number }[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const startSec = (cumLen / totalLen) * duration;
+      payloads.push({ lineIndex: i, startSec });
+      cumLen += lengths[i];
+    }
+
+    setLineEditMsg(`자동 분할 저장 중... 0 / ${payloads.length}`);
+    let done = 0;
+    let failed = 0;
+    await Promise.all(
+      payloads.map(async (p) => {
+        try {
+          const res = await fetch(`/api/council/reading/${selected.id}/line-times`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...p, manual: false }),
+          });
+          if (!res.ok) failed++;
+        } catch {
+          failed++;
+        }
+        done++;
+        setLineEditMsg(`자동 분할 저장 중... ${done} / ${payloads.length}`);
+      })
+    );
+
+    const tres = await fetch(`/api/council/reading/${selected.id}/line-times`);
+    const td = await tres.json();
+    setLineTimes(td.times || []);
+    setLineEditMsg(
+      failed > 0
+        ? `저장 완료: 성공 ${done - failed} / 실패 ${failed}`
+        : `자동 분할 저장 완료 (${done}건). 진행바로 줄별 미세 조정 가능.`
+    );
+  };
+
+  const clearAllLineTimes = async () => {
+    if (!selected) return;
+    if (!confirm(`이 본문의 모든 줄-시간 매핑(${lineTimes.length}건) 을 삭제할까요?`))
+      return;
+    const res = await fetch(
+      `/api/council/reading/${selected.id}/line-times?lineIndex=all`,
+      { method: "DELETE" }
+    );
+    if (res.ok) {
+      setLineTimes([]);
+      setLineEditMsg("이 본문 전체 매핑 삭제됨");
+    }
   };
 
   // 줄 클릭 → 음성은 유지, 동기화 기준점만 재설정
@@ -1074,6 +1239,32 @@ export default function ReadingPage() {
                         <input type="checkbox" checked={continuous} onChange={(e) => setContinuous(e.target.checked)} className="rounded" />
                         이어쓰기
                       </label>
+                      {isAdmin && (
+                        <label className="flex items-center gap-1 text-xs text-amber-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={lineEditMode}
+                            onChange={(e) => setLineEditMode(e.target.checked)}
+                            className="rounded"
+                          />
+                          싱크 편집
+                        </label>
+                      )}
+                      {lineTimes.length > 0 && (
+                        <span className="text-[10px]">
+                          {(() => {
+                            const m = lineTimes.filter((l) => l.manuallyAdjusted).length;
+                            const a = lineTimes.length - m;
+                            return (
+                              <>
+                                (<span className="text-emerald-600">{lineTimes.length}건</span>
+                                {a > 0 && <span className="text-gray-500"> · 자동 {a}</span>}
+                                {m > 0 && <span className="text-amber-700"> · 수동 {m}</span>})
+                              </>
+                            );
+                          })()}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -1091,6 +1282,132 @@ export default function ReadingPage() {
                     줄을 클릭하면 해당 위치부터 재동기화됩니다
                     {hasTimestamps && " (타임스탬프 동기화 활성)"}
                   </div>
+
+                  {/* 줄-시간 편집 패널 */}
+                  {isAdmin && lineEditMode && (
+                    <div className="mt-3 p-3 border border-amber-200 bg-amber-50 rounded-lg space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="text-xs font-bold text-amber-900">싱크 편집 (줄-시간 매핑)</div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={autoDistributeLineTimes}
+                            disabled={!duration || lines.length === 0}
+                            className="px-3 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-40"
+                            title="이 본문의 모든 줄을 글자 수 비율로 자동 분할 저장"
+                          >
+                            이 본문 자동 분할 저장 ({lines.length}줄)
+                          </button>
+                          {lineTimes.length > 0 && (
+                            <button
+                              onClick={clearAllLineTimes}
+                              className="px-2 py-1 text-xs text-red-600 hover:underline"
+                            >
+                              전체 초기화
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-amber-700">
+                        ① 위 버튼으로 자동 분할 (대략적 시작 시간)<br />
+                        ② 진행바를 정확한 위치로 옮기고 줄 선택 → 저장 (미세 조정)
+                      </div>
+                      <div className="flex items-center flex-wrap gap-2">
+                        <span className="text-xs text-gray-700">
+                          현재 위치: <strong className="font-mono">{formatTime(currentTime)}</strong>
+                          <span className="text-gray-400 ml-1">({currentTime.toFixed(1)}초)</span>
+                        </span>
+                        <select
+                          value={editLineIndex}
+                          onChange={(e) => setEditLineIndex(Number(e.target.value))}
+                          className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white max-w-md"
+                        >
+                          {lines.map((ln, i) => (
+                            <option key={i} value={i}>
+                              {i + 1}. {ln.length > 40 ? ln.slice(0, 40) + "…" : ln}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={saveLineTime}
+                          className="px-3 py-1 text-xs bg-amber-600 text-white rounded hover:bg-amber-700"
+                        >
+                          이 시각을 {editLineIndex + 1}번 줄 시작으로 저장
+                        </button>
+                      </div>
+                      {lineEditMsg && (
+                        <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">
+                          {lineEditMsg}
+                        </div>
+                      )}
+                      {lineTimes.length > 0 ? (
+                        <div className="mt-2 max-h-48 overflow-y-auto bg-white rounded border border-amber-200">
+                          <table className="w-full text-xs">
+                            <thead className="bg-gray-50 sticky top-0">
+                              <tr className="text-gray-600">
+                                <th className="px-2 py-1 text-left font-medium w-10">#</th>
+                                <th className="px-2 py-1 text-left font-medium">줄 (앞부분)</th>
+                                <th className="px-2 py-1 text-left font-medium w-20">시작</th>
+                                <th className="px-2 py-1 text-center font-medium w-12">상태</th>
+                                <th className="px-2 py-1 text-right font-medium w-24">동작</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {lineTimes.map((lt) => {
+                                const text = lines[lt.lineIndex] || "(줄 없음)";
+                                return (
+                                  <tr key={lt.lineIndex} className="border-t border-gray-100 hover:bg-amber-50">
+                                    <td className="px-2 py-1 font-mono">{lt.lineIndex + 1}</td>
+                                    <td className="px-2 py-1 text-gray-700 truncate max-w-md" title={text}>
+                                      {text.length > 50 ? text.slice(0, 50) + "…" : text}
+                                    </td>
+                                    <td className="px-2 py-1">
+                                      <button
+                                        onClick={() => seekToLineTime(lt.startSec)}
+                                        className="font-mono text-blue-600 hover:underline"
+                                        title="이 위치로 이동"
+                                      >
+                                        {formatTime(lt.startSec)}
+                                      </button>
+                                    </td>
+                                    <td className="px-2 py-1 text-center">
+                                      {lt.manuallyAdjusted ? (
+                                        <span className="inline-block px-1.5 py-px text-[10px] bg-amber-100 text-amber-800 rounded font-bold">
+                                          수동
+                                        </span>
+                                      ) : (
+                                        <span className="inline-block px-1.5 py-px text-[10px] bg-gray-100 text-gray-500 rounded">
+                                          자동
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-2 py-1 text-right space-x-1">
+                                      <button
+                                        onClick={() => {
+                                          setEditLineIndex(lt.lineIndex);
+                                          seekToLineTime(lt.startSec);
+                                        }}
+                                        className="text-[11px] text-gray-500 hover:underline"
+                                      >
+                                        편집
+                                      </button>
+                                      <button
+                                        onClick={() => deleteLineTime(lt.lineIndex)}
+                                        className="text-[11px] text-red-500 hover:underline"
+                                      >
+                                        삭제
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-gray-500">저장된 매핑이 없습니다.</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
