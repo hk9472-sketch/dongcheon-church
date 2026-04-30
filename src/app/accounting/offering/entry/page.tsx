@@ -393,8 +393,8 @@ export default function OfferingEntryPage() {
 
       {/* form card */}
       <div className="bg-white rounded-lg shadow-sm border-t-4 border-teal-500 p-4 md:p-6 space-y-4">
-        {/* date */}
-        <div className="flex items-end gap-4">
+        {/* date + 무기명 추가 */}
+        <div className="flex items-end gap-4 flex-wrap">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">연보일자</label>
             <input
@@ -404,6 +404,23 @@ export default function OfferingEntryPage() {
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
             />
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              // 개인번호 0 (무기명) + 연보종류별 줄 묶음 추가
+              setRows((prev) => {
+                // 마지막이 빈 행이면 제거 후 무기명 묶음 추가
+                const next = prev.length > 0 && !prev[prev.length - 1].memberId && !prev[prev.length - 1].amount
+                  ? prev.slice(0, -1)
+                  : prev;
+                return [...next, ...memberRows("0", "(무기명)"), emptyRow()];
+              });
+            }}
+            className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+            title="개인번호 없이 (무기명) 으로 연보종류별 줄을 한 묶음 추가"
+          >
+            + 무기명 묶음 추가
+          </button>
         </div>
 
         {/* entry rows table */}
