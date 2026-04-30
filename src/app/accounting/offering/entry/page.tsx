@@ -445,11 +445,11 @@ export default function OfferingEntryPage() {
             <tbody ref={tbodyRef}>
               {rows.map((row, rowIdx) => {
                 const firstOfGroup = isFirstOfMember(rowIdx);
-                // 같은 개인번호 그룹의 행 수 계산 (첫 행에서만)
+                // 같은 묶음(groupKey)의 행 수 계산 — 같은 memberId 라도 묶음 다르면 분리
                 let groupSpan = 1;
                 if (firstOfGroup && row.memberId) {
                   for (let i = rowIdx + 1; i < rows.length; i++) {
-                    if (rows[i].memberId === row.memberId) groupSpan++;
+                    if (rows[i].groupKey === row.groupKey) groupSpan++;
                     else break;
                   }
                 }
@@ -461,8 +461,8 @@ export default function OfferingEntryPage() {
                       firstOfGroup && row.memberId ? "border-t border-gray-300" : ""
                     }`}
                   >
-                    {/* 개인번호 - 그룹 첫 행에서만 표시 */}
-                    {(firstOfGroup || !row.memberId) && (
+                    {/* 개인번호 - 묶음 첫 행에서만 표시 */}
+                    {firstOfGroup && (
                       <td
                         className="px-2 py-1.5 align-top"
                         rowSpan={row.memberId ? groupSpan : 1}
@@ -504,8 +504,8 @@ export default function OfferingEntryPage() {
                         </div>
                       </td>
                     )}
-                    {/* 성명 - 그룹 첫 행에서만 표시 */}
-                    {hasMemberEdit && (firstOfGroup || !row.memberId) && (
+                    {/* 성명 - 묶음 첫 행에서만 표시 */}
+                    {hasMemberEdit && firstOfGroup && (
                       <td
                         className="px-2 py-1.5 align-top"
                         rowSpan={row.memberId ? groupSpan : 1}
