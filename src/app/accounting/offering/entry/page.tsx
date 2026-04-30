@@ -17,6 +17,7 @@ const OFFERING_TYPES = [
 /* ───── types ───── */
 interface EntryRow {
   key: string;
+  groupKey: string;          // 같은 묶음(연보종류 6행) 식별자 — memberId 가 같아도 묶음마다 unique
   memberId: string;
   memberName: string;
   offeringType: string;
@@ -55,10 +56,15 @@ let keySeq = 0;
 function nextKey(): string {
   return `row-${++keySeq}-${Date.now()}`;
 }
+let groupSeq = 0;
+function nextGroupKey(): string {
+  return `g-${++groupSeq}-${Date.now()}`;
+}
 
 function emptyRow(): EntryRow {
   return {
     key: nextKey(),
+    groupKey: nextGroupKey(),  // 빈 행도 자기만의 그룹키 — 입력 시 그 그룹키로 6행 확장
     memberId: "",
     memberName: "",
     offeringType: OFFERING_TYPES[0],
@@ -67,10 +73,12 @@ function emptyRow(): EntryRow {
   };
 }
 
-/** 하나의 개인번호에 대해 연보종류별 6행 생성 */
+/** 하나의 개인번호에 대해 연보종류별 6행 생성 — 같은 묶음은 동일 groupKey */
 function memberRows(memberId: string, memberName: string): EntryRow[] {
+  const gk = nextGroupKey();
   return OFFERING_TYPES.map((t) => ({
     key: nextKey(),
+    groupKey: gk,
     memberId,
     memberName,
     offeringType: t,
@@ -194,24 +202,22 @@ export default function OfferingEntryPage() {
           const idx = prev.findIndex((r) => r.key === key);
           if (idx < 0) return prev;
           const current = prev[idx];
-          // 같은 번호가 이미 확장된 상태면 그대로 유지 (중복 확장 방지)
-          if (current.memberId === String(id) && current.memberName === name) {
+          // 이 행이 이미 같은 묶음으로 확장된 상태면 그대로 유지 (재입력 방지)
+          if (
+            current.memberId === String(id) &&
+            current.memberName === name &&
+            // 다음 행도 같은 groupKey 면 이미 확장된 묶음
+            prev[idx + 1]?.groupKey === current.groupKey
+          ) {
             return prev;
           }
-          // 빈 줄 → 6줄로 확장. 이름만 다른 경우에도 새로 확장하여 일관성 유지.
+          // 빈 줄 → 6줄로 확장 (새 groupKey). 같은 memberId 가 다른 묶음으로 또 들어가도 OK.
           const newRows = memberRows(String(id), name);
           const result = [...prev];
-          // 같은 번호 그룹이 뒤에 이어져 있으면 한꺼번에 교체
-          let removeCount = 1;
-          for (let i = idx + 1; i < result.length; i++) {
-            if (result[i].memberId === current.memberId && current.memberId !== "") {
-              removeCount++;
-            } else break;
-          }
-          result.splice(idx, removeCount, ...newRows);
+          result.splice(idx, 1, ...newRows);
           // 끝에 빈 줄이 없으면 추가
           const last = result[result.length - 1];
-          if (last.memberId !== "") {
+          if (last.memberId !== "" || last.amount !== "") {
             result.push(emptyRow());
           }
           // 확장된 첫 행의 금액 칸으로 포커스
@@ -367,10 +373,10 @@ export default function OfferingEntryPage() {
     setMemberSearchResults([]);
   }
 
-  /* ---- 같은 개인번호의 첫 행인지 (그룹 헤더용) ---- */
+  /* ---- 묶음(groupKey)의 첫 행인지 (그룹 헤더용) ---- */
   function isFirstOfMember(idx: number): boolean {
     if (idx === 0) return true;
-    return rows[idx].memberId !== rows[idx - 1].memberId || rows[idx].memberId === "";
+    return rows[idx].groupKey !== rows[idx - 1].groupKey;
   }
 
   /* ======== render ======== */
