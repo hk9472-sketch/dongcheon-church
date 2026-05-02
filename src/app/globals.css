@@ -296,6 +296,20 @@ html {
   background-color: #f3f4f6;
   font-weight: 600;
 }
+/* ProseMirror 셀 다중선택 — 드래그로 여러 셀 선택했을 때 시각적 표시.
+   이게 없으면 선택돼도 안 보여서 사용자가 선택 안 됐다고 오인.
+   ::after 오버레이로 칠해서 셀 안의 텍스트 색은 그대로 유지. */
+.tiptap-editor .ProseMirror .selectedCell {
+  background-color: rgba(59, 130, 246, 0.18);
+}
+.tiptap-editor .ProseMirror .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(59, 130, 246, 0.15);
+  pointer-events: none;
+  z-index: 2;
+}
 /* TipTap 컬럼 리사이즈 핸들 (셀 오른쪽 경계 6px 영역) */
 .tiptap-editor .ProseMirror .column-resize-handle {
   position: absolute;
