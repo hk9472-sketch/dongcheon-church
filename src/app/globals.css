@@ -535,11 +535,13 @@ html {
 .prose ol[data-style="decimal-zero"],
 .comment-content ol[data-style="decimal-zero"] { list-style-type: decimal-leading-zero !important; }
 
-/* 9) — 숫자 + 우괄호. CSS counter 로 처리 (표준 list-style 에 없음) */
+/* 9) — 숫자 + 우괄호. CSS counter 로 처리 (표준 list-style 에 없음).
+   nested 단계용 list-style-type 이 더 강해 default decimal 마커가
+   추가로 표시되는 사고를 막기 위해 list-style-type: none 도 !important. */
 .tiptap-editor .ProseMirror ol[data-style="paren"],
 .prose ol[data-style="paren"],
 .comment-content ol[data-style="paren"] {
-  list-style: none;
+  list-style-type: none !important;
   counter-reset: dc-list;
   padding-left: 2em;
 }
@@ -560,11 +562,11 @@ html {
   padding-right: 0.2em;
 }
 
-/* (9) — 양괄호로 감싼 숫자 */
+/* (9) — 양괄호로 감싼 숫자. paren 과 동일 이유로 list-style-type none !important */
 .tiptap-editor .ProseMirror ol[data-style="bracket"],
 .prose ol[data-style="bracket"],
 .comment-content ol[data-style="bracket"] {
-  list-style: none;
+  list-style-type: none !important;
   counter-reset: dc-list;
   padding-left: 2.4em;
 }
