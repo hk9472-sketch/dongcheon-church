@@ -104,6 +104,7 @@ export async function POST(req: NextRequest) {
   let body: {
     date?: string;
     denominations?: DenomCounts;
+    allocation?: AllocationResult; // 작업자가 수동 조정한 분배 결과 (있으면 저장)
   };
   try {
     body = await req.json();
@@ -144,7 +145,11 @@ export async function POST(req: NextRequest) {
   const generalAmount =
     cat.amtSunday + cat.amtThanks + cat.amtSpecial + cat.amtOil + cat.amtSeason + diff;
   const titheAmount = cat.amtTithe;
-  const allocation: AllocationResult = allocate(counts, generalAmount, titheAmount);
+  // 작업자가 수동 분배 보냈으면 그대로 저장, 아니면 알고리즘으로 자동 계산
+  const allocation: AllocationResult =
+    body.allocation && typeof body.allocation === "object"
+      ? body.allocation
+      : allocate(counts, generalAmount, titheAmount);
 
   const operatorName = acc.user?.name ?? acc.user?.userId ?? "결산";
   const data = {

@@ -144,7 +144,17 @@ export function allocate(
   //   단, 금액 제약(remG, remT) 을 넘지 않게 clamp.
   //   1000원 같은 작은 단위는 적은 쪽에 몰아주면 매수가 빠르게 채워지면서 금액은 적게 드는 이점.
   //   큰 단위(50000) 는 마지막에 남은 금액 차이를 채움.
-  const BIG_ASCENDING: DenomKey[] = ["w1000", "w5000", "w10000", "w50000"];
+  // Phase 1 후 남은 모든 단위(작은 것부터) 를 Phase 2 에서 분배 — w500 같은 leftover 도 포함
+  const BIG_ASCENDING: DenomKey[] = [
+    "w10",
+    "w50",
+    "w100",
+    "w500",
+    "w1000",
+    "w5000",
+    "w10000",
+    "w50000",
+  ];
   const sumCount = (g: AllocationGroup) =>
     g.w50000 + g.w10000 + g.w5000 + g.w1000 + g.w500 + g.w100 + g.w50 + g.w10;
   for (const key of BIG_ASCENDING) {
@@ -210,9 +220,10 @@ export function allocate(
         if (bigUnit % smallUnit !== 0) continue;
         const ratio = bigUnit / smallUnit; // 작은 단위 매수
         if (giver[small] < ratio) continue;
-        // 차이 감소량: ratio - 1 (giver -ratio + 1, receiver +ratio - 1)
-        // 차이가 |delta| < ratio - 1 이면 over-shoot — skip
-        if (Math.abs(cDelta) < ratio - 1) continue;
+        // 진동 방지: swap 후 |cDelta| 가 줄어드는지 확인.
+        // swap 은 |cDelta| 를 |cDelta - 2*(ratio-1)| 로 바꾼다.
+        // 줄이려면 (ratio-1) <= (|cDelta|-1) 즉 (ratio-1) < |cDelta|.
+        if (ratio - 1 >= Math.abs(cDelta)) continue;
         receiver[big] -= 1;
         giver[big] += 1;
         receiver[small] += ratio;
@@ -264,14 +275,15 @@ export function allocate(
   return { general, tithe, residual, exact };
 }
 
-/** from 에서 to 로 단위 ≤ need 인 매수 1매 이동 — 가능했으면 그 단위 반환, 아니면 0 */
+/** from 에서 to 로 단위 ≤ need 인 매수 1매 이동 — 가능한 가장 큰 단위 우선(빠른 수렴). */
 function moveOne(
-  order: DenomKey[],
+  _order: DenomKey[],
   from: AllocationGroup,
   to: AllocationGroup,
   need: number,
 ): number {
-  for (const key of order) {
+  // DENOM_KEYS 는 큰 단위부터 → 첫 매치가 가장 큰 적합 단위
+  for (const key of DENOM_KEYS) {
     const u = KEY_TO_UNIT[key];
     if (u <= need && from[key] > 0) {
       from[key] -= 1;

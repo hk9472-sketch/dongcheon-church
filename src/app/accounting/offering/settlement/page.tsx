@@ -61,6 +61,67 @@ export default function OfferingSettlementPage() {
   const [counts, setCounts] = useState<DenomCounts>(ZERO_COUNTS);
   const [allocation, setAllocation] = useState<AllocationResult | null>(null);
 
+  // 분배표의 매수 셀을 편집할 때 호출 — 일반/십일조 매수를 직접 수정.
+  // 매수 변경 시 같은 단위의 다른 측 매수는 (전체 매수 - 변경값) 으로 자동 sync.
+  const updateAllocCount = (
+    side: "general" | "tithe",
+    key: keyof AllocationGroup,
+    value: string,
+  ) => {
+    if (!allocation) return;
+    const n = parseInt(value.replace(/[^\d]/g, ""), 10) || 0;
+    setAllocation((prev) => {
+      if (!prev) return prev;
+      const next = {
+        ...prev,
+        general: { ...prev.general },
+        tithe: { ...prev.tithe },
+        residual: { ...prev.residual },
+      };
+      if (key === "check") {
+        // 수표는 금액 입력
+        next[side].check = n;
+        const otherSide = side === "general" ? "tithe" : "general";
+        next[otherSide].check = Math.max(0, counts.check - n);
+      } else {
+        const totalCnt = counts[key as keyof DenomCounts];
+        next[side][key] = n;
+        const otherSide = side === "general" ? "tithe" : "general";
+        next[otherSide][key] = Math.max(0, totalCnt - n);
+      }
+      // residual 재계산
+      next.residual.general =
+        categories.amtTithe + 0 // placeholder; 실제 계산 아래에서
+          ? 0
+          : 0;
+      // 재계산: residual = 목표 - 분배합. 목표는 차액 반영된 값
+      const finalSunday = categories.amtSunday + Math.max(0, cashTotal - inputTotal);
+      const generalAmount =
+        finalSunday +
+        categories.amtThanks +
+        categories.amtSpecial +
+        categories.amtOil +
+        categories.amtSeason;
+      const titheAmount = categories.amtTithe;
+      const sumGroupLocal = (g: AllocationGroup) =>
+        g.check +
+        g.w50000 * 50000 +
+        g.w10000 * 10000 +
+        g.w5000 * 5000 +
+        g.w1000 * 1000 +
+        g.w500 * 500 +
+        g.w100 * 100 +
+        g.w50 * 50 +
+        g.w10 * 10;
+      next.residual = {
+        general: generalAmount - sumGroupLocal(next.general),
+        tithe: titheAmount - sumGroupLocal(next.tithe),
+      };
+      next.exact = next.residual.general === 0 && next.residual.tithe === 0;
+      return next;
+    });
+  };
+
   const inputTotal = useMemo(
     () =>
       categories.amtTithe +
@@ -276,7 +337,12 @@ export default function OfferingSettlementPage() {
       const res = await fetch("/api/accounting/offering/settlement", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, denominations: counts }),
+        body: JSON.stringify({
+          date,
+          denominations: counts,
+          // 작업자가 분배 매수를 수동 조정했으면 그대로 저장
+          allocation: allocation || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "저장 실패");
@@ -541,15 +607,64 @@ export default function OfferingSettlementPage() {
                   const tv = tithe?.[row.key as keyof AllocationGroup] ?? 0;
                   const gAmt = row.unit ? gv * row.unit : gv;
                   const tAmt = row.unit ? tv * row.unit : tv;
+                  const isCheck = row.unit === null;
                   return (
                     <tr key={row.key} className="border-b last:border-b-0">
                       <td className="px-3 py-2 border-r">{row.label}</td>
                       <td className="px-3 py-2 text-right">{row.unit ? totCnt : "—"}</td>
                       <td className="px-3 py-2 text-right font-mono border-r">{fmt(totAmt)}</td>
-                      <td className="px-3 py-2 text-right">{row.unit ? gv : "—"}</td>
-                      <td className="px-3 py-2 text-right font-mono border-r">{fmt(gAmt)}</td>
-                      <td className="px-3 py-2 text-right">{row.unit ? tv : "—"}</td>
-                      <td className="px-3 py-2 text-right font-mono">{fmt(tAmt)}</td>
+                      <td className="px-2 py-1 text-right">
+                        {isCheck ? (
+                          <span className="text-gray-400">—</span>
+                        ) : (
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={gv === 0 ? "" : gv.toLocaleString()}
+                            onChange={(e) => updateAllocCount("general", row.key as keyof AllocationGroup, e.target.value)}
+                            className="w-16 rounded border border-gray-200 px-1 py-0.5 text-right text-sm focus:border-emerald-500 focus:outline-none"
+                          />
+                        )}
+                      </td>
+                      <td className="px-2 py-1 text-right border-r">
+                        {isCheck ? (
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={gv === 0 ? "" : gv.toLocaleString()}
+                            onChange={(e) => updateAllocCount("general", "check", e.target.value)}
+                            className="w-24 rounded border border-gray-200 px-1 py-0.5 text-right text-sm font-mono focus:border-emerald-500 focus:outline-none"
+                          />
+                        ) : (
+                          <span className="font-mono">{fmt(gAmt)}</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        {isCheck ? (
+                          <span className="text-gray-400">—</span>
+                        ) : (
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={tv === 0 ? "" : tv.toLocaleString()}
+                            onChange={(e) => updateAllocCount("tithe", row.key as keyof AllocationGroup, e.target.value)}
+                            className="w-16 rounded border border-gray-200 px-1 py-0.5 text-right text-sm focus:border-amber-500 focus:outline-none"
+                          />
+                        )}
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        {isCheck ? (
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={tv === 0 ? "" : tv.toLocaleString()}
+                            onChange={(e) => updateAllocCount("tithe", "check", e.target.value)}
+                            className="w-24 rounded border border-gray-200 px-1 py-0.5 text-right text-sm font-mono focus:border-amber-500 focus:outline-none"
+                          />
+                        ) : (
+                          <span className="font-mono">{fmt(tAmt)}</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
