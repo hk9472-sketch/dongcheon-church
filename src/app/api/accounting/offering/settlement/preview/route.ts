@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     int(cat.amtOil) +
     int(cat.amtSeason);
   const cashTotal = totalOf(counts);
-  const diff = Math.max(0, cashTotal - inputTotal);
+  const diff = cashTotal - inputTotal; // 음수도 허용 (확인 안 된 분 등 — 담당자 판단)
 
   const finalSunday = int(cat.amtSunday) + diff;
   const generalAmount =

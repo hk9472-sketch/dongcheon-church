@@ -52,7 +52,8 @@ export async function GET(req: NextRequest) {
 
   const rawEntries = await prisma.offeringEntry.findMany({
     where,
-    orderBy: { date: "desc" },
+    // 최근 입력순: 날짜 내림차순 + id 내림차순 (같은 날 내에서 마지막 입력이 위)
+    orderBy: [{ date: "desc" }, { id: "desc" }],
   });
   const entries = await attachMembers(rawEntries);
 

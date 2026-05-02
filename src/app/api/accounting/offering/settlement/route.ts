@@ -56,16 +56,24 @@ async function loadCategoryTotals(date: Date) {
 }
 
 // GET /api/accounting/offering/settlement?date=YYYY-MM-DD
-//   기존 결산 있으면 그대로, 없으면 카테고리 합계만 (매수는 0)
+//   기존 결산 있으면 반환, 없으면 카테고리만 자동 집계.
+//   query refresh=1 면 매수·결산 무시하고 카테고리만 새로 집계 (새로고침).
 export async function GET(req: NextRequest) {
   const acc = await checkAccAccess("offering");
   if (!acc.ok) return NextResponse.json({ error: acc.error }, { status: acc.status });
 
   const dateStr = req.nextUrl.searchParams.get("date");
+  const refresh = req.nextUrl.searchParams.get("refresh") === "1";
   if (!dateStr) return NextResponse.json({ error: "date 파라미터 필요" }, { status: 400 });
   const date = new Date(dateStr + "T00:00:00");
   if (isNaN(date.getTime()))
     return NextResponse.json({ error: "잘못된 날짜" }, { status: 400 });
+
+  const cat = await loadCategoryTotals(date);
+
+  if (refresh) {
+    return NextResponse.json({ mode: "refresh", categories: cat });
+  }
 
   const existing = await prisma.offeringSettlement.findUnique({ where: { date } });
   if (existing) {
@@ -75,25 +83,27 @@ export async function GET(req: NextRequest) {
         ...existing,
         allocation: safeJsonParse(existing.allocation),
       },
+      // 최신 카테고리 합계도 같이 줘서 변동 있는지 비교 가능
+      categories: cat,
     });
   }
 
-  // 신규 — 카테고리 합계만 계산해서 반환
-  const cat = await loadCategoryTotals(date);
-  return NextResponse.json({
-    mode: "new",
-    categories: cat,
-  });
+  return NextResponse.json({ mode: "new", categories: cat });
 }
 
 // POST /api/accounting/offering/settlement
-// body: { date, denominations: DenomCounts }
-//   확정 — 차액 entry 추가 + 분배 계산 + settlement 저장. 잠금.
+//   body: { date, denominations: DenomCounts, denomAmounts?: Partial<AllocationGroup> }
+//   denomAmounts 가 있으면 매수 × 단위 외 별도 금액으로 처리 (수표 외 단위에도
+//   금액 직접 입력 허용 — 매수와 정확히 일치 안 해도 사용자 입력 그대로 저장).
+//   잠금 없음 — 항상 upsert 가능.
 export async function POST(req: NextRequest) {
   const acc = await checkAccAccess("offering");
   if (!acc.ok) return NextResponse.json({ error: acc.error }, { status: acc.status });
 
-  let body: { date?: string; denominations?: DenomCounts };
+  let body: {
+    date?: string;
+    denominations?: DenomCounts;
+  };
   try {
     body = await req.json();
   } catch {
@@ -121,100 +131,49 @@ export async function POST(req: NextRequest) {
     w50: int(d.w50),
     w10: int(d.w10),
   };
-  for (const v of Object.values(counts)) {
-    if (v < 0) return NextResponse.json({ error: "음수 매수 불가" }, { status: 400 });
-  }
 
-  // 이미 확정됐으면 거부
-  const existing = await prisma.offeringSettlement.findUnique({ where: { date } });
-  if (existing && existing.finalizedAt) {
-    return NextResponse.json(
-      { error: "이미 확정된 결산입니다. 관리자에게 잠금 해제 요청 필요." },
-      { status: 409 },
-    );
-  }
-
-  // 서버측 카테고리 합계 재계산
+  // 카테고리 합계 (저장 시점 스냅샷)
   const cat = await loadCategoryTotals(date);
   const inputTotal =
     cat.amtTithe + cat.amtSunday + cat.amtThanks + cat.amtSpecial + cat.amtOil + cat.amtSeason;
   const cashTotal = totalOf(counts);
 
-  if (cashTotal < inputTotal) {
-    return NextResponse.json(
-      {
-        error: `매수합계(${cashTotal.toLocaleString()})가 입력합계(${inputTotal.toLocaleString()})보다 적습니다. 매수를 다시 확인해주세요.`,
-      },
-      { status: 400 },
-    );
-  }
-
+  // 차액 = 매수합 - 입력합 (음수도 허용 — 미확인 분 등). 주일연보에 더해 일반 금액 산정.
   const diff = cashTotal - inputTotal;
+  const generalAmount =
+    cat.amtSunday + cat.amtThanks + cat.amtSpecial + cat.amtOil + cat.amtSeason + diff;
+  const titheAmount = cat.amtTithe;
+  const allocation: AllocationResult = allocate(counts, generalAmount, titheAmount);
 
-  // 트랜잭션: 차액 OfferingEntry 추가 → settlement upsert
   const operatorName = acc.user?.name ?? acc.user?.userId ?? "결산";
+  const data = {
+    date,
+    ...cat, // 원본 카테고리 (차액 미반영 — UI 에서 확인용)
+    cashCheck: counts.check,
+    cnt50000: counts.w50000,
+    cnt10000: counts.w10000,
+    cnt5000: counts.w5000,
+    cnt1000: counts.w1000,
+    cnt500: counts.w500,
+    cnt100: counts.w100,
+    cnt50: counts.w50,
+    cnt10: counts.w10,
+    diffAmount: diff,
+    diffEntryId: null,
+    allocation: JSON.stringify(allocation),
+    finalizedAt: null,
+    finalizedBy: operatorName, // 마지막 저장자
+  };
 
-  const result = await prisma.$transaction(async (tx) => {
-    let diffEntryId: number | null = null;
-    if (diff > 0) {
-      const entry = await tx.offeringEntry.create({
-        data: {
-          date,
-          memberId: null,
-          offeringType: "주일연보",
-          amount: diff,
-          description: "결산차액",
-          createdBy: operatorName,
-        },
-      });
-      diffEntryId = entry.id;
-    }
-
-    // 차액 반영된 카테고리 (주일연보에 더해짐)
-    const finalCat = {
-      ...cat,
-      amtSunday: cat.amtSunday + diff,
-    };
-    const generalAmount =
-      finalCat.amtSunday +
-      finalCat.amtThanks +
-      finalCat.amtSpecial +
-      finalCat.amtOil +
-      finalCat.amtSeason;
-    const titheAmount = finalCat.amtTithe;
-
-    const allocation: AllocationResult = allocate(counts, generalAmount, titheAmount);
-
-    const data = {
-      date,
-      ...finalCat,
-      cashCheck: counts.check,
-      cnt50000: counts.w50000,
-      cnt10000: counts.w10000,
-      cnt5000: counts.w5000,
-      cnt1000: counts.w1000,
-      cnt500: counts.w500,
-      cnt100: counts.w100,
-      cnt50: counts.w50,
-      cnt10: counts.w10,
-      diffAmount: diff,
-      diffEntryId,
-      allocation: JSON.stringify(allocation),
-      finalizedAt: new Date(),
-      finalizedBy: operatorName,
-    };
-
-    const saved = await tx.offeringSettlement.upsert({
-      where: { date },
-      create: data,
-      update: data,
-    });
-    return { saved, allocation, finalCat };
+  const saved = await prisma.offeringSettlement.upsert({
+    where: { date },
+    create: data,
+    update: data,
   });
 
   return NextResponse.json({
     ok: true,
-    settlement: { ...result.saved, allocation: result.allocation },
+    settlement: { ...saved, allocation },
   });
 }
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAccountPerms } from "@/lib/useAccountPerms";
 import HelpButton from "@/components/HelpButton";
+import EntryEditModal from "@/components/offering/EntryEditModal";
 
 /* ───── constants ───── */
 const OFFERING_TYPES = [
@@ -95,6 +96,7 @@ export default function OfferingEntryPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [todayEntries, setTodayEntries] = useState<SavedEntry[]>([]);
+  const [editingEntry, setEditingEntry] = useState<SavedEntry | null>(null);
 
   // member search popup
   const [searchPopupKey, setSearchPopupKey] = useState<string | null>(null);
@@ -635,7 +637,12 @@ export default function OfferingEntryPage() {
                 </tr>
               ) : (
                 todayEntries.map((e) => (
-                  <tr key={e.id} className="border-t border-gray-100 hover:bg-gray-50">
+                  <tr
+                    key={e.id}
+                    className="border-t border-gray-100 hover:bg-blue-50 cursor-pointer"
+                    onClick={() => setEditingEntry(e)}
+                    title="클릭하면 수정"
+                  >
                     <td className="px-3 py-2 text-gray-600">{e.memberId ?? "-"}</td>
                     {hasMemberEdit && (
                       <td className="px-3 py-2 text-gray-800">
@@ -650,7 +657,10 @@ export default function OfferingEntryPage() {
                     <td className="px-3 py-2 text-center">
                       <button
                         type="button"
-                        onClick={() => handleDeleteEntry(e.id)}
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          handleDeleteEntry(e.id);
+                        }}
                         className="text-red-400 hover:text-red-600 text-xs"
                       >
                         삭제
@@ -727,6 +737,16 @@ export default function OfferingEntryPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {editingEntry && (
+        <EntryEditModal
+          entry={editingEntry}
+          onClose={() => setEditingEntry(null)}
+          onSaved={() => {
+            fetchTodayEntries();
+          }}
+        />
       )}
     </div>
   );

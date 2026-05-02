@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import type {
   AllocationResult,
   DenomCounts,
@@ -55,21 +55,11 @@ export default function OfferingSettlementPage() {
   const [date, setDate] = useState(today);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
 
-  const [savedMode, setSavedMode] = useState<"new" | "saved">("new");
   const [categories, setCategories] = useState<Categories>(ZERO_CAT);
   const [counts, setCounts] = useState<DenomCounts>(ZERO_COUNTS);
   const [allocation, setAllocation] = useState<AllocationResult | null>(null);
-  const [previewCalc, setPreviewCalc] = useState<{
-    diff: number;
-    finalSunday: number;
-    generalAmount: number;
-    titheAmount: number;
-    cashTotal: number;
-    inputTotal: number;
-  } | null>(null);
-  const [finalizedAt, setFinalizedAt] = useState<string | null>(null);
-  const [finalizedBy, setFinalizedBy] = useState<string | null>(null);
 
   const inputTotal = useMemo(
     () =>
@@ -96,16 +86,14 @@ export default function OfferingSettlementPage() {
     [counts],
   );
 
-  const diff = Math.max(0, cashTotal - inputTotal);
+  const diff = cashTotal - inputTotal;
 
-  // 일자 변경 → 카테고리 + 기존 결산 로드
+  // 일자 선택 → 기존 결산 또는 카테고리 자동 로드
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     setAllocation(null);
-    setPreviewCalc(null);
-    setFinalizedAt(null);
-    setFinalizedBy(null);
+    setSavedAt(null);
     try {
       const res = await fetch(`/api/accounting/offering/settlement?date=${date}`);
       const data = await res.json();
@@ -113,7 +101,6 @@ export default function OfferingSettlementPage() {
 
       if (data.mode === "saved") {
         const s = data.settlement;
-        setSavedMode("saved");
         setCategories({
           amtTithe: s.amtTithe,
           amtSunday: s.amtSunday,
@@ -134,10 +121,8 @@ export default function OfferingSettlementPage() {
           w10: s.cnt10,
         });
         setAllocation(s.allocation);
-        setFinalizedAt(s.finalizedAt);
-        setFinalizedBy(s.finalizedBy);
+        setSavedAt(s.updatedAt || s.createdAt || null);
       } else {
-        setSavedMode("new");
         setCategories(data.categories);
         setCounts(ZERO_COUNTS);
       }
@@ -152,11 +137,90 @@ export default function OfferingSettlementPage() {
     load();
   }, [load]);
 
+  // 새로고침 — 매수 입력은 유지, 카테고리 합계만 DB 에서 재집계
+  const refreshCategories = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/accounting/offering/settlement?date=${date}&refresh=1`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "새로고침 실패");
+      setCategories(data.categories);
+      setAllocation(null); // 카테고리 바뀌면 분배 다시 계산 필요
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "새로고침 실패");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 매수/금액 양방향 sync
+  // 매수 변경 시 금액 = 매수 × 단위 (수표 제외)
+  // 금액 변경 시 매수 = round(금액 / 단위)
   const updateCount = (key: keyof DenomCounts, value: string) => {
     const n = parseInt(value.replace(/[^\d]/g, ""), 10) || 0;
     setCounts((prev) => ({ ...prev, [key]: n }));
     setAllocation(null);
-    setPreviewCalc(null);
+  };
+
+  const updateAmount = (key: keyof DenomCounts, value: string) => {
+    const amt = parseInt(value.replace(/[^\d]/g, ""), 10) || 0;
+    const row = DENOM_ROWS.find((r) => r.key === key);
+    if (!row) return;
+    if (row.unit === null) {
+      // 수표 — 금액 그대로 저장
+      setCounts((prev) => ({ ...prev, [key]: amt }));
+    } else {
+      // 매수 = round(금액 / 단위)
+      const cnt = Math.round(amt / row.unit);
+      setCounts((prev) => ({ ...prev, [key]: cnt }));
+    }
+    setAllocation(null);
+  };
+
+  // 화살표키 ↑↓ 로 매수 입력란 위/아래 이동.
+  // 칸 인덱스: 0=수표, 1=50000, ... 8=10원. 좌우는 매수↔금액 (수표는 금액만).
+  const inputRefs = useRef<Array<Array<HTMLInputElement | null>>>(
+    DENOM_ROWS.map(() => [null, null]),
+  );
+  const focusCell = (rowIdx: number, colIdx: number) => {
+    const r = Math.max(0, Math.min(DENOM_ROWS.length - 1, rowIdx));
+    const c = Math.max(0, Math.min(1, colIdx));
+    const el = inputRefs.current[r]?.[c];
+    if (el) {
+      el.focus();
+      el.select();
+    } else {
+      // fallback: 다른 컬럼 시도
+      const other = inputRefs.current[r]?.[1 - c];
+      other?.focus();
+    }
+  };
+  const onCellKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    rowIdx: number,
+    colIdx: number,
+  ) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      focusCell(rowIdx + 1, colIdx);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      focusCell(rowIdx - 1, colIdx);
+    } else if (e.key === "ArrowLeft" && (e.target as HTMLInputElement).selectionStart === 0) {
+      e.preventDefault();
+      focusCell(rowIdx, colIdx - 1);
+    } else if (
+      e.key === "ArrowRight" &&
+      (e.target as HTMLInputElement).selectionEnd ===
+        (e.target as HTMLInputElement).value.length
+    ) {
+      e.preventDefault();
+      focusCell(rowIdx, colIdx + 1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      focusCell(rowIdx + 1, colIdx);
+    }
   };
 
   // 분배 미리보기
@@ -171,35 +235,13 @@ export default function OfferingSettlementPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "미리보기 실패");
       setAllocation(data.allocation);
-      setPreviewCalc({
-        diff: data.diff,
-        finalSunday: data.finalCategories.amtSunday,
-        generalAmount: data.generalAmount,
-        titheAmount: data.titheAmount,
-        cashTotal: data.cashTotal,
-        inputTotal: data.inputTotal,
-      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "미리보기 실패");
     }
   };
 
-  // 최종 확정
-  const finalize = async () => {
-    if (cashTotal < inputTotal) {
-      alert(`매수합(${fmt(cashTotal)})이 입력합(${fmt(inputTotal)})보다 적습니다.`);
-      return;
-    }
-    if (
-      !confirm(
-        `${date} 결산을 확정합니다.\n\n` +
-          `· 차액 ${fmt(diff)}원이 주일연보로 추가됨\n` +
-          `· 매수 분배 결과 저장\n` +
-          `· 확정 후 잠김 (수정 불가)\n\n계속하시겠습니까?`,
-      )
-    ) {
-      return;
-    }
+  // 저장 (잠금 없음 — 언제든 다시 수정 가능)
+  const save = async () => {
     setLoading(true);
     setError(null);
     try {
@@ -209,17 +251,16 @@ export default function OfferingSettlementPage() {
         body: JSON.stringify({ date, denominations: counts }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "확정 실패");
-      alert("결산이 확정되었습니다.");
-      await load();
+      if (!res.ok) throw new Error(data?.error || "저장 실패");
+      setAllocation(data.settlement.allocation);
+      setSavedAt(new Date().toISOString());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "확정 실패");
+      setError(e instanceof Error ? e.message : "저장 실패");
     } finally {
       setLoading(false);
     }
   };
 
-  const isFinalized = !!finalizedAt;
   const general = allocation?.general;
   const tithe = allocation?.tithe;
 
@@ -236,11 +277,12 @@ export default function OfferingSettlementPage() {
           />
           <button
             type="button"
-            onClick={load}
+            onClick={refreshCategories}
             disabled={loading}
             className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
+            title="해당 일자의 연보 입력 합계를 다시 불러옵니다 (매수 입력은 유지)"
           >
-            새로고침
+            연보 다시 불러오기
           </button>
         </div>
       </div>
@@ -251,10 +293,9 @@ export default function OfferingSettlementPage() {
         </div>
       )}
 
-      {isFinalized && (
-        <div className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-          🔒 확정됨 — {finalizedAt && new Date(finalizedAt).toLocaleString("ko-KR")} ·{" "}
-          {finalizedBy} (수정 불가)
+      {savedAt && (
+        <div className="rounded border border-green-200 bg-green-50 p-2 text-xs text-green-800">
+          마지막 저장: {new Date(savedAt).toLocaleString("ko-KR")}
         </div>
       )}
 
@@ -294,41 +335,78 @@ export default function OfferingSettlementPage() {
       {/* 매수 입력 */}
       <section className="rounded-lg border bg-white shadow-sm">
         <header className="border-b bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700">
-          2. 화폐 매수 입력
+          2. 화폐 매수 입력{" "}
+          <span className="ml-2 text-xs font-normal text-gray-500">
+            (↑↓←→ 키로 칸 이동, Enter 로 다음 칸)
+          </span>
         </header>
         <table className="w-full text-sm">
           <thead className="border-b text-xs text-gray-500">
             <tr>
               <th className="px-4 py-2 text-left font-medium">종류</th>
-              <th className="px-4 py-2 text-right font-medium w-32">매수 / 총액</th>
+              <th className="px-4 py-2 text-right font-medium w-32">매수</th>
               <th className="px-4 py-2 text-right font-medium w-40">금액</th>
             </tr>
           </thead>
           <tbody>
-            {DENOM_ROWS.map((row) => {
+            {DENOM_ROWS.map((row, idx) => {
               const v = counts[row.key];
               const amount = row.unit ? v * row.unit : v;
+              const isCheck = row.unit === null;
               return (
                 <tr key={row.key} className="border-b last:border-b-0">
                   <td className="px-4 py-2">{row.label}</td>
                   <td className="px-4 py-2 text-right">
+                    {isCheck ? (
+                      <span className="text-gray-400">—</span>
+                    ) : (
+                      <input
+                        ref={(el) => {
+                          inputRefs.current[idx][0] = el;
+                        }}
+                        type="text"
+                        inputMode="numeric"
+                        value={v === 0 ? "" : v.toLocaleString()}
+                        onChange={(e) => updateCount(row.key, e.target.value)}
+                        onKeyDown={(e) => onCellKeyDown(e, idx, 0)}
+                        disabled={loading}
+                        placeholder="0"
+                        className="w-24 rounded border border-gray-300 px-2 py-1 text-right disabled:bg-gray-100"
+                      />
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-right">
                     <input
+                      ref={(el) => {
+                        inputRefs.current[idx][1] = el;
+                      }}
                       type="text"
                       inputMode="numeric"
-                      value={v === 0 ? "" : v.toLocaleString()}
-                      onChange={(e) => updateCount(row.key, e.target.value)}
-                      disabled={isFinalized || loading}
-                      placeholder={row.unit ? "매수" : "총액"}
+                      value={amount === 0 ? "" : amount.toLocaleString()}
+                      onChange={(e) => updateAmount(row.key, e.target.value)}
+                      onKeyDown={(e) => onCellKeyDown(e, idx, 1)}
+                      disabled={loading}
+                      placeholder="0"
                       className="w-32 rounded border border-gray-300 px-2 py-1 text-right disabled:bg-gray-100"
                     />
                   </td>
-                  <td className="px-4 py-2 text-right font-mono">{fmt(amount)}</td>
                 </tr>
               );
             })}
             <tr className="border-t bg-gray-50 font-bold">
               <td className="px-4 py-2">매수 합계</td>
-              <td className="px-4 py-2"></td>
+              <td className="px-4 py-2 text-right">
+                {fmt(
+                  counts.w50000 +
+                    counts.w10000 +
+                    counts.w5000 +
+                    counts.w1000 +
+                    counts.w500 +
+                    counts.w100 +
+                    counts.w50 +
+                    counts.w10,
+                )}
+              </td>
               <td className="px-4 py-2 text-right">{fmt(cashTotal)}</td>
             </tr>
           </tbody>
@@ -351,34 +429,30 @@ export default function OfferingSettlementPage() {
           </div>
           <div
             className={`flex justify-between border-t pt-1 font-bold ${
-              cashTotal < inputTotal ? "text-red-600" : "text-emerald-700"
+              diff < 0 ? "text-red-600" : "text-emerald-700"
             }`}
           >
-            <span>차액 (주일연보 추가 예정)</span>
+            <span>차액 (매수합 - 입력합)</span>
             <span className="font-mono">{fmt(diff)}</span>
           </div>
-          {cashTotal < inputTotal && (
-            <div className="text-xs text-red-600">
-              ⚠ 매수합이 입력합보다 적습니다 — 매수를 다시 확인하거나 연보 입력을 점검하세요.
-            </div>
-          )}
+          <div className="text-xs text-gray-500">
+            ※ 분배 계산은 차액을 일반(주일연보)에 더해 일반/십일조 비율 산정에 반영합니다.
+          </div>
         </div>
       </section>
 
       {/* 분배 결과 */}
       <section className="rounded-lg border bg-white shadow-sm">
         <header className="border-b bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700 flex items-center justify-between">
-          <span>4. 일반/십일조 분배</span>
-          {!isFinalized && (
-            <button
-              type="button"
-              onClick={preview}
-              disabled={loading || cashTotal === 0}
-              className="rounded bg-indigo-600 px-3 py-1 text-xs text-white hover:bg-indigo-700 disabled:opacity-50"
-            >
-              분배 계산
-            </button>
-          )}
+          <span>4. 일반/십일조 분배 (참고용)</span>
+          <button
+            type="button"
+            onClick={preview}
+            disabled={loading || cashTotal === 0}
+            className="rounded bg-indigo-600 px-3 py-1 text-xs text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            분배 계산
+          </button>
         </header>
         {!allocation ? (
           <div className="p-6 text-center text-sm text-gray-500">
@@ -386,15 +460,9 @@ export default function OfferingSettlementPage() {
           </div>
         ) : (
           <>
-            {previewCalc && (
-              <div className="px-4 py-2 text-xs text-gray-600 bg-blue-50 border-b">
-                일반금액(주일+감사+특별+오일+절기, 차액 반영) {fmt(previewCalc.generalAmount)} ·
-                십일조 {fmt(previewCalc.titheAmount)}
-                {!allocation.exact && (
-                  <span className="ml-2 text-amber-700">
-                    ⚠ 매수가 단위로 안 떨어져 일부 수표 분배로 흡수됨
-                  </span>
-                )}
+            {!allocation.exact && (
+              <div className="px-4 py-2 text-xs text-amber-700 bg-amber-50 border-b">
+                ⚠ 매수가 단위로 안 떨어져 일부 잔여가 있습니다 — 담당자가 수표/세부 조정 필요.
               </div>
             )}
             <table className="w-full text-sm">
@@ -427,45 +495,59 @@ export default function OfferingSettlementPage() {
                     </tr>
                   );
                 })}
-                <tr className="border-t bg-gray-50 font-bold">
-                  <td className="px-4 py-2">합계</td>
-                  <td className="px-4 py-2"></td>
-                  <td className="px-4 py-2 text-right text-emerald-700">
-                    {fmt(general ? sumGroup(general) : 0)}
-                  </td>
-                  <td className="px-4 py-2"></td>
-                  <td className="px-4 py-2 text-right text-amber-700">
-                    {fmt(tithe ? sumGroup(tithe) : 0)}
-                  </td>
-                </tr>
+                {general && tithe && (
+                  <>
+                    <tr className="border-t bg-gray-50 font-bold">
+                      <td className="px-4 py-2">합계</td>
+                      <td className="px-4 py-2 text-right">{fmt(sumCount(general))}</td>
+                      <td className="px-4 py-2 text-right text-emerald-700">
+                        {fmt(sumGroup(general))}
+                      </td>
+                      <td className="px-4 py-2 text-right">{fmt(sumCount(tithe))}</td>
+                      <td className="px-4 py-2 text-right text-amber-700">
+                        {fmt(sumGroup(tithe))}
+                      </td>
+                    </tr>
+                    {(allocation.residual.general !== 0 || allocation.residual.tithe !== 0) && (
+                      <tr className="border-t bg-orange-50 font-semibold text-orange-800">
+                        <td className="px-4 py-2">
+                          잔여 (담당자 처리)
+                          <div className="text-[10px] font-normal text-orange-600">
+                            매수·수표로 정확히 분배가 안 된 부분 — 별도 계산 필요
+                          </div>
+                        </td>
+                        <td className="px-4 py-2"></td>
+                        <td className="px-4 py-2 text-right font-mono">
+                          {fmt(allocation.residual.general)}
+                        </td>
+                        <td className="px-4 py-2"></td>
+                        <td className="px-4 py-2 text-right font-mono">
+                          {fmt(allocation.residual.tithe)}
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                )}
               </tbody>
             </table>
           </>
         )}
       </section>
 
-      {/* 확정 */}
-      {!isFinalized && (
-        <div className="flex justify-end gap-2 sticky bottom-2 bg-white border rounded-lg shadow-md p-3">
-          <span className="text-xs text-gray-500 self-center mr-auto">
-            확정하면 차액이 주일연보 entry 로 추가되고 결산이 잠깁니다.
-          </span>
-          <button
-            type="button"
-            onClick={finalize}
-            disabled={loading || cashTotal < inputTotal || cashTotal === 0}
-            className="rounded bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-          >
-            최종 확정
-          </button>
-        </div>
-      )}
-
-      {savedMode === "saved" && isFinalized && (
-        <div className="text-xs text-gray-500 text-center">
-          이 결산은 {finalizedBy} 가 확정했습니다. 변경하려면 관리자에게 문의하세요.
-        </div>
-      )}
+      {/* 저장 */}
+      <div className="flex justify-end gap-2 sticky bottom-2 bg-white border rounded-lg shadow-md p-3">
+        <span className="text-xs text-gray-500 self-center mr-auto">
+          저장 후에도 언제든 다시 수정할 수 있습니다 (잠금 없음).
+        </span>
+        <button
+          type="button"
+          onClick={save}
+          disabled={loading}
+          className="rounded bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          저장
+        </button>
+      </div>
     </div>
   );
 }
@@ -503,4 +585,9 @@ function sumGroup(g: AllocationGroup): number {
     g.w50 * 50 +
     g.w10 * 10
   );
+}
+
+function sumCount(g: AllocationGroup): number {
+  // 수표는 매수 개념 없으므로 제외
+  return g.w50000 + g.w10000 + g.w5000 + g.w1000 + g.w500 + g.w100 + g.w50 + g.w10;
 }
