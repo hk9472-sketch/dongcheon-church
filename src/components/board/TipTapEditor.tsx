@@ -631,6 +631,16 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         class: "prose prose-sm max-w-none focus:outline-none px-4 py-3 text-gray-800 leading-relaxed",
         style: `min-height: ${minH}`,
       },
+      // 한글파일/Word 등에서 붙여넣기 시 inline style 의 한컴 전용 글꼴 제거
+      //   사용자 PC 에 그 글꼴이 없으면 글자가 □ 로 깨져 보이기 때문에
+      //   글꼴 지정만 빼면 system fallback 으로 정상 한글 표시.
+      //   대상: 한컴바탕/한컴돋움/Hancom*/HCR*/함초롬*
+      transformPastedHTML(html: string) {
+        return html.replace(
+          /font-family\s*:\s*[^;"]*?(한컴|Hancom|HCR|함초롬|Hamchorom)[^;"]*;?/gi,
+          ""
+        );
+      },
     },
   });
 
