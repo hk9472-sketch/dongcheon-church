@@ -1090,3 +1090,41 @@ model OfferingEntry {
   @@index([offeringType])
   @@map("offering_entries")
 }
+
+// ============================================================
+// 연보 일별 결산 — 카테고리합계·매수입력·차액·일반/십일조 분배 결과 저장
+// 일자 단위 1행. finalizedAt 이 채워지면 잠금 (재계산 불가).
+// ============================================================
+model OfferingSettlement {
+  id           Int       @id @default(autoincrement())
+  date         DateTime  @unique @db.Date
+  // 입력 카테고리 합계 (확정 시점 스냅샷, 차액 반영 후)
+  amtTithe     Int       @default(0)   // 십일조연보
+  amtSunday    Int       @default(0)   // 주일연보 (차액 포함)
+  amtThanks    Int       @default(0)   // 감사연보
+  amtSpecial   Int       @default(0)   // 특별연보
+  amtOil       Int       @default(0)   // 오일연보
+  amtSeason    Int       @default(0)   // 절기연보
+  // 매수 입력
+  cashCheck    Int       @default(0)   // 수표 총액
+  cnt50000     Int       @default(0)
+  cnt10000     Int       @default(0)
+  cnt5000      Int       @default(0)
+  cnt1000      Int       @default(0)
+  cnt500       Int       @default(0)
+  cnt100       Int       @default(0)
+  cnt50        Int       @default(0)
+  cnt10        Int       @default(0)
+  // 차액 (매수합 - 입력합) — 0 이상. 주일연보 OfferingEntry 한 행 추가하고 그 id 보관
+  diffAmount   Int       @default(0)
+  diffEntryId  Int?
+  // 분배 결과 JSON: { tithe: { check, w50000, ..., w10 }, general: { ... } }
+  allocation   String    @db.Text
+  // 확정
+  finalizedAt  DateTime?
+  finalizedBy  String?   @db.VarChar(50)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("offering_settlements")
+}
