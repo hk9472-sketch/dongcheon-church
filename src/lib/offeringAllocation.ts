@@ -139,38 +139,90 @@ export function allocate(
     }
   }
 
-  // Phase 2: 남은 매수(큰 단위 + 작은 단위 잔여) 를 "남은 부족분 비율" 로 분배.
-  //   큰 단위가 큰 쪽을 채우면 작은 단위는 자동으로 작은 쪽에 더 감 → 매수 균형.
-  for (const key of DENOM_KEYS) {
+  // Phase 2: 1000원 이상 단위를 *작은 단위부터* 처리하면서 "매수 균형" 을 목표로.
+  //   각 단위마다 현재까지의 매수 차이(delta)를 보정하는 방향으로 분배 (적은 쪽에 더).
+  //   단, 금액 제약(remG, remT) 을 넘지 않게 clamp.
+  //   1000원 같은 작은 단위는 적은 쪽에 몰아주면 매수가 빠르게 채워지면서 금액은 적게 드는 이점.
+  //   큰 단위(50000) 는 마지막에 남은 금액 차이를 채움.
+  const BIG_ASCENDING: DenomKey[] = ["w1000", "w5000", "w10000", "w50000"];
+  const sumCount = (g: AllocationGroup) =>
+    g.w50000 + g.w10000 + g.w5000 + g.w1000 + g.w500 + g.w100 + g.w50 + g.w10;
+  for (const key of BIG_ASCENDING) {
     const cnt = remainingCounts[key];
     const unit = KEY_TO_UNIT[key];
     if (cnt === 0) continue;
 
     const remG = Math.max(0, generalAmount - gAmt);
     const remT = Math.max(0, titheAmount - tAmt);
-    const denomSum = remG + remT;
-
-    let gCnt: number;
-    if (denomSum <= 0) {
-      gCnt = cnt >> 1; // 양쪽 다 채워짐 → 50/50 부피 균형
-    } else if (remT === 0) {
-      gCnt = cnt;
-    } else if (remG === 0) {
-      gCnt = 0;
-    } else {
-      const frac = remG / denomSum;
-      gCnt = Math.round(cnt * frac);
-      const maxG = Math.floor(remG / unit);
-      if (gCnt > maxG) gCnt = maxG;
-      const maxT = Math.floor(remT / unit);
-      if (cnt - gCnt > maxT) gCnt = cnt - maxT;
-      gCnt = Math.max(0, Math.min(cnt, gCnt));
+    if (remG + remT === 0) {
+      // 양쪽 다 채워짐 — 부피 균형용 50/50
+      const half = cnt >> 1;
+      general[key] += half;
+      tithe[key] += cnt - half;
+      gAmt += half * unit;
+      tAmt += (cnt - half) * unit;
+      continue;
     }
+
+    // 매수 균형 목표: gCnt + g_count_so_far ≈ tCnt + t_count_so_far
+    // gCnt + tCnt = cnt
+    // → gCnt = (cnt + (t_count - g_count)) / 2
+    const delta = sumCount(tithe) - sumCount(general);
+    let gCnt = Math.round((cnt + delta) / 2);
+
+    // 금액 제약 적용
+    const maxG = Math.floor(remG / unit);
+    const maxT = Math.floor(remT / unit);
+    if (gCnt > maxG) gCnt = maxG;
+    if (cnt - gCnt > maxT) gCnt = cnt - maxT;
+    gCnt = Math.max(0, Math.min(cnt, gCnt));
     const tCnt = cnt - gCnt;
+
     general[key] += gCnt;
     tithe[key] += tCnt;
     gAmt += gCnt * unit;
     tAmt += tCnt * unit;
+  }
+
+  // Phase 2.5: 같은 금액 등가 swap 으로 매수 균형 추가 미세조정.
+  //   예: gen 의 50000 1매 ↔ tit 의 10000 5매 (둘 다 50000원) — 금액 보존, gen +4 / tit -4
+  //   gen 매수가 적으면 큰 단위(50000) 를 작은 단위(10000) 로 쪼개서 가져옴.
+  //   양쪽 매수 차이가 줄어드는 swap 만 실행.
+  let swapSafety = 500;
+  while (swapSafety-- > 0) {
+    const gC = sumCount(general);
+    const tC = sumCount(tithe);
+    const cDelta = gC - tC; // 양수면 gen 이 더 많음
+    if (Math.abs(cDelta) < 2) break;
+
+    // 매수 적은 쪽이 받아야 할 큰 단위, 매수 많은 쪽에서 줄 수 있는 작은 단위
+    const giver = cDelta > 0 ? general : tithe; // 매수 많은 쪽
+    const receiver = cDelta > 0 ? tithe : general;
+    let swapped = false;
+    // 큰 단위 1매를 받고 작은 단위 N매로 돌려줘 매수 차이를 줄임
+    for (const big of [...DENOM_KEYS]) { // 50000 → 10
+      const bigUnit = KEY_TO_UNIT[big];
+      if (receiver[big] === 0) continue; // receiver 가 갖고 있어야 양도 가능
+      for (const small of [...DENOM_KEYS].reverse()) { // 10 → 50000
+        if (small === big) continue;
+        const smallUnit = KEY_TO_UNIT[small];
+        if (smallUnit >= bigUnit) continue;
+        if (bigUnit % smallUnit !== 0) continue;
+        const ratio = bigUnit / smallUnit; // 작은 단위 매수
+        if (giver[small] < ratio) continue;
+        // 차이 감소량: ratio - 1 (giver -ratio + 1, receiver +ratio - 1)
+        // 차이가 |delta| < ratio - 1 이면 over-shoot — skip
+        if (Math.abs(cDelta) < ratio - 1) continue;
+        receiver[big] -= 1;
+        giver[big] += 1;
+        receiver[small] += ratio;
+        giver[small] -= ratio;
+        swapped = true;
+        break;
+      }
+      if (swapped) break;
+    }
+    if (!swapped) break;
   }
   // 3) 수표 slack — 양쪽 다 양수일 때만 그대로 사용. 음수면 매수 이동 시도 후
   //    그래도 안 풀리면 수표 0 으로 clip 하고 부족분을 residual 로 보고.

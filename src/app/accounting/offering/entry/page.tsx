@@ -34,6 +34,29 @@ interface SavedEntry {
   offeringType: string;
   amount: number;
   description: string | null;
+  createdAt?: string;
+}
+
+// 전표번호 부여 — 비슷한 시각(±5초) + 같은 memberId 묶음 = 1전표.
+// 최근(목록 위) 묶음이 1번. 같은 묶음 내 행들은 같은 번호.
+function assignVouchers(entries: SavedEntry[]): Record<number, number> {
+  const map: Record<number, number> = {};
+  let voucher = 0;
+  let prevTimeSec = -Infinity;
+  let prevMember: number | null | undefined = undefined;
+  for (const e of entries) {
+    const t = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+    const sec = Math.floor(t / 1000);
+    const sameGroup =
+      prevMember !== undefined &&
+      e.memberId === prevMember &&
+      Math.abs(sec - prevTimeSec) <= 5;
+    if (!sameGroup) voucher += 1;
+    map[e.id] = voucher;
+    prevTimeSec = sec;
+    prevMember = e.memberId;
+  }
+  return map;
 }
 
 /* ───── helpers ───── */
@@ -613,13 +636,21 @@ export default function OfferingEntryPage() {
 
       {/* today's entries */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-4 py-3 bg-teal-50 border-b border-teal-100">
-          <h2 className="text-sm font-bold text-teal-800">{date} 입력내역</h2>
+        <div className="px-4 py-3 bg-teal-50 border-b border-teal-100 flex items-center justify-between">
+          <h2 className="text-sm font-bold text-teal-800">
+            {date} 입력내역 ({todayEntries.length}건)
+          </h2>
+          {todayEntries.length > 0 && (
+            <span className="text-sm font-bold text-teal-900">
+              총액 {fmtAmount(todayEntries.reduce((s, e) => s + e.amount, 0))}원
+            </span>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-gray-600">
+                <th className="px-2 py-2 text-center font-medium w-12">전표</th>
                 <th className="px-3 py-2 text-left font-medium w-16">번호</th>
                 {hasMemberEdit && <th className="px-3 py-2 text-left font-medium">성명</th>}
                 <th className="px-3 py-2 text-left font-medium">연보종류</th>
@@ -631,49 +662,65 @@ export default function OfferingEntryPage() {
             <tbody>
               {todayEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-gray-400">
+                  <td colSpan={7} className="px-3 py-6 text-center text-gray-400">
                     입력된 내역이 없습니다.
                   </td>
                 </tr>
-              ) : (
-                todayEntries.map((e) => (
-                  <tr
-                    key={e.id}
-                    className="border-t border-gray-100 hover:bg-blue-50 cursor-pointer"
-                    onClick={() => setEditingEntry(e)}
-                    title="클릭하면 수정"
-                  >
-                    <td className="px-3 py-2 text-gray-600">{e.memberId ?? "-"}</td>
-                    {hasMemberEdit && (
-                      <td className="px-3 py-2 text-gray-800">
-                        {e.member?.name ?? "(개인번호없음)"}
-                      </td>
-                    )}
-                    <td className="px-3 py-2 text-gray-600">{e.offeringType}</td>
-                    <td className="px-3 py-2 text-right text-blue-700 font-medium">
-                      {fmtAmount(e.amount)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-500">{e.description || ""}</td>
-                    <td className="px-3 py-2 text-center">
-                      <button
-                        type="button"
-                        onClick={(ev) => {
-                          ev.stopPropagation();
-                          handleDeleteEntry(e.id);
-                        }}
-                        className="text-red-400 hover:text-red-600 text-xs"
+              ) : (() => {
+                const vMap = assignVouchers(todayEntries);
+                let prevVoucher = -1;
+                return todayEntries.map((e) => {
+                  const v = vMap[e.id];
+                  const isFirstOfGroup = v !== prevVoucher;
+                  prevVoucher = v;
+                  return (
+                    <tr
+                      key={e.id}
+                      className={`border-t hover:bg-blue-50 cursor-pointer ${
+                        isFirstOfGroup ? "border-gray-300" : "border-gray-100"
+                      }`}
+                      onClick={() => setEditingEntry(e)}
+                      title="클릭하면 수정"
+                    >
+                      <td
+                        className={`px-2 py-2 text-center text-xs font-mono ${
+                          isFirstOfGroup ? "text-teal-700 font-semibold" : "text-gray-300"
+                        }`}
                       >
-                        삭제
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
+                        {isFirstOfGroup ? v : ""}
+                      </td>
+                      <td className="px-3 py-2 text-gray-600">{e.memberId ?? "-"}</td>
+                      {hasMemberEdit && (
+                        <td className="px-3 py-2 text-gray-800">
+                          {e.member?.name ?? "(개인번호없음)"}
+                        </td>
+                      )}
+                      <td className="px-3 py-2 text-gray-600">{e.offeringType}</td>
+                      <td className="px-3 py-2 text-right text-blue-700 font-medium">
+                        {fmtAmount(e.amount)}
+                      </td>
+                      <td className="px-3 py-2 text-gray-500">{e.description || ""}</td>
+                      <td className="px-3 py-2 text-center">
+                        <button
+                          type="button"
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            handleDeleteEntry(e.id);
+                          }}
+                          className="text-red-400 hover:text-red-600 text-xs"
+                        >
+                          삭제
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
             {todayEntries.length > 0 && (
               <tfoot>
                 <tr className="bg-gray-50 font-semibold border-t">
-                  <td colSpan={3} className="px-3 py-2 text-right text-gray-600">
+                  <td colSpan={hasMemberEdit ? 4 : 3} className="px-3 py-2 text-right text-gray-600">
                     합계
                   </td>
                   <td className="px-3 py-2 text-right text-blue-700">

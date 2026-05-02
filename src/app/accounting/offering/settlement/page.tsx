@@ -240,6 +240,34 @@ export default function OfferingSettlementPage() {
     }
   };
 
+  // 차액 반영 — 차액만큼 주일연보 OfferingEntry 1건 INSERT 후 카테고리 재집계
+  const applyDiff = async () => {
+    if (diff <= 0) return;
+    if (!confirm(`차액 ${fmt(diff)}원을 주일연보로 추가합니다.\n\n이 작업은 되돌릴 수 없습니다 (관리자가 수동 삭제 가능).`)) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/accounting/offering/settlement/apply-diff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, amount: diff }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "차액 반영 실패");
+      // 카테고리 재집계 — 매수 입력은 유지
+      const r2 = await fetch(`/api/accounting/offering/settlement?date=${date}&refresh=1`);
+      const d2 = await r2.json();
+      if (r2.ok) setCategories(d2.categories);
+      setAllocation(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "차액 반영 실패");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 저장 (잠금 없음 — 언제든 다시 수정 가능)
   const save = async () => {
     setLoading(true);
@@ -438,6 +466,21 @@ export default function OfferingSettlementPage() {
           <div className="text-xs text-gray-500">
             ※ 분배 계산은 차액을 일반(주일연보)에 더해 일반/십일조 비율 산정에 반영합니다.
           </div>
+          {diff > 0 && (
+            <div className="pt-2 border-t mt-2 flex items-center justify-between">
+              <span className="text-xs text-gray-700">
+                차액 <strong>{fmt(diff)}</strong> 원을 주일연보 1건으로 추가
+              </span>
+              <button
+                type="button"
+                onClick={applyDiff}
+                disabled={loading}
+                className="rounded bg-amber-600 px-3 py-1 text-xs text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                차액 반영 (주일연보 추가)
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
@@ -468,60 +511,90 @@ export default function OfferingSettlementPage() {
             <table className="w-full text-sm">
               <thead className="border-b text-xs text-gray-500">
                 <tr>
-                  <th className="px-4 py-2 text-left font-medium">종류</th>
-                  <th className="px-4 py-2 text-right font-medium">일반 매수</th>
-                  <th className="px-4 py-2 text-right font-medium">일반 금액</th>
-                  <th className="px-4 py-2 text-right font-medium">십일조 매수</th>
-                  <th className="px-4 py-2 text-right font-medium">십일조 금액</th>
+                  <th rowSpan={2} className="px-3 py-2 text-left font-medium border-r">
+                    종류
+                  </th>
+                  <th colSpan={2} className="px-3 py-1 text-center font-medium border-r bg-gray-100">
+                    전체
+                  </th>
+                  <th colSpan={2} className="px-3 py-1 text-center font-medium border-r bg-emerald-50">
+                    일반
+                  </th>
+                  <th colSpan={2} className="px-3 py-1 text-center font-medium bg-amber-50">
+                    십일조
+                  </th>
+                </tr>
+                <tr>
+                  <th className="px-3 py-1 text-right font-medium">매수</th>
+                  <th className="px-3 py-1 text-right font-medium border-r">금액</th>
+                  <th className="px-3 py-1 text-right font-medium">매수</th>
+                  <th className="px-3 py-1 text-right font-medium border-r">금액</th>
+                  <th className="px-3 py-1 text-right font-medium">매수</th>
+                  <th className="px-3 py-1 text-right font-medium">금액</th>
                 </tr>
               </thead>
               <tbody>
                 {DENOM_ROWS.map((row) => {
+                  const totCnt = counts[row.key];
+                  const totAmt = row.unit ? totCnt * row.unit : totCnt;
                   const gv = general?.[row.key as keyof AllocationGroup] ?? 0;
                   const tv = tithe?.[row.key as keyof AllocationGroup] ?? 0;
                   const gAmt = row.unit ? gv * row.unit : gv;
                   const tAmt = row.unit ? tv * row.unit : tv;
                   return (
                     <tr key={row.key} className="border-b last:border-b-0">
-                      <td className="px-4 py-2">{row.label}</td>
-                      <td className="px-4 py-2 text-right">
-                        {row.unit ? gv : "—"}
-                      </td>
-                      <td className="px-4 py-2 text-right font-mono">{fmt(gAmt)}</td>
-                      <td className="px-4 py-2 text-right">
-                        {row.unit ? tv : "—"}
-                      </td>
-                      <td className="px-4 py-2 text-right font-mono">{fmt(tAmt)}</td>
+                      <td className="px-3 py-2 border-r">{row.label}</td>
+                      <td className="px-3 py-2 text-right">{row.unit ? totCnt : "—"}</td>
+                      <td className="px-3 py-2 text-right font-mono border-r">{fmt(totAmt)}</td>
+                      <td className="px-3 py-2 text-right">{row.unit ? gv : "—"}</td>
+                      <td className="px-3 py-2 text-right font-mono border-r">{fmt(gAmt)}</td>
+                      <td className="px-3 py-2 text-right">{row.unit ? tv : "—"}</td>
+                      <td className="px-3 py-2 text-right font-mono">{fmt(tAmt)}</td>
                     </tr>
                   );
                 })}
                 {general && tithe && (
                   <>
                     <tr className="border-t bg-gray-50 font-bold">
-                      <td className="px-4 py-2">합계</td>
-                      <td className="px-4 py-2 text-right">{fmt(sumCount(general))}</td>
-                      <td className="px-4 py-2 text-right text-emerald-700">
+                      <td className="px-3 py-2 border-r">합계</td>
+                      <td className="px-3 py-2 text-right">
+                        {fmt(
+                          counts.w50000 +
+                            counts.w10000 +
+                            counts.w5000 +
+                            counts.w1000 +
+                            counts.w500 +
+                            counts.w100 +
+                            counts.w50 +
+                            counts.w10,
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right border-r">{fmt(cashTotal)}</td>
+                      <td className="px-3 py-2 text-right">{fmt(sumCount(general))}</td>
+                      <td className="px-3 py-2 text-right text-emerald-700 border-r">
                         {fmt(sumGroup(general))}
                       </td>
-                      <td className="px-4 py-2 text-right">{fmt(sumCount(tithe))}</td>
-                      <td className="px-4 py-2 text-right text-amber-700">
+                      <td className="px-3 py-2 text-right">{fmt(sumCount(tithe))}</td>
+                      <td className="px-3 py-2 text-right text-amber-700">
                         {fmt(sumGroup(tithe))}
                       </td>
                     </tr>
                     {(allocation.residual.general !== 0 || allocation.residual.tithe !== 0) && (
                       <tr className="border-t bg-orange-50 font-semibold text-orange-800">
-                        <td className="px-4 py-2">
+                        <td className="px-3 py-2 border-r">
                           잔여 (담당자 처리)
                           <div className="text-[10px] font-normal text-orange-600">
-                            매수·수표로 정확히 분배가 안 된 부분 — 별도 계산 필요
+                            매수·수표로 정확히 분배 안 된 부분 — 별도 계산 필요
                           </div>
                         </td>
-                        <td className="px-4 py-2"></td>
-                        <td className="px-4 py-2 text-right font-mono">
+                        <td className="px-3 py-2"></td>
+                        <td className="px-3 py-2 border-r"></td>
+                        <td className="px-3 py-2"></td>
+                        <td className="px-3 py-2 text-right font-mono border-r">
                           {fmt(allocation.residual.general)}
                         </td>
-                        <td className="px-4 py-2"></td>
-                        <td className="px-4 py-2 text-right font-mono">
+                        <td className="px-3 py-2"></td>
+                        <td className="px-3 py-2 text-right font-mono">
                           {fmt(allocation.residual.tithe)}
                         </td>
                       </tr>

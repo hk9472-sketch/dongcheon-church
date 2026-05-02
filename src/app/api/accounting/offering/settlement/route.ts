@@ -8,16 +8,17 @@ import {
   type AllocationResult,
 } from "@/lib/offeringAllocation";
 
-// 일자별 카테고리 합계 조회 (DB 의 OfferingEntry 집계)
+// 일자별 카테고리 합계 조회 (DB 의 OfferingEntry 집계).
+// OfferingEntry 의 @db.Date 는 UTC 자정 기준으로 저장되므로 같은 기준으로 조회.
 async function loadCategoryTotals(date: Date) {
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(date);
-  end.setHours(23, 59, 59, 999);
+  const dateStr = date.toISOString().slice(0, 10);
+  const start = new Date(`${dateStr}T00:00:00Z`);
+  const end = new Date(`${dateStr}T00:00:00Z`);
+  end.setUTCDate(end.getUTCDate() + 1);
 
   const rows = await prisma.offeringEntry.groupBy({
     by: ["offeringType"],
-    where: { date: { gte: start, lte: end } },
+    where: { date: { gte: start, lt: end } },
     _sum: { amount: true },
   });
 
@@ -65,7 +66,7 @@ export async function GET(req: NextRequest) {
   const dateStr = req.nextUrl.searchParams.get("date");
   const refresh = req.nextUrl.searchParams.get("refresh") === "1";
   if (!dateStr) return NextResponse.json({ error: "date 파라미터 필요" }, { status: 400 });
-  const date = new Date(dateStr + "T00:00:00");
+  const date = new Date(dateStr + "T00:00:00Z");
   if (isNaN(date.getTime()))
     return NextResponse.json({ error: "잘못된 날짜" }, { status: 400 });
 
@@ -112,7 +113,7 @@ export async function POST(req: NextRequest) {
 
   const dateStr = body.date;
   if (!dateStr) return NextResponse.json({ error: "date 필수" }, { status: 400 });
-  const date = new Date(dateStr + "T00:00:00");
+  const date = new Date(dateStr + "T00:00:00Z");
   if (isNaN(date.getTime()))
     return NextResponse.json({ error: "잘못된 날짜" }, { status: 400 });
 
