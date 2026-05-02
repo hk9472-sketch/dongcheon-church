@@ -27,6 +27,7 @@ import {
   isPuaCode,
   type UnmappedSample,
 } from "@/lib/hwpPuaMap";
+import { extractPuaFromClipboard } from "@/lib/hwpPuaAlign";
 import PuaRegisterModal from "./PuaRegisterModal";
 
 interface TipTapEditorProps {
@@ -570,6 +571,35 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
   // PUA 등록 모달 — paste 시 매핑 안 된 PUA 가 발견되면 표시.
   const [puaSamples, setPuaSamples] = useState<UnmappedSample[] | null>(null);
 
+  // paste 직전 capture 단계에서 캡처한 text/plain. transformPastedHTML 에서
+  // text/html 와 정렬해 HWP 자체 매핑표를 자동 추출하는데 사용.
+  const lastClipboardPlainRef = useRef<string>("");
+
+  // 자동 추출된 매핑을 DB 에 백그라운드 POST — fire-and-forget. 비로그인 시
+  // 401 이면 무시 (런타임 캐시는 이미 적용돼 있어 이번 paste 는 정상 표시).
+  const persistAutoMappingsRef = useRef(async (
+    mapping: Record<number, string>,
+    contexts: Record<number, string>,
+  ) => {
+    for (const [codeStr, char] of Object.entries(mapping)) {
+      const code = Number(codeStr);
+      if (!Number.isInteger(code)) continue;
+      try {
+        await fetch("/api/board/pua-map", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code,
+            char,
+            context: contexts[code]?.slice(0, 64) || null,
+          }),
+        });
+      } catch {
+        // 무시 — 런타임 캐시는 이미 갱신됨
+      }
+    }
+  });
+
   // 클라이언트 PUA 런타임 매핑 — DB(PuaMapping) 등록분을 mount 시 hydrate.
   // mergeRuntimePuaMap 으로 모듈 캐시에 저장 → replaceHwpPua 가 자동 활용.
   useEffect(() => {
@@ -664,16 +694,33 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       },
       // 한글파일/Word 등에서 붙여넣기 시:
       //   1) inline style 의 한컴 전용 글꼴 제거 (글꼴 없으면 □ 로 깨짐 방지)
-      //   2) PUA 문자 → 표준 unicode 매핑 (정적 + DB 등록분)
-      //   3) 매핑 안 된 PUA 가 있으면 등록 모달 표시 (paste 한 사람이 직접 등록)
+      //   2) text/html ↔ text/plain 정렬로 HWP 자체 PUA 매핑 자동 추출 →
+      //      런타임 캐시 머지 + DB 백그라운드 등록 (다음부터 모든 사용자 혜택)
+      //   3) PUA 문자 → 표준 unicode 매핑 (정적 + DB + 자동추출분)
+      //   4) 그래도 매핑 안 된 PUA 가 있으면 등록 모달 표시
       transformPastedHTML(html: string) {
         const noFont = html.replace(
           /font-family\s*:\s*[^;"]*?(한컴|Hancom|HCR|함초롬|Hamchorom)[^;"]*;?/gi,
           ""
         );
+
+        // 2) HWP 클립보드 이중 포맷 정렬 — 평문에서 매핑 자동 추출
+        const plain = lastClipboardPlainRef.current;
+        lastClipboardPlainRef.current = ""; // 다음 paste 까지 stale 방지
+        if (plain) {
+          const { mapping, contexts } = extractPuaFromClipboard(noFont, plain);
+          const codes = Object.keys(mapping);
+          if (codes.length > 0) {
+            mergeRuntimePuaMap(mapping);
+            // DB 백그라운드 등록 — 비로그인이면 401 무시
+            void persistAutoMappingsRef.current(mapping, contexts);
+          }
+        }
+
+        // 3) 매핑 적용 (정적 + DB hydrate + 방금 자동추출분)
         const { result, samples } = replaceHwpPua(noFont);
         if (samples.length > 0) {
-          // 모달 트리거 — 동일 paste 호출 안에서 setState 직접은 stale 문제 없음
+          // 4) 그래도 안 풀린 PUA — 모달로 사용자 직접 등록 요청
           setPuaSamples(samples);
         }
         return result;
@@ -987,6 +1034,19 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     },
     [uploadAndInsertImage]
   );
+
+  // paste capture 단계 — text/plain 을 ref 에 저장. transformPastedHTML 안에서
+  // text/html 와 정렬해 HWP 자체 PUA 매핑을 자동 추출 (메모장이 정상 표시되는
+  // 원리 — 한컴이 평문 클립보드는 표준 unicode 로 변환해서 보내준다).
+  useEffect(() => {
+    const dom = editor?.view.dom;
+    if (!dom) return;
+    const captureHandler = (e: ClipboardEvent) => {
+      lastClipboardPlainRef.current = e.clipboardData?.getData("text/plain") || "";
+    };
+    dom.addEventListener("paste", captureHandler, { capture: true });
+    return () => dom.removeEventListener("paste", captureHandler, { capture: true });
+  }, [editor]);
 
   // 클립보드 붙여넣기 — 이미지가 있으면 자동 업로드 후 삽입
   useEffect(() => {
