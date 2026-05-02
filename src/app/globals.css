@@ -476,15 +476,15 @@ html {
   display: list-item !important;
 }
 
-/* 중첩 시 부모 li 의 마커 숨김 — TipTap sinkListItem 이 만들어내는 빈 외부 li +
-   안에 nested ul/ol 패턴에서 부모 disc + 자식 circle 두 마커 겹쳐 보이는 문제 해결.
-   부모 li 가 자식 list 를 가지면 그 li 의 마커는 표시 안 함. */
-.tiptap-editor .ProseMirror li:has(> ul),
-.tiptap-editor .ProseMirror li:has(> ol),
-.prose li:has(> ul),
-.prose li:has(> ol),
-.comment-content li:has(> ul),
-.comment-content li:has(> ol) {
+/* 텍스트 없이 nested list 만 가진 li 의 부모 마커 숨김.
+   TipTap 의 빈 부모 li 패턴: <li><p></p><ul>...</ul></li>
+   p 가 비어있는 경우만 부모 마커 숨김 — 텍스트 있는 부모는 그대로 마커 유지. */
+.tiptap-editor .ProseMirror li:has(> p:empty:first-child + ul),
+.tiptap-editor .ProseMirror li:has(> p:empty:first-child + ol),
+.prose li:has(> p:empty:first-child + ul),
+.prose li:has(> p:empty:first-child + ol),
+.comment-content li:has(> p:empty:first-child + ul),
+.comment-content li:has(> p:empty:first-child + ol) {
   list-style: none !important;
 }
 
