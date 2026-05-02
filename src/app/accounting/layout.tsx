@@ -100,12 +100,12 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
 
   const offeringItems = [
     { href: "/accounting/offering/members", label: "관리번호" },
-    { href: "/accounting/offering/donor-info", label: "기부자 정보" },
+    { href: "/accounting/offering/donor-info", label: "관리상세" },
     { href: "/accounting/offering/entry", label: "연보입력" },
+    { href: "/accounting/offering/settlement", label: "일별결산" },
     { href: "/accounting/offering/list", label: "연보내역" },
     { href: "/accounting/offering/thanks", label: "감사연보현황" },
     { href: "/accounting/offering/summary", label: "연보집계" },
-    { href: "/accounting/offering/settlement", label: "일별결산" },
     { href: "/accounting/offering/receipt", label: "기부금영수증" },
     { href: "/accounting/offering/certificate", label: "소속증명서" },
   ];

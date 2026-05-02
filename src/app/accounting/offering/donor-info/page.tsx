@@ -141,7 +141,7 @@ export default function DonorInfoPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">기부자 정보 <HelpButton slug="offering-donor-info" /></h1>
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">관리상세 <HelpButton slug="offering-donor-info" /></h1>
         <p className="text-xs text-gray-500 mt-1">
           기부금영수증(국세청 서식 29호) 발급용 기부자 정보. 주민등록번호는 목록에서 마스킹 표시되며 수정 화면에서만 원본 조회됩니다.
         </p>
