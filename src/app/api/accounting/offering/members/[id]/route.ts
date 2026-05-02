@@ -19,7 +19,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
   if (isNaN(memberId))
     return NextResponse.json({ error: "잘못된 ID" }, { status: 400 });
 
-  const member = await prisma.offeringMember.findUnique({
+  const memberRow = await prisma.offeringMember.findUnique({
     where: { id: memberId },
     include: {
       // 가족 대표
@@ -30,13 +30,17 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       members: {
         select: { id: true, name: true, groupName: true, isActive: true },
       },
-      // 최근 연보 내역 (최근 50건)
-      entries: {
-        orderBy: { date: "desc" },
-        take: 50,
-      },
     },
   });
+  // 최근 연보 내역 (최근 50건) — FK 없는 soft 관계라 별도 조회
+  const recentEntries = memberRow
+    ? await prisma.offeringEntry.findMany({
+        where: { memberId },
+        orderBy: { date: "desc" },
+        take: 50,
+      })
+    : [];
+  const member = memberRow ? { ...memberRow, entries: recentEntries } : null;
 
   if (!member) {
     return NextResponse.json({ error: "교인을 찾을 수 없습니다" }, { status: 404 });

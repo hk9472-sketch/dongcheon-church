@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { checkAccAccess, hasMemberEdit } from "@/lib/accountAuth";
+import { attachMembers } from "@/lib/offeringMemberJoin";
 
 /**
  * 날짜 문자열(YYYY-MM-DD)을 UTC 자정 Date로 변환
@@ -49,15 +50,11 @@ export async function GET(req: NextRequest) {
     if (dateTo) where.date.lt = toNextDay(dateTo);
   }
 
-  const entries = await prisma.offeringEntry.findMany({
+  const rawEntries = await prisma.offeringEntry.findMany({
     where,
-    include: {
-      member: {
-        select: { id: true, name: true, groupName: true },
-      },
-    },
     orderBy: { date: "desc" },
   });
+  const entries = await attachMembers(rawEntries);
 
   // memberEdit 권한 없으면 성명 마스킹
   const canSeeName = hasMemberEdit(access.user);
@@ -131,29 +128,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // memberId 유효성 일괄 확인 (null 제외)
-  const memberIds = [
-    ...new Set(
-      entries
-        .map((e: { memberId: number | null }) => e.memberId)
-        .filter((v): v is number => typeof v === "number" && v > 0)
-    ),
-  ];
-  if (memberIds.length > 0) {
-    const existingMembers = await prisma.offeringMember.findMany({
-      where: { id: { in: memberIds } },
-      select: { id: true },
-    });
-    const existingIds = new Set(existingMembers.map((m) => m.id));
-    for (const mid of memberIds) {
-      if (!existingIds.has(mid)) {
-        return NextResponse.json(
-          { error: `교인 ID ${mid}을(를) 찾을 수 없습니다` },
-          { status: 400 }
-        );
-      }
-    }
-  }
+  // memberId 는 soft FK — 미등록 번호도 허용 (나중에 OfferingMember 등록되면
+  // 같은 memberId 끼리 자동 매칭). 따라서 등록 여부 검증 안 함.
 
   const createdBy = access.user?.name || String(access.userId ?? "");
 

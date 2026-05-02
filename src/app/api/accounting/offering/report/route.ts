@@ -11,6 +11,7 @@ function decryptRrnSafe(v: string | null | undefined): string | null {
   }
 }
 import { checkAccAccess, hasMemberEdit } from "@/lib/accountAuth";
+import { attachMembers } from "@/lib/offeringMemberJoin";
 
 /**
  * 날짜 문자열(YYYY-MM-DD)을 UTC 자정 Date로 변환
@@ -105,13 +106,11 @@ async function handleIndividual(
     if (params.dateTo) where.date.lte = toDateOnly(params.dateTo);
   }
 
-  const entries = await prisma.offeringEntry.findMany({
+  const rawEntries = await prisma.offeringEntry.findMany({
     where,
-    include: {
-      member: { select: { id: true, name: true, groupName: true } },
-    },
     orderBy: [{ memberId: "asc" }, { date: "asc" }],
   });
+  const entries = await attachMembers(rawEntries);
 
   // 교인별 → 유형별 합계
   const grouped: Record<
@@ -285,13 +284,11 @@ async function handlePeriod(
   };
   if (params.offeringType) where.offeringType = params.offeringType;
 
-  const entries = await prisma.offeringEntry.findMany({
+  const rawEntries2 = await prisma.offeringEntry.findMany({
     where,
-    include: {
-      member: { select: { id: true, name: true, groupName: true } },
-    },
     orderBy: [{ memberId: "asc" }, { offeringType: "asc" }],
   });
+  const entries = await attachMembers(rawEntries2);
 
   // 교인 + 유형별 합계
   const grouped: Record<
@@ -426,7 +423,7 @@ async function handleReceipt(
     }
   }
 
-  const entries = await prisma.offeringEntry.findMany({
+  const rawEntries3 = await prisma.offeringEntry.findMany({
     where: {
       memberId: { in: includeIds },
       date: {
@@ -434,11 +431,9 @@ async function handleReceipt(
         lt: toNextDay(`${targetYear}-12-31`),
       },
     },
-    include: {
-      member: { select: { id: true, name: true } },
-    },
     orderBy: { date: "asc" },
   });
+  const entries = await attachMembers(rawEntries3);
 
   // 유형별 합계 (가족 전원 rollup)
   const byType: Record<string, number> = {};

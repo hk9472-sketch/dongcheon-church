@@ -168,67 +168,67 @@ export default function OfferingEntryPage() {
 
   /* ---- member lookup by id → expand to 6 rows ---- */
   // 번호가 빈 칸이거나 0 이면 "익명 연보" 입력 모드 — 이름 비우고 행 확장하지 않음.
-  // 번호가 양수면 서버에서 교인 조회 후 6종 연보 행으로 확장.
+  // 번호가 양수면 서버에서 교인 조회. 등록된 번호면 이름 채우고 확장,
+  // 미등록 번호여도 "(미등록)" 표시 후 6행 확장 — 나중에 OfferingMember 가
+  // 등록되면 같은 memberId 끼리 자동 매칭됨 (FK 없는 soft 관계).
   function handleMemberIdBlur(key: string, idStr: string) {
     const trimmed = idStr.trim();
-    // 빈 칸이거나 명시적 0 → 익명 연보로 간주
     if (trimmed === "" || trimmed === "0") {
       updateRow(key, "memberName", "");
       return;
     }
     const id = parseInt(trimmed, 10);
     if (!Number.isFinite(id) || id <= 0) {
-      updateRow(key, "memberName", "(없음)");
+      updateRow(key, "memberName", "(잘못된 번호)");
       return;
     }
+
+    const expandRows = (name: string) => {
+      setRows((prev) => {
+        const idx = prev.findIndex((r) => r.key === key);
+        if (idx < 0) return prev;
+        const current = prev[idx];
+        // 이미 같은 묶음으로 확장돼 있으면 그대로
+        if (
+          current.memberId === String(id) &&
+          current.memberName === name &&
+          prev[idx + 1]?.groupKey === current.groupKey
+        ) {
+          return prev;
+        }
+        const newRows = memberRows(String(id), name);
+        const result = [...prev];
+        result.splice(idx, 1, ...newRows);
+        const last = result[result.length - 1];
+        if (last.memberId !== "" || last.amount !== "") {
+          result.push(emptyRow());
+        }
+        requestAnimationFrame(() => {
+          getNavCell(idx, 1)?.focus();
+        });
+        return result;
+      });
+    };
+
     fetch(`/api/accounting/offering/members/${id}`)
       .then(async (r) => {
+        if (r.status === 404) {
+          // 미등록 번호 — 그냥 입력된 번호처럼 처리 (6행 확장)
+          expandRows("(미등록)");
+          return null;
+        }
         if (!r.ok) {
-          // 404 는 "없는 번호", 나머지는 권한·서버 오류
-          const msg = r.status === 404 ? "(없음)" : `(오류 ${r.status})`;
-          updateRow(key, "memberName", msg);
-          throw new Error(msg);
+          updateRow(key, "memberName", `(오류 ${r.status})`);
+          return null;
         }
-        return r.json();
-      })
-      .then((d) => {
-        const name = d.name || "";
-        if (!name) {
-          updateRow(key, "memberName", "(없음)");
-          return;
-        }
-        // 현재 행의 인덱스 찾기
-        setRows((prev) => {
-          const idx = prev.findIndex((r) => r.key === key);
-          if (idx < 0) return prev;
-          const current = prev[idx];
-          // 이 행이 이미 같은 묶음으로 확장된 상태면 그대로 유지 (재입력 방지)
-          if (
-            current.memberId === String(id) &&
-            current.memberName === name &&
-            // 다음 행도 같은 groupKey 면 이미 확장된 묶음
-            prev[idx + 1]?.groupKey === current.groupKey
-          ) {
-            return prev;
-          }
-          // 빈 줄 → 6줄로 확장 (새 groupKey). 같은 memberId 가 다른 묶음으로 또 들어가도 OK.
-          const newRows = memberRows(String(id), name);
-          const result = [...prev];
-          result.splice(idx, 1, ...newRows);
-          // 끝에 빈 줄이 없으면 추가
-          const last = result[result.length - 1];
-          if (last.memberId !== "" || last.amount !== "") {
-            result.push(emptyRow());
-          }
-          // 확장된 첫 행의 금액 칸으로 포커스
-          requestAnimationFrame(() => {
-            getNavCell(idx, 1)?.focus();
-          });
-          return result;
-        });
+        const d = await r.json();
+        const name = d.name || "(미등록)";
+        expandRows(name);
+        return null;
       })
       .catch(() => {
-        // updateRow 는 위에서 이미 호출됨 — 여기서는 삼킴
+        // 네트워크 오류여도 미등록처럼 일단 확장 (오프라인에서도 입력 가능)
+        expandRows("(미등록)");
       });
   }
 

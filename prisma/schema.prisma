@@ -1064,7 +1064,9 @@ model OfferingMember {
   phone          String? @db.VarChar(20)            // 연락처
   donorEmail     String? @db.VarChar(255)           // 영수증 수령 이메일
 
-  entries   OfferingEntry[]
+  // OfferingEntry → memberId 는 의도적으로 FK 없이 soft reference 로 운영.
+  // 미등록 관리번호로도 연보 입력이 가능해야 하고(나중에 등록되면 자동 매칭),
+  // entries 백릴레이션을 두면 FK 가 강제됨. 매핑은 app 코드에서 manual JOIN.
 
   @@index([familyId])
   @@index([name])
@@ -1077,8 +1079,7 @@ model OfferingMember {
 model OfferingEntry {
   id           Int      @id @default(autoincrement())
   date         DateTime @db.Date                     // 일자
-  memberId     Int?                                  // 개인번호 (null 허용 = 익명/개인번호없음)
-  member       OfferingMember? @relation(fields: [memberId], references: [id])
+  memberId     Int?                                  // 개인번호 (null=익명, 미등록 번호도 허용 — soft FK)
   offeringType String   @db.VarChar(20)              // 주일연보, 감사, 특별, 절기, 오일
   amount       Int                                   // 금액
   description  String?  @db.VarChar(200)             // 비고

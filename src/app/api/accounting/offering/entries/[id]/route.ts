@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { checkAccAccess, hasMemberEdit } from "@/lib/accountAuth";
+import { attachMember } from "@/lib/offeringMemberJoin";
 
 /**
  * 날짜 문자열(YYYY-MM-DD)을 UTC 자정 Date로 변환
@@ -27,17 +28,15 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
   if (isNaN(entryId))
     return NextResponse.json({ error: "잘못된 ID" }, { status: 400 });
 
-  const entry = await prisma.offeringEntry.findUnique({
+  const rawEntry = await prisma.offeringEntry.findUnique({
     where: { id: entryId },
-    include: {
-      member: { select: { id: true, name: true, groupName: true } },
-    },
   });
 
-  if (!entry) {
+  if (!rawEntry) {
     return NextResponse.json({ error: "연보 내역을 찾을 수 없습니다" }, { status: 404 });
   }
 
+  const entry = await attachMember(rawEntry);
   const canSeeName = hasMemberEdit(access.user);
   const result = canSeeName
     ? entry
@@ -94,15 +93,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
           { status: 400 }
         );
       }
-      const member = await prisma.offeringMember.findUnique({
-        where: { id: memberId },
-      });
-      if (!member) {
-        return NextResponse.json(
-          { error: "교인을 찾을 수 없습니다" },
-          { status: 400 }
-        );
-      }
+      // 미등록 번호 허용 — soft FK
       data.memberId = memberId;
     }
   }
