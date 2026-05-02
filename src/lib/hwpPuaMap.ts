@@ -41,28 +41,52 @@ export function isPuaCode(code: number): boolean {
   return code >= PUA_MIN && code <= PUA_MAX;
 }
 
+/** 매핑 안 된 PUA 한 건의 컨텍스트 — 코드포인트 + 앞뒤 글자 (식별용) */
+export interface UnmappedSample {
+  code: number;
+  context: string; // "...앞 [□] 뒤..." 형식
+}
+
 /**
  * 문자열의 PUA 문자를 매핑된 표준 unicode 로 치환.
- * 매핑 안 된 PUA 는 원본 유지 (사용자가 확인 가능하게) + unmapped 집합에 코드포인트 수집.
+ * 매핑 안 된 PUA 는 원본 유지 + 코드포인트별 첫 등장 컨텍스트 수집 (사용자 보고용).
  */
-export function replaceHwpPua(text: string): { result: string; unmapped: Set<number> } {
+export function replaceHwpPua(
+  text: string,
+): { result: string; unmapped: Set<number>; samples: UnmappedSample[] } {
+  const chars = Array.from(text); // 코드포인트 단위 split
   const unmapped = new Set<number>();
-  let result = "";
-  for (const ch of text) {
+  const samples = new Map<number, UnmappedSample>(); // 코드포인트당 첫 등장만
+  const out: string[] = [];
+
+  const CTX = 6; // 앞뒤 글자 수
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
     const code = ch.codePointAt(0);
     if (code !== undefined && isPuaCode(code)) {
       const mapped = HWP_PUA_MAP[code];
       if (mapped !== undefined) {
-        result += mapped;
+        out.push(mapped);
       } else {
         unmapped.add(code);
-        result += ch; // 일단 원본 보존
+        if (!samples.has(code)) {
+          const before = chars.slice(Math.max(0, i - CTX), i).join("");
+          const after = chars.slice(i + 1, i + 1 + CTX).join("");
+          // HTML 태그·엔티티 노이즈 줄여서 단순 텍스트로
+          const clean = (s: string) =>
+            s.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+          samples.set(code, {
+            code,
+            context: `${clean(before)}[□]${clean(after)}`,
+          });
+        }
+        out.push(ch); // 일단 원본 보존
       }
     } else {
-      result += ch;
+      out.push(ch);
     }
   }
-  return { result, unmapped };
+  return { result: out.join(""), unmapped, samples: Array.from(samples.values()) };
 }
 
 /** 코드포인트 집합을 "U+E0BC, U+E0BD" 형식으로 출력 (사용자 보고용) */
@@ -71,4 +95,16 @@ export function fmtCodes(set: Set<number>): string {
     .sort((a, b) => a - b)
     .map((c) => `U+${c.toString(16).toUpperCase().padStart(4, "0")}`)
     .join(", ");
+}
+
+/** 컨텍스트 샘플들을 "U+F081 [...] 앞[□]뒤" 여러 줄로 포맷 */
+export function fmtSamples(samples: UnmappedSample[]): string {
+  return samples
+    .slice()
+    .sort((a, b) => a.code - b.code)
+    .map(
+      (s) =>
+        `  • U+${s.code.toString(16).toUpperCase().padStart(4, "0")}  ${s.context}`,
+    )
+    .join("\n");
 }

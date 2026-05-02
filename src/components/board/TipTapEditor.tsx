@@ -21,7 +21,7 @@ import TableHeader from "@tiptap/extension-table-header";
 import FontFamily from "@tiptap/extension-font-family";
 import Placeholder from "@tiptap/extension-placeholder";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { replaceHwpPua, fmtCodes } from "@/lib/hwpPuaMap";
+import { replaceHwpPua, fmtCodes, fmtSamples } from "@/lib/hwpPuaMap";
 
 interface TipTapEditorProps {
   content: string;
@@ -635,21 +635,39 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       // 한글파일/Word 등에서 붙여넣기 시:
       //   1) inline style 의 한컴 전용 글꼴 제거 (글꼴 없으면 □ 로 깨짐 방지)
       //   2) PUA 문자 → 표준 unicode 매핑 (글꼴 종속 chars 정상 표시)
+      //   3) 매핑 안 된 PUA 가 있으면 컨텍스트와 함께 콘솔·화면 안내 (보고 루프 단축)
       transformPastedHTML(html: string) {
-        // 1) 한컴 글꼴 제거
         const noFont = html.replace(
           /font-family\s*:\s*[^;"]*?(한컴|Hancom|HCR|함초롬|Hamchorom)[^;"]*;?/gi,
           ""
         );
-        // 2) PUA 매핑
-        const { result, unmapped } = replaceHwpPua(noFont);
+        const { result, unmapped, samples } = replaceHwpPua(noFont);
         if (unmapped.size > 0) {
-          // 매핑 안 된 PUA 발견 — 콘솔에 코드포인트 + 보고 안내
+          const codes = fmtCodes(unmapped);
+          const ctx = fmtSamples(samples);
           // eslint-disable-next-line no-console
           console.warn(
-            `[HWP PUA] 매핑 안 된 한컴 PUA 문자 ${unmapped.size}종: ${fmtCodes(unmapped)}\n` +
-              `  → 그 글자가 □ 로 보이면 src/lib/hwpPuaMap.ts 의 HWP_PUA_MAP 에 추가 필요.`
+            `[HWP PUA] 매핑 안 된 한컴 PUA 문자 ${unmapped.size}종: ${codes}\n` +
+              `${ctx}\n` +
+              `  → 위 컨텍스트를 보고 어떤 글자였는지 알려주면 hwpPuaMap.ts 에 추가 가능.`,
           );
+          // 화면에도 한 번 안내 (DevTools 안 여는 사용자도 인지)
+          if (typeof window !== "undefined") {
+            const w = window as unknown as { __hwpPuaWarned?: Set<string> };
+            w.__hwpPuaWarned = w.__hwpPuaWarned || new Set();
+            const key = codes;
+            if (!w.__hwpPuaWarned.has(key)) {
+              w.__hwpPuaWarned.add(key);
+              setTimeout(() => {
+                alert(
+                  `한컴 전용 특수문자 ${unmapped.size}종이 매핑 안 됨 — □ 로 보일 수 있어.\n\n` +
+                    `${codes}\n\n` +
+                    `${ctx}\n\n` +
+                    `위 [□] 자리에 어떤 글자가 보였는지 관리자에게 알려주면 다음 배포에 추가됨.`,
+                );
+              }, 0);
+            }
+          }
         }
         return result;
       },
