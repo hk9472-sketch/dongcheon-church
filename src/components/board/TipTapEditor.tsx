@@ -21,6 +21,7 @@ import TableHeader from "@tiptap/extension-table-header";
 import FontFamily from "@tiptap/extension-font-family";
 import Placeholder from "@tiptap/extension-placeholder";
 import { useState, useRef, useEffect, useCallback } from "react";
+import { replaceHwpPua, fmtCodes } from "@/lib/hwpPuaMap";
 
 interface TipTapEditorProps {
   content: string;
@@ -631,15 +632,26 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         class: "prose prose-sm max-w-none focus:outline-none px-4 py-3 text-gray-800 leading-relaxed",
         style: `min-height: ${minH}`,
       },
-      // 한글파일/Word 등에서 붙여넣기 시 inline style 의 한컴 전용 글꼴 제거
-      //   사용자 PC 에 그 글꼴이 없으면 글자가 □ 로 깨져 보이기 때문에
-      //   글꼴 지정만 빼면 system fallback 으로 정상 한글 표시.
-      //   대상: 한컴바탕/한컴돋움/Hancom*/HCR*/함초롬*
+      // 한글파일/Word 등에서 붙여넣기 시:
+      //   1) inline style 의 한컴 전용 글꼴 제거 (글꼴 없으면 □ 로 깨짐 방지)
+      //   2) PUA 문자 → 표준 unicode 매핑 (글꼴 종속 chars 정상 표시)
       transformPastedHTML(html: string) {
-        return html.replace(
+        // 1) 한컴 글꼴 제거
+        const noFont = html.replace(
           /font-family\s*:\s*[^;"]*?(한컴|Hancom|HCR|함초롬|Hamchorom)[^;"]*;?/gi,
           ""
         );
+        // 2) PUA 매핑
+        const { result, unmapped } = replaceHwpPua(noFont);
+        if (unmapped.size > 0) {
+          // 매핑 안 된 PUA 발견 — 콘솔에 코드포인트 + 보고 안내
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[HWP PUA] 매핑 안 된 한컴 PUA 문자 ${unmapped.size}종: ${fmtCodes(unmapped)}\n` +
+              `  → 그 글자가 □ 로 보이면 src/lib/hwpPuaMap.ts 의 HWP_PUA_MAP 에 추가 필요.`
+          );
+        }
+        return result;
       },
     },
   });

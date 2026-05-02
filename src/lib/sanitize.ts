@@ -1,4 +1,5 @@
 import DOMPurify from "isomorphic-dompurify";
+import { replaceHwpPua } from "./hwpPuaMap";
 
 // ============================================================
 // 사용자 생성 HTML 정화
@@ -83,10 +84,14 @@ export function sanitizeHtml(dirty: string | null | undefined): string {
     ""
   );
 
+  // HWP PUA 문자(한컴 글꼴 종속) 를 표준 unicode 로 매핑.
+  // 매핑 안 된 것은 원본 유지 — 매핑 추가 시 자동 치환됨.
+  const { result: withPuaMapped } = replaceHwpPua(withoutHwpFont);
+
   // TipTap 등 리치 에디터는 연속 Enter 를 <p></p><p></p>... 로 출력하는데,
   // 브라우저는 내용이 없는 <p></p> 를 0 높이로 렌더하고 인접 margin 도 collapse 되어
   // 입력한 공백 줄이 화면에서 사라진다. 빈 단락 안에 <br> 을 넣어 한 줄 높이를 확보.
-  const withEmptyP = withoutHwpFont.replace(/<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, "<p><br></p>");
+  const withEmptyP = withPuaMapped.replace(/<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, "<p><br></p>");
 
   // 렌더 시점에 <video>/<audio> 처리:
   //   1. src 가 http:// 외부 도메인이면 → /api/board/media-proxy 로 리라이트
