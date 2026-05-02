@@ -41,6 +41,27 @@ export function isPuaCode(code: number): boolean {
   return code >= PUA_MIN && code <= PUA_MAX;
 }
 
+// 런타임 추가 매핑 — DB(`PuaMapping` 테이블) 에서 hydrate 된 사용자 등록 매핑.
+// 클라이언트: GET /api/board/pua-map 호출로 적재. 서버: prisma 직접 조회.
+// 정적 HWP_PUA_MAP 보다 우선 적용 (사용자가 더 정확한 정보 등록 가능).
+let runtimeMap: Record<number, string> = {};
+
+export function setRuntimePuaMap(map: Record<number, string>): void {
+  runtimeMap = map;
+}
+
+export function mergeRuntimePuaMap(extra: Record<number, string>): void {
+  runtimeMap = { ...runtimeMap, ...extra };
+}
+
+export function getRuntimePuaMap(): Record<number, string> {
+  return runtimeMap;
+}
+
+function lookup(code: number): string | undefined {
+  return runtimeMap[code] ?? HWP_PUA_MAP[code];
+}
+
 /** 매핑 안 된 PUA 한 건의 컨텍스트 — 코드포인트 + 앞뒤 글자 (식별용) */
 export interface UnmappedSample {
   code: number;
@@ -64,7 +85,7 @@ export function replaceHwpPua(
     const ch = chars[i];
     const code = ch.codePointAt(0);
     if (code !== undefined && isPuaCode(code)) {
-      const mapped = HWP_PUA_MAP[code];
+      const mapped = lookup(code);
       if (mapped !== undefined) {
         out.push(mapped);
       } else {

@@ -21,7 +21,13 @@ import TableHeader from "@tiptap/extension-table-header";
 import FontFamily from "@tiptap/extension-font-family";
 import Placeholder from "@tiptap/extension-placeholder";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { replaceHwpPua, fmtCodes, fmtSamples } from "@/lib/hwpPuaMap";
+import {
+  replaceHwpPua,
+  mergeRuntimePuaMap,
+  isPuaCode,
+  type UnmappedSample,
+} from "@/lib/hwpPuaMap";
+import PuaRegisterModal from "./PuaRegisterModal";
 
 interface TipTapEditorProps {
   content: string;
@@ -561,6 +567,30 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
     return () => clearInterval(id);
   }, [isUploading]);
 
+  // PUA 등록 모달 — paste 시 매핑 안 된 PUA 가 발견되면 표시.
+  const [puaSamples, setPuaSamples] = useState<UnmappedSample[] | null>(null);
+
+  // 클라이언트 PUA 런타임 매핑 — DB(PuaMapping) 등록분을 mount 시 hydrate.
+  // mergeRuntimePuaMap 으로 모듈 캐시에 저장 → replaceHwpPua 가 자동 활용.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/board/pua-map")
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled || !data?.map) return;
+        const m: Record<number, string> = {};
+        for (const [hex, ch] of Object.entries(data.map as Record<string, string>)) {
+          const code = parseInt(hex, 16);
+          if (Number.isInteger(code) && typeof ch === "string") m[code] = ch;
+        }
+        mergeRuntimePuaMap(m);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // 글꼴 목록 — 관리자가 /admin/settings 에서 편집한 DB 값을 우선 사용하고,
   // 비어 있거나 fetch 실패 시 DEFAULT_FONTS 로 폴백.
   const [fonts, setFonts] = useState<typeof DEFAULT_FONTS>(DEFAULT_FONTS);
@@ -634,40 +664,17 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       },
       // 한글파일/Word 등에서 붙여넣기 시:
       //   1) inline style 의 한컴 전용 글꼴 제거 (글꼴 없으면 □ 로 깨짐 방지)
-      //   2) PUA 문자 → 표준 unicode 매핑 (글꼴 종속 chars 정상 표시)
-      //   3) 매핑 안 된 PUA 가 있으면 컨텍스트와 함께 콘솔·화면 안내 (보고 루프 단축)
+      //   2) PUA 문자 → 표준 unicode 매핑 (정적 + DB 등록분)
+      //   3) 매핑 안 된 PUA 가 있으면 등록 모달 표시 (paste 한 사람이 직접 등록)
       transformPastedHTML(html: string) {
         const noFont = html.replace(
           /font-family\s*:\s*[^;"]*?(한컴|Hancom|HCR|함초롬|Hamchorom)[^;"]*;?/gi,
           ""
         );
-        const { result, unmapped, samples } = replaceHwpPua(noFont);
-        if (unmapped.size > 0) {
-          const codes = fmtCodes(unmapped);
-          const ctx = fmtSamples(samples);
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[HWP PUA] 매핑 안 된 한컴 PUA 문자 ${unmapped.size}종: ${codes}\n` +
-              `${ctx}\n` +
-              `  → 위 컨텍스트를 보고 어떤 글자였는지 알려주면 hwpPuaMap.ts 에 추가 가능.`,
-          );
-          // 화면에도 한 번 안내 (DevTools 안 여는 사용자도 인지)
-          if (typeof window !== "undefined") {
-            const w = window as unknown as { __hwpPuaWarned?: Set<string> };
-            w.__hwpPuaWarned = w.__hwpPuaWarned || new Set();
-            const key = codes;
-            if (!w.__hwpPuaWarned.has(key)) {
-              w.__hwpPuaWarned.add(key);
-              setTimeout(() => {
-                alert(
-                  `한컴 전용 특수문자 ${unmapped.size}종이 매핑 안 됨 — □ 로 보일 수 있어.\n\n` +
-                    `${codes}\n\n` +
-                    `${ctx}\n\n` +
-                    `위 [□] 자리에 어떤 글자가 보였는지 관리자에게 알려주면 다음 배포에 추가됨.`,
-                );
-              }, 0);
-            }
-          }
+        const { result, samples } = replaceHwpPua(noFont);
+        if (samples.length > 0) {
+          // 모달 트리거 — 동일 paste 호출 안에서 setState 직접은 stale 문제 없음
+          setPuaSamples(samples);
         }
         return result;
       },
@@ -1587,6 +1594,29 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
 
       {/* ── 편집 영역 ── */}
       <EditorContent editor={editor} />
+
+      {puaSamples && puaSamples.length > 0 && (
+        <PuaRegisterModal
+          samples={puaSamples}
+          onClose={() => setPuaSamples(null)}
+          onRegistered={(newMap) => {
+            // 클라 런타임 캐시 갱신
+            mergeRuntimePuaMap(newMap);
+            // 에디터 본문 안의 해당 PUA 즉시 치환 — 사용자 화면도 업데이트
+            if (editor) {
+              const html = editor.getHTML();
+              let replaced = html;
+              for (const [codeStr, ch] of Object.entries(newMap)) {
+                const code = Number(codeStr);
+                if (!Number.isInteger(code) || !isPuaCode(code)) continue;
+                const re = new RegExp(String.fromCodePoint(code), "g");
+                replaced = replaced.replace(re, ch);
+              }
+              if (replaced !== html) editor.commands.setContent(replaced, { emitUpdate: true });
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

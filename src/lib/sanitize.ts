@@ -1,6 +1,17 @@
 import DOMPurify from "isomorphic-dompurify";
 import { replaceHwpPua } from "./hwpPuaMap";
 
+// 서버측 sanitize 호출 시 PUA 런타임 매핑(DB 등록분) 을 백그라운드 hydrate.
+// 첫 sanitize 후 60초 TTL 로 캐시 갱신 — 호출은 fire-and-forget 이라 정화 자체는 즉시 수행.
+// (사용자가 새 매핑을 등록하면 POST 핸들러에서 force-refresh 하므로 즉시 반영됨)
+function triggerServerHydrate() {
+  if (typeof window !== "undefined") return; // 클라에선 별도 hydrate 경로
+  // 동적 import 로 클라 번들에 prisma 가 섞이지 않도록 — 서버에서만 로드
+  import("./puaMapServer")
+    .then((m) => m.ensurePuaMapHydrated())
+    .catch(() => {});
+}
+
 // ============================================================
 // 사용자 생성 HTML 정화
 //  · img/style/data-align : 이미지 리사이즈+정렬 지원
@@ -52,6 +63,7 @@ function registerIframeHook() {
  */
 export function sanitizeHtml(dirty: string | null | undefined): string {
   if (!dirty) return "";
+  triggerServerHydrate();
   registerIframeHook();
   const clean = DOMPurify.sanitize(dirty, {
     ALLOWED_TAGS: [

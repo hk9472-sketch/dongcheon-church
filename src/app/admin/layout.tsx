@@ -16,6 +16,7 @@ const ADMIN_MENU: { label: string; href: string; icon: string; external?: boolea
   { label: "회원 관리", href: "/admin/members", icon: "👥" },
   { label: "SQL 관리", href: "/admin/db/sql", icon: "💾" },
   { label: "도움말 관리", href: "/admin/help", icon: "❓" },
+  { label: "PUA 매핑", href: "/admin/pua-map", icon: "🔤" },
   { label: "백업", href: "/admin/backup", icon: "📦" },
   { label: "SSL 인증서", href: "/admin/certificate", icon: "🔐" },
   { label: "Google Cloud", href: "https://console.cloud.google.com/compute/instances?hl=ko&project=project-d273e626-5a30-41ff-b5f", icon: "☁️", external: true },

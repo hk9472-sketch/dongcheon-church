@@ -496,6 +496,21 @@ model SiteSetting {
 }
 
 // ============================================================
+// HWP PUA 매핑 — 한컴 글꼴 종속 PUA 코드포인트(F081 등) 를 표준 unicode 로.
+// 작성자가 인라인 모달로 직접 등록 (first-write-wins, 관리자만 수정 가능).
+// ============================================================
+model PuaMapping {
+  code        Int      @id                              // PUA 코드포인트 (예: 0xF081)
+  char        String   @db.VarChar(8)                   // 표준 unicode 글자 (예: "①")
+  context     String?  @db.VarChar(64)                  // 등록 시 보였던 앞뒤 컨텍스트 (검토용)
+  addedById   Int?
+  addedByName String?  @db.VarChar(64)
+  createdAt   DateTime @default(now())
+
+  @@map("pua_mappings")
+}
+
+// ============================================================
 // 백업 이력 — 매 백업 실행 시 1행. 시작/종료/결과 기록.
 // ============================================================
 model BackupHistory {
