@@ -15,6 +15,7 @@ import MediaRow from "./MediaRow";
 import MediaUrlDialog from "./MediaUrlDialog";
 import Link from "@tiptap/extension-link";
 import { Table } from "@tiptap/extension-table";
+import { CellSelection, selectionCell } from "prosemirror-tables";
 import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
@@ -1589,6 +1590,43 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
               title="표 삭제"
             >
               ✕표
+            </TBtn>
+
+            {/* 행/열 통째 선택 — 드래그로 셀 선택이 어려운 경우 사용.
+                CellSelection 직접 구성 — TipTap 에 selectRow/Column 명령이
+                노출 안 돼 prosemirror-tables 의 selectionCell + rowSelection
+                /colSelection 으로 처리. */}
+            <TBtn
+              onClick={() => {
+                editor.commands.command(({ state, dispatch }) => {
+                  const $cell = selectionCell(state);
+                  if (!$cell) return false;
+                  if (dispatch) {
+                    dispatch(state.tr.setSelection(CellSelection.rowSelection($cell)));
+                  }
+                  return true;
+                });
+                editor.commands.focus();
+              }}
+              title="현재 행 전체 선택"
+            >
+              ⇒행
+            </TBtn>
+            <TBtn
+              onClick={() => {
+                editor.commands.command(({ state, dispatch }) => {
+                  const $cell = selectionCell(state);
+                  if (!$cell) return false;
+                  if (dispatch) {
+                    dispatch(state.tr.setSelection(CellSelection.colSelection($cell)));
+                  }
+                  return true;
+                });
+                editor.commands.focus();
+              }}
+              title="현재 열 전체 선택"
+            >
+              ⇓열
             </TBtn>
 
             {/* 병합/분할 (셀 여러 개 선택 후 병합, 병합된 셀에서 분할) */}
