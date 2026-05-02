@@ -476,6 +476,41 @@ html {
   display: list-item !important;
 }
 
+/* 중첩 단계별 마커 — Tab 으로 들여쓰기 시 깊이별로 자동 변환.
+   ul: disc → circle → square 순환
+   ol: decimal → lower-alpha → lower-roman 순환 */
+.tiptap-editor .ProseMirror ul ul,
+.prose ul ul,
+.comment-content ul ul {
+  list-style-type: circle !important;
+}
+.tiptap-editor .ProseMirror ul ul ul,
+.prose ul ul ul,
+.comment-content ul ul ul {
+  list-style-type: square !important;
+}
+.tiptap-editor .ProseMirror ul ul ul ul,
+.prose ul ul ul ul,
+.comment-content ul ul ul ul {
+  list-style-type: disc !important;
+}
+
+.tiptap-editor .ProseMirror ol ol,
+.prose ol ol,
+.comment-content ol ol {
+  list-style-type: lower-alpha !important;
+}
+.tiptap-editor .ProseMirror ol ol ol,
+.prose ol ol ol,
+.comment-content ol ol ol {
+  list-style-type: lower-roman !important;
+}
+.tiptap-editor .ProseMirror ol ol ol ol,
+.prose ol ol ol ol,
+.comment-content ol ol ol ol {
+  list-style-type: decimal !important;
+}
+
 /* 다양한 마커 종류 — 에디터 툴바에서 ul/ol 의 data-style 속성으로 선택 */
 .tiptap-editor .ProseMirror ul[data-style="circle"],
 .prose ul[data-style="circle"],

@@ -1329,6 +1329,24 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
           </select>
         )}
 
+        {/* 목록 들여쓰기 / 내어쓰기 — 단계 (중첩 list) */}
+        {(editor.isActive("bulletList") || editor.isActive("orderedList")) && (
+          <>
+            <TBtn
+              onClick={() => editor.chain().focus().liftListItem("listItem").run()}
+              title="내어쓰기 (Shift+Tab) — 한 단계 위로"
+            >
+              ⇤
+            </TBtn>
+            <TBtn
+              onClick={() => editor.chain().focus().sinkListItem("listItem").run()}
+              title="들여쓰기 (Tab) — 한 단계 아래로 (다른 마커로 중첩)"
+            >
+              ⇥
+            </TBtn>
+          </>
+        )}
+
         <Sep />
 
         {/* 삽입 */}
