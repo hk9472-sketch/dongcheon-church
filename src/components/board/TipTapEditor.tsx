@@ -61,6 +61,65 @@ const StyledOrderedList = OrderedList.extend({
   },
 });
 
+// 표 셀 / 헤더 셀에 배경색 속성 추가
+const StyledTableCell = TableCell.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      backgroundColor: {
+        default: null,
+        parseHTML: (el) => {
+          const dataBg = el.getAttribute("data-bg");
+          if (dataBg) return dataBg;
+          const bg = (el as HTMLElement).style.backgroundColor;
+          return bg && bg !== "transparent" ? bg : null;
+        },
+        renderHTML: (attrs: Record<string, unknown>) =>
+          attrs.backgroundColor
+            ? {
+                "data-bg": attrs.backgroundColor as string,
+                style: `background-color: ${attrs.backgroundColor}`,
+              }
+            : {},
+      },
+    };
+  },
+});
+
+const StyledTableHeader = TableHeader.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      backgroundColor: {
+        default: null,
+        parseHTML: (el) => {
+          const dataBg = el.getAttribute("data-bg");
+          if (dataBg) return dataBg;
+          const bg = (el as HTMLElement).style.backgroundColor;
+          return bg && bg !== "transparent" ? bg : null;
+        },
+        renderHTML: (attrs: Record<string, unknown>) =>
+          attrs.backgroundColor
+            ? {
+                "data-bg": attrs.backgroundColor as string,
+                style: `background-color: ${attrs.backgroundColor}`,
+              }
+            : {},
+      },
+    };
+  },
+});
+
+const CELL_BG_PRESETS = [
+  { value: "", label: "없음" },
+  { value: "#fef3c7", label: "노랑" },
+  { value: "#dcfce7", label: "초록" },
+  { value: "#dbeafe", label: "파랑" },
+  { value: "#fee2e2", label: "빨강" },
+  { value: "#f3e8ff", label: "보라" },
+  { value: "#e5e7eb", label: "회색" },
+];
+
 const BULLET_STYLES: { value: string; label: string }[] = [
   { value: "", label: "● 점 (기본)" },
   { value: "circle", label: "○ 동그라미" },
@@ -556,8 +615,8 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       // 행 높이는 CSS resize: vertical 로 셀마다 개별 조절(아래 globals.css 참고).
       Table.configure({ resizable: true, handleWidth: 6, cellMinWidth: 40 }),
       TableRow,
-      TableCell,
-      TableHeader,
+      StyledTableCell,
+      StyledTableHeader,
       Placeholder.configure({
         placeholder: placeholder || "내용을 입력하세요",
       }),
@@ -1424,6 +1483,64 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
             >
               ✕표
             </TBtn>
+
+            {/* 병합/분할 (셀 여러 개 선택 후 병합, 병합된 셀에서 분할) */}
+            <TBtn
+              onClick={() => editor.chain().focus().mergeOrSplit().run()}
+              title="셀 병합 (여러 셀 선택 후) / 병합된 셀 분할"
+            >
+              ⊞
+            </TBtn>
+
+            {/* 헤더 토글 */}
+            <TBtn
+              onClick={() => editor.chain().focus().toggleHeaderRow().run()}
+              title="현재 행을 헤더로 토글"
+            >
+              H행
+            </TBtn>
+            <TBtn
+              onClick={() => editor.chain().focus().toggleHeaderColumn().run()}
+              title="현재 열을 헤더로 토글"
+            >
+              H열
+            </TBtn>
+
+            {/* 셀 배경색 */}
+            <select
+              value=""
+              onChange={(e) => {
+                const v = e.target.value || null;
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("tableCell", { backgroundColor: v })
+                  .updateAttributes("tableHeader", { backgroundColor: v })
+                  .run();
+              }}
+              title="셀 배경색"
+              className="text-xs px-1.5 py-0.5 border border-gray-300 rounded bg-white"
+            >
+              <option value="">셀 배경색</option>
+              {CELL_BG_PRESETS.map((p) => (
+                <option key={p.label} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            <input
+              type="color"
+              onChange={(e) => {
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("tableCell", { backgroundColor: e.target.value })
+                  .updateAttributes("tableHeader", { backgroundColor: e.target.value })
+                  .run();
+              }}
+              title="셀 배경색 (직접 선택)"
+              className="w-7 h-7 rounded cursor-pointer border border-gray-300"
+            />
           </>
         )}
       </div>
