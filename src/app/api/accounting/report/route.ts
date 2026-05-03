@@ -28,6 +28,9 @@ async function calculateCarryOverBefore(
   unitId: number,
   beforeDate: Date
 ): Promise<number> {
+  // unitId=0 (전체) 인 경우 연초이월·마감 데이터 합산이 의미 없음 → 0 반환
+  if (!unitId) return 0;
+
   const year = beforeDate.getUTCFullYear();
   const targetMonth = beforeDate.getUTCMonth() + 1;
   const targetDay = beforeDate.getUTCDate();
@@ -114,14 +117,12 @@ export async function GET(request: NextRequest) {
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
 
-  if (!reportType || !unitIdStr) {
-    return NextResponse.json(
-      { error: "reportType과 unitId는 필수입니다." },
-      { status: 400 }
-    );
+  if (!reportType) {
+    return NextResponse.json({ error: "reportType은 필수입니다." }, { status: 400 });
   }
 
-  const unitId = parseInt(unitIdStr, 10);
+  // unitId 미지정 또는 "all" 이면 0 (전체 회계단위 합산 — carryOver 는 0)
+  const unitId = unitIdStr && unitIdStr !== "all" ? parseInt(unitIdStr, 10) : 0;
 
   if (reportType === "monthly") {
     return handleMonthlyReport(unitId, yearStr, monthStr);
@@ -162,11 +163,11 @@ async function handleMonthlyReport(
           `${year}-${String(month + 1).padStart(2, "0")}-01`
         );
 
-  // 전표항목을 계정별로 집계
+  // 전표항목을 계정별로 집계 (unitId=0 이면 전체 단위 합산)
   const voucherItems = await prisma.accVoucherItem.findMany({
     where: {
       voucher: {
-        unitId,
+        ...(unitId ? { unitId } : {}),
         date: { gte: monthStart, lt: nextMonth },
       },
     },
@@ -257,7 +258,7 @@ async function handleAccountReport(
   const voucherItems = await prisma.accVoucherItem.findMany({
     where: {
       voucher: {
-        unitId,
+        ...(unitId ? { unitId } : {}),
         date: { gte: from, lt: to },
       },
     },
@@ -361,7 +362,7 @@ async function handleDailyReport(
 
   const vouchers = await prisma.accVoucher.findMany({
     where: {
-      unitId,
+      ...(unitId ? { unitId } : {}),
       date: { gte: from, lt: to },
     },
     include: {

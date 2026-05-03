@@ -67,7 +67,8 @@ export async function GET(request: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {};
 
-  if (unitId) {
+  // unitId 미지정 또는 "all" → 전체 회계단위 조회
+  if (unitId && unitId !== "all") {
     where.unitId = parseInt(unitId, 10);
   }
 

@@ -50,13 +50,12 @@ export default function MonthlyReportPage() {
   }, []);
 
   const fetchReport = useCallback(async () => {
-    if (!unitId) return;
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams({
         reportType: "monthly",
-        unitId,
+        unitId: unitId || "all",
         year: String(year),
         month: String(month),
       });
@@ -94,7 +93,7 @@ export default function MonthlyReportPage() {
   }, [unitId, year, month]);
 
   useEffect(() => {
-    if (unitId) fetchReport();
+    fetchReport();
   }, [unitId, year, month, fetchReport]);
 
   const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i);
@@ -114,6 +113,7 @@ export default function MonthlyReportPage() {
               onChange={(e) => setUnitId(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
             >
+              <option value="">전체</option>
               {units.map((u) => (
                 <option key={u.id} value={u.id}>{u.name}</option>
               ))}
@@ -166,7 +166,7 @@ export default function MonthlyReportPage() {
           {/* 제목 (인쇄용) */}
           <div className="hidden print:block text-center py-4">
             <h2 className="text-lg font-bold">
-              {units.find((u) => String(u.id) === unitId)?.name} - {year}년 {month}월 수입지출 보고서
+              {(unitId ? units.find((u) => String(u.id) === unitId)?.name : "전체") || "전체"} - {year}년 {month}월 수입지출 보고서
             </h2>
           </div>
 

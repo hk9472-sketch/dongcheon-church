@@ -6,6 +6,7 @@ import type {
   DenomCounts,
   AllocationGroup,
 } from "@/lib/offeringAllocation";
+import PostVoucherModal from "@/components/offering/PostVoucherModal";
 
 interface Categories {
   amtTithe: number;
@@ -61,6 +62,7 @@ export default function OfferingSettlementPage() {
   const [sundaySchool, setSundaySchool] = useState(0); // 장년반계와 별도, 매수·분배 로직엔 미반영
   const [counts, setCounts] = useState<DenomCounts>(ZERO_COUNTS);
   const [allocation, setAllocation] = useState<AllocationResult | null>(null);
+  const [voucherOpen, setVoucherOpen] = useState(false);
 
   // 분배표의 매수 셀을 편집할 때 호출 — 일반/십일조 매수를 직접 수정.
   // 매수 변경 시 같은 단위의 다른 측 매수는 (전체 매수 - 변경값) 으로 자동 sync.
@@ -450,6 +452,17 @@ export default function OfferingSettlementPage() {
             </tr>
           </tbody>
         </table>
+        <div className="border-t px-4 py-2 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setVoucherOpen(true)}
+            disabled={loading || inputTotal + sundaySchool === 0}
+            className="rounded bg-emerald-600 px-3 py-1.5 text-xs text-white hover:bg-emerald-700 disabled:opacity-50"
+            title="이 일자의 카테고리별 합계를 회계 수입(D) 전표로 반영"
+          >
+            전표 반영
+          </button>
+        </div>
       </section>
 
       {/* 매수 입력 */}
@@ -762,6 +775,25 @@ export default function OfferingSettlementPage() {
           저장
         </button>
       </div>
+
+      {voucherOpen && (
+        <PostVoucherModal
+          date={date}
+          seasonAmount={categories.amtSeason}
+          totals={{
+            tithe: categories.amtTithe,
+            sunday: categories.amtSunday,
+            thanks: categories.amtThanks,
+            special: categories.amtSpecial,
+            oil: categories.amtOil,
+            season: categories.amtSeason,
+            sundaySchool,
+          }}
+          sundaySchool={sundaySchool}
+          onClose={() => setVoucherOpen(false)}
+          onSuccess={() => {}}
+        />
+      )}
     </div>
   );
 }

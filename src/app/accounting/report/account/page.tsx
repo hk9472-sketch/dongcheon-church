@@ -59,13 +59,12 @@ export default function AccountReportPage() {
   }, []);
 
   const fetchReport = useCallback(async () => {
-    if (!unitId) return;
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams({
         reportType: "account",
-        unitId,
+        unitId: unitId || "all",
         dateFrom,
         dateTo,
       });
@@ -96,7 +95,7 @@ export default function AccountReportPage() {
   }, [unitId, dateFrom, dateTo]);
 
   useEffect(() => {
-    if (unitId) fetchReport();
+    fetchReport();
   }, [unitId, dateFrom, dateTo, fetchReport]);
 
   const filteredItems = report?.items.filter((item) => {
@@ -118,6 +117,7 @@ export default function AccountReportPage() {
               onChange={(e) => setUnitId(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
             >
+              <option value="">전체</option>
               {units.map((u) => (
                 <option key={u.id} value={u.id}>{u.name}</option>
               ))}
@@ -176,7 +176,7 @@ export default function AccountReportPage() {
           {/* 인쇄용 제목 */}
           <div className="hidden print:block text-center py-4">
             <h2 className="text-lg font-bold">
-              {units.find((u) => String(u.id) === unitId)?.name} - 계정별 현황
+              {(unitId ? units.find((u) => String(u.id) === unitId)?.name : "전체") || "전체"} - 계정별 현황
             </h2>
             <p className="text-sm text-gray-500">{dateFrom} ~ {dateTo}</p>
           </div>
