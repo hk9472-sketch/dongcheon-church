@@ -65,9 +65,13 @@ export async function POST(req: NextRequest) {
   const dayEnd = new Date(date);
   dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
+  // 과거 "결산차액" entry 는 카테고리 합계에서 제외 (소실 기능의 잔재).
   const rows = await prisma.offeringEntry.groupBy({
     by: ["offeringType"],
-    where: { date: { gte: dayStart, lt: dayEnd } },
+    where: {
+      date: { gte: dayStart, lt: dayEnd },
+      NOT: { description: "결산차액" },
+    },
     _sum: { amount: true },
   });
 
@@ -81,6 +85,36 @@ export async function POST(req: NextRequest) {
   };
   for (const r of rows) {
     if (r.offeringType in sums) sums[r.offeringType] = r._sum.amount ?? 0;
+  }
+
+  // 저장된 OfferingSettlement 에서 매수 합계를 가져와 차액 계산.
+  // 차액 = 매수합 - 카테고리합. 양수면 주일연보 금액에 더해 전표 반영.
+  // (음수면 0 으로 — 부족분은 담당자 수동 처리, 전표엔 영향 X)
+  const settlement = await prisma.offeringSettlement.findUnique({
+    where: { date: dayStart },
+  });
+  if (settlement) {
+    const cashTotal =
+      settlement.cashCheck +
+      settlement.cnt50000 * 50000 +
+      settlement.cnt10000 * 10000 +
+      settlement.cnt5000 * 5000 +
+      settlement.cnt1000 * 1000 +
+      settlement.cnt500 * 500 +
+      settlement.cnt100 * 100 +
+      settlement.cnt50 * 50 +
+      settlement.cnt10 * 10;
+    const inputTotal =
+      sums["십일조연보"] +
+      sums["주일연보"] +
+      sums["감사연보"] +
+      sums["특별연보"] +
+      sums["오일연보"] +
+      sums["절기연보"];
+    const diff = cashTotal - inputTotal;
+    if (diff > 0) {
+      sums["주일연보"] += diff;
+    }
   }
 
   const sundaySchool =

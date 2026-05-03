@@ -309,34 +309,6 @@ export default function OfferingSettlementPage() {
     }
   };
 
-  // 차액 반영 — 차액만큼 주일연보 OfferingEntry 1건 INSERT 후 카테고리 재집계
-  const applyDiff = async () => {
-    if (diff <= 0) return;
-    if (!confirm(`차액 ${fmt(diff)}원을 주일연보로 추가합니다.\n\n이 작업은 되돌릴 수 없습니다 (관리자가 수동 삭제 가능).`)) {
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/accounting/offering/settlement/apply-diff", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, amount: diff }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "차액 반영 실패");
-      // 카테고리 재집계 — 매수 입력은 유지
-      const r2 = await fetch(`/api/accounting/offering/settlement?date=${date}&refresh=1`);
-      const d2 = await r2.json();
-      if (r2.ok) setCategories(d2.categories);
-      setAllocation(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "차액 반영 실패");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // 저장 (잠금 없음 — 언제든 다시 수정 가능)
   const save = async () => {
     setLoading(true);
@@ -602,18 +574,10 @@ export default function OfferingSettlementPage() {
             ※ 분배 계산은 차액을 일반(주일연보)에 더해 일반/십일조 비율 산정에 반영합니다.
           </div>
           {diff > 0 && (
-            <div className="pt-2 border-t mt-2 flex items-center justify-between">
-              <span className="text-xs text-gray-700">
-                차액 <strong>{fmt(diff)}</strong> 원을 주일연보 1건으로 추가
-              </span>
-              <button
-                type="button"
-                onClick={applyDiff}
-                disabled={loading}
-                className="rounded bg-amber-600 px-3 py-1 text-xs text-white hover:bg-amber-700 disabled:opacity-50"
-              >
-                차액 반영 (주일연보 추가)
-              </button>
+            <div className="pt-2 border-t mt-2 text-xs text-gray-600">
+              💡 차액 <strong className="text-emerald-700">{fmt(diff)}</strong> 원은
+              하단 "전표 반영" 버튼을 누르면 <strong>주일연보 금액에 자동 추가</strong>되어
+              전표로 처리됩니다 (재반영 시 덮어쓰기 확인 후 재계산).
             </div>
           )}
         </div>
@@ -812,13 +776,15 @@ export default function OfferingSettlementPage() {
           seasonAmount={categories.amtSeason}
           totals={{
             tithe: categories.amtTithe,
-            sunday: categories.amtSunday,
+            // 차액 양수면 주일연보에 더해진 금액으로 미리 표시 (서버도 동일하게 처리)
+            sunday: categories.amtSunday + (diff > 0 ? diff : 0),
             thanks: categories.amtThanks,
             special: categories.amtSpecial,
             oil: categories.amtOil,
             season: categories.amtSeason,
             sundaySchool,
           }}
+          diffApplied={diff > 0 ? diff : 0}
           sundaySchool={sundaySchool}
           onClose={() => setVoucherOpen(false)}
           onSuccess={() => {}}

@@ -16,9 +16,14 @@ async function loadCategoryTotals(date: Date) {
   const end = new Date(`${dateStr}T00:00:00Z`);
   end.setUTCDate(end.getUTCDate() + 1);
 
+  // 과거 "결산차액" entry 는 카테고리 합계에서 제외 — 차액은 매수합 - 입력합으로
+  // 전표반영 시점에 동적 계산되므로 entry 로 보존하지 않음.
   const rows = await prisma.offeringEntry.groupBy({
     by: ["offeringType"],
-    where: { date: { gte: start, lt: end } },
+    where: {
+      date: { gte: start, lt: end },
+      NOT: { description: "결산차액" },
+    },
     _sum: { amount: true },
   });
 

@@ -6,7 +6,7 @@ interface Props {
   date: string;
   /** 절기 금액 — 0 이면 절기 선택 라디오 안 보임 */
   seasonAmount: number;
-  /** 미리보기용 합계 */
+  /** 미리보기용 합계 (sunday 는 차액 반영 후 값) */
   totals: {
     tithe: number;
     sunday: number;
@@ -16,6 +16,8 @@ interface Props {
     season: number;
     sundaySchool: number;
   };
+  /** 차액(매수합 - 입력합)이 양수면 그 값. 주일연보에 자동 가산됐음을 안내. */
+  diffApplied: number;
   sundaySchool: number;
   onClose: () => void;
   onSuccess: () => void;
@@ -35,6 +37,7 @@ export default function PostVoucherModal({
   date,
   seasonAmount,
   totals,
+  diffApplied,
   sundaySchool,
   onClose,
   onSuccess,
@@ -194,6 +197,12 @@ export default function PostVoucherModal({
             </div>
           )}
 
+          {diffApplied > 0 && (
+            <div className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+              💡 차액 <strong>{fmt(diffApplied)}</strong>원이 주일연보 금액에 자동 가산되어
+              전표에 반영됩니다.
+            </div>
+          )}
           <div className="rounded border border-gray-200 bg-gray-50 p-2">
             <div className="text-xs text-gray-500 mb-1">반영될 전표 (회계단위별 분리)</div>
             {unitNames.length === 0 ? (
