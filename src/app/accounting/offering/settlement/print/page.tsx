@@ -58,12 +58,28 @@ export default function SettlementPrintPage() {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   if (m) dateDisplay = `${m[1]}.${parseInt(m[2], 10)}.${parseInt(m[3], 10)}.`;
 
-  // 증명번호 — 전표번호 같은 일련번호. 결산 데이터엔 없으므로 일단 날짜 끝 2자리.
-  const certNo = m ? `${m[3]}-` : "-";
+  // 증명번호는 비워둠 — 나중에 수입전표로 이관할 때 발생할 번호이므로 지금 쓰지 않음.
 
   return (
     <div className="p-8 print:p-4 max-w-3xl mx-auto bg-white">
       <style jsx global>{`
+        /* 사이트 헤더/푸터 + 회계 사이드바 숨김 — 인쇄 페이지는 깨끗한 양식만 보여줌
+           (스크린/인쇄 모두). aside.print:hidden 은 회계 layout 의 사이드바. */
+        body > header,
+        body > footer {
+          display: none !important;
+        }
+        body > main {
+          max-width: none !important;
+          padding: 0 !important;
+        }
+        body > main aside {
+          display: none !important;
+        }
+        body > main > div > div:first-child.lg\\:hidden {
+          display: none !important;
+        }
+
         @media print {
           @page {
             size: A4 portrait;
@@ -82,7 +98,7 @@ export default function SettlementPrintPage() {
         .receipt-table td {
           border: 1px solid #000;
           padding: 8px 12px;
-          font-size: 14px;
+          font-size: 15px;
         }
         .receipt-table th {
           background: #f5f5f5;
@@ -91,6 +107,8 @@ export default function SettlementPrintPage() {
         .receipt-table .amt {
           text-align: right;
           font-family: "Courier New", monospace;
+          font-size: 16px;
+          font-weight: 500;
         }
       `}</style>
 
@@ -140,7 +158,7 @@ export default function SettlementPrintPage() {
         <tbody>
           <tr>
             <th style={{ width: "20%" }}>증명번호</th>
-            <td style={{ width: "30%" }}>{certNo}</td>
+            <td style={{ width: "30%" }}></td>
             <th style={{ width: "15%" }}>날짜</th>
             <td>{dateDisplay}</td>
           </tr>
