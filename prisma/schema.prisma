@@ -1106,6 +1106,7 @@ model OfferingSettlement {
   amtSpecial   Int       @default(0)   // 특별연보
   amtOil       Int       @default(0)   // 오일연보
   amtSeason    Int       @default(0)   // 절기연보
+  amtSundaySchool Int    @default(0)   // 주일학교 — 작업자 수동 입력 (장년반계와 별도)
   // 매수 입력
   cashCheck    Int       @default(0)   // 수표 총액
   cnt50000     Int       @default(0)

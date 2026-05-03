@@ -58,6 +58,7 @@ export default function OfferingSettlementPage() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
   const [categories, setCategories] = useState<Categories>(ZERO_CAT);
+  const [sundaySchool, setSundaySchool] = useState(0); // 장년반계와 별도, 매수·분배 로직엔 미반영
   const [counts, setCounts] = useState<DenomCounts>(ZERO_COUNTS);
   const [allocation, setAllocation] = useState<AllocationResult | null>(null);
 
@@ -170,6 +171,7 @@ export default function OfferingSettlementPage() {
           amtOil: s.amtOil,
           amtSeason: s.amtSeason,
         });
+        setSundaySchool(s.amtSundaySchool ?? 0);
         setCounts({
           check: s.cashCheck,
           w50000: s.cnt50000,
@@ -185,6 +187,7 @@ export default function OfferingSettlementPage() {
         setSavedAt(s.updatedAt || s.createdAt || null);
       } else {
         setCategories(data.categories);
+        setSundaySchool(0);
         setCounts(ZERO_COUNTS);
       }
     } catch (e) {
@@ -342,6 +345,7 @@ export default function OfferingSettlementPage() {
           denominations: counts,
           // 작업자가 분배 매수를 수동 조정했으면 그대로 저장
           allocation: allocation || undefined,
+          sundaySchool,
         }),
       });
       const data = await res.json();
@@ -419,8 +423,30 @@ export default function OfferingSettlementPage() {
               </td>
             </tr>
             <tr className="border-t font-bold">
-              <td className="px-4 py-2">총계</td>
+              <td className="px-4 py-2">장년반계</td>
               <td className="px-4 py-2 text-right">{fmt(inputTotal)}</td>
+            </tr>
+            <tr className="border-t">
+              <td className="px-4 py-2">주일학교 (수동 입력)</td>
+              <td className="px-4 py-2 text-right">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={sundaySchool === 0 ? "" : sundaySchool.toLocaleString()}
+                  onChange={(e) => {
+                    const n = parseInt(e.target.value.replace(/[^\d]/g, ""), 10) || 0;
+                    setSundaySchool(n);
+                  }}
+                  placeholder="0"
+                  className="w-32 rounded border border-gray-300 px-2 py-1 text-right font-mono"
+                />
+              </td>
+            </tr>
+            <tr className="border-t bg-blue-50 font-bold">
+              <td className="px-4 py-2">총계 (장년반계 + 주일학교)</td>
+              <td className="px-4 py-2 text-right text-blue-800">
+                {fmt(inputTotal + sundaySchool)}
+              </td>
             </tr>
           </tbody>
         </table>
