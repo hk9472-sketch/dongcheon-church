@@ -143,6 +143,23 @@ export default function DuesTable({ category }: Props) {
     }
   };
 
+  const deleteMember = async (idx: number) => {
+    const r = rows[idx];
+    if (!confirm(`${r.memberNo}. ${r.name} 회원을 삭제할까요?\n(입금 내역이 있으면 삭제 불가)`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/accounting/dues/members/${r.memberId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "삭제 실패");
+      setRows((prev) => prev.filter((_, i) => i !== idx));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "삭제 실패");
+    }
+  };
+
   const updateNewRow = (idx: number, field: keyof NewMember, value: string) => {
     setNewRows((prev) => {
       const next = [...prev];
@@ -245,7 +262,7 @@ export default function DuesTable({ category }: Props) {
               <th className="px-3 py-2 text-left font-medium w-24">고유번호</th>
               <th className="px-3 py-2 text-left font-medium">이름</th>
               <th className="px-3 py-2 text-right font-medium w-40">월정액</th>
-              <th className="px-3 py-2 w-20 text-center font-medium">작업</th>
+              <th className="px-3 py-2 w-32 text-center font-medium">작업</th>
             </tr>
           </thead>
           <tbody>
@@ -277,15 +294,24 @@ export default function DuesTable({ category }: Props) {
                     className="w-full rounded border border-gray-200 px-2 py-1 text-right font-mono"
                   />
                 </td>
-                <td className="px-3 py-2 text-center">
-                  <button
-                    type="button"
-                    onClick={() => saveAmount(idx)}
-                    disabled={r.status === "saving"}
-                    className="rounded bg-blue-600 px-2 py-0.5 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {r.status === "saving" ? "..." : "저장"}
-                  </button>
+                <td className="px-3 py-2 text-center whitespace-nowrap">
+                  <div className="flex items-center justify-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => saveAmount(idx)}
+                      disabled={r.status === "saving"}
+                      className="w-12 rounded bg-blue-600 px-2 py-0.5 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {r.status === "saving" ? "..." : "저장"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteMember(idx)}
+                      className="w-12 rounded bg-red-600 px-2 py-0.5 text-xs text-white hover:bg-red-700"
+                    >
+                      삭제
+                    </button>
+                  </div>
                   {r.message && r.status === "error" && (
                     <div className="text-[10px] text-red-600 mt-0.5">{r.message}</div>
                   )}
@@ -343,7 +369,7 @@ export default function DuesTable({ category }: Props) {
                     <button
                       type="button"
                       onClick={() => saveNewRow(idx)}
-                      className="rounded bg-emerald-600 px-2 py-0.5 text-xs text-white hover:bg-emerald-700"
+                      className="w-12 rounded bg-emerald-600 px-2 py-0.5 text-xs text-white hover:bg-emerald-700"
                     >
                       등록
                     </button>

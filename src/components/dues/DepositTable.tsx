@@ -321,7 +321,7 @@ export default function DepositTable({ category }: Props) {
               <th className="px-2 py-2 text-right font-medium w-32">금액</th>
               <th className="px-2 py-2 text-center font-medium w-20">회차</th>
               <th className="px-2 py-2 text-left font-medium">비고</th>
-              <th className="px-2 py-2 w-20 text-center font-medium">작업</th>
+              <th className="px-2 py-2 w-32 text-center font-medium">작업</th>
             </tr>
           </thead>
           <tbody>
@@ -404,13 +404,13 @@ export default function DepositTable({ category }: Props) {
                       className="w-full rounded border border-gray-200 px-1.5 py-0.5"
                     />
                   </td>
-                  <td className="px-2 py-1 text-center">
+                  <td className="px-2 py-1 text-center whitespace-nowrap">
                     <div className="flex items-center justify-center gap-1">
                       <button
                         type="button"
                         onClick={() => saveRow(idx)}
                         disabled={r.status === "saving"}
-                        className="rounded bg-blue-600 px-2 py-0.5 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
+                        className="w-12 rounded bg-blue-600 px-2 py-0.5 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
                       >
                         저장
                       </button>
@@ -418,7 +418,7 @@ export default function DepositTable({ category }: Props) {
                         <button
                           type="button"
                           onClick={() => deleteRow(idx)}
-                          className="rounded bg-red-500 px-2 py-0.5 text-xs text-white hover:bg-red-600"
+                          className="w-12 rounded bg-red-500 px-2 py-0.5 text-xs text-white hover:bg-red-600"
                         >
                           삭제
                         </button>
