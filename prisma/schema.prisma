@@ -1097,6 +1097,25 @@ model OfferingEntry {
 // 연보 일별 결산 — 카테고리합계·매수입력·차액·일반/십일조 분배 결과 저장
 // 일자 단위 1행. finalizedAt 이 채워지면 잠금 (재계산 불가).
 // ============================================================
+// 연보 관리번호 이력 — OfferingMember.id 는 내부 일련번호(고정),
+// memberNo 는 시기별로 변경 가능한 표면 관리번호.
+//   · validFrom : 이 번호가 유효해진 일자
+//   · validUntil: 다음 번호로 바뀐 일자 (null = 현재까지 유효)
+// 같은 (memberNo, 기간) 에 다른 사람이 들어올 수 있음 → memberNo 자체가 unique 가 아님.
+// 같은 사람이 시기별로 다른 번호를 가질 수도 있음.
+model OfferingMemberNumber {
+  id         Int       @id @default(autoincrement())
+  memberId   Int                                   // soft FK → OfferingMember.id
+  memberNo   Int                                   // 표면 관리번호
+  validFrom  DateTime  @db.Date
+  validUntil DateTime? @db.Date
+  createdAt  DateTime  @default(now())
+
+  @@index([memberNo, validFrom])
+  @@index([memberId])
+  @@map("offering_member_numbers")
+}
+
 // 월정 회원 — 전도회 / 건축 단위별 고유번호로 관리.
 //   같은 사람이 두 단위에 별도 회원으로 등록 가능 (각각 다른 고유번호).
 model MonthlyDuesMember {

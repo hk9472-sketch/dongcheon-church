@@ -130,6 +130,7 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
 
   const offeringItems = [
     { href: "/accounting/offering/members", label: "관리번호" },
+    { href: "/accounting/offering/member-numbers", label: "관리번호 변경" },
     { href: "/accounting/offering/donor-info", label: "관리상세" },
     { href: "/accounting/offering/entry", label: "연보입력" },
     { href: "/accounting/offering/by-type", label: "연보별입력" },
@@ -165,6 +166,7 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
     : offeringItems.filter(
         (i) =>
           i.href !== "/accounting/offering/members" &&
+          i.href !== "/accounting/offering/member-numbers" &&
           i.href !== "/accounting/offering/donor-info" &&
           i.href !== "/accounting/offering/certificate"
       );
