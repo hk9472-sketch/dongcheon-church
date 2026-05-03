@@ -54,16 +54,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "이미 사용 중인 아이디입니다." }, { status: 409 });
     }
 
-    // 이메일 중복 확인 — 입력된 경우만. 빈 이메일은 중복으로 안 잡음.
-    if (email) {
-      const existingEmail = await prisma.user.findFirst({ where: { email } });
-      if (existingEmail) {
-        return NextResponse.json(
-          { message: "이미 사용 중인 이메일입니다. 비밀번호를 잊으셨다면 비밀번호 찾기를 이용해 주세요." },
-          { status: 409 }
-        );
-      }
-    }
+    // 이메일 중복은 허용 — 같은 이메일을 여러 아이디가 공유 가능.
+    // 비밀번호 재설정·인증 메일은 (이메일 + 아이디) 조합으로 식별하므로 충돌 없음.
 
     const hashedPassword = await hashPassword(password);
 
