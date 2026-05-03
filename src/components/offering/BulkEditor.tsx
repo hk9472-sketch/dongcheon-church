@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 const OFFERING_TYPES = [
   "주일연보",
@@ -54,6 +54,37 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
   const [rows, setRows] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 행간 화살표 이동 — 각 셀(input/select) 의 ref 를 [row][col] 에 저장.
+  // col 순서: 일자(0) / 관리번호(1) / [연보종류(2)] / 금액 / 비고
+  const cellRefs = useRef<Array<Array<HTMLElement | null>>>([]);
+  const colCount = showTypeColumn ? 5 : 4;
+  const setCellRef = (row: number, col: number) => (el: HTMLElement | null) => {
+    if (!cellRefs.current[row]) cellRefs.current[row] = [];
+    cellRefs.current[row][col] = el;
+  };
+  const focusCell = (row: number, col: number) => {
+    const r = Math.max(0, Math.min(rows.length - 1, row));
+    const c = Math.max(0, Math.min(colCount - 1, col));
+    const el = cellRefs.current[r]?.[c];
+    if (el) {
+      el.focus();
+      if (el instanceof HTMLInputElement) el.select();
+    }
+  };
+  const onCellKeyDown = (
+    e: React.KeyboardEvent<HTMLElement>,
+    row: number,
+    col: number,
+  ) => {
+    if (e.key === "ArrowDown" || e.key === "Enter") {
+      e.preventDefault();
+      focusCell(row + 1, col);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      focusCell(row - 1, col);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -374,14 +405,17 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
                   >
                     <td className="px-2 py-1">
                       <input
+                        ref={setCellRef(idx, 0)}
                         type="date"
                         value={r.date}
                         onChange={(e) => updateField(idx, "date", e.target.value)}
+                        onKeyDown={(e) => onCellKeyDown(e, idx, 0)}
                         className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-sm"
                       />
                     </td>
                     <td className="px-2 py-1">
                       <input
+                        ref={setCellRef(idx, 1)}
                         type="text"
                         inputMode="numeric"
                         value={r.memberId}
@@ -389,6 +423,7 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
                           updateField(idx, "memberId", e.target.value.replace(/[^\d]/g, ""))
                         }
                         onBlur={() => lookupMember(idx)}
+                        onKeyDown={(e) => onCellKeyDown(e, idx, 1)}
                         placeholder="0"
                         className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-sm text-right"
                       />
@@ -397,8 +432,10 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
                     {showTypeColumn && (
                       <td className="px-2 py-1">
                         <select
+                          ref={setCellRef(idx, 2)}
                           value={r.offeringType}
                           onChange={(e) => updateField(idx, "offeringType", e.target.value)}
+                          onKeyDown={(e) => onCellKeyDown(e, idx, 2)}
                           className="w-full rounded border border-gray-200 px-1 py-0.5 text-sm"
                         >
                           {OFFERING_TYPES.map((t) => (
@@ -409,6 +446,7 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
                     )}
                     <td className="px-2 py-1">
                       <input
+                        ref={setCellRef(idx, showTypeColumn ? 3 : 2)}
                         type="text"
                         inputMode="numeric"
                         value={
@@ -419,15 +457,18 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
                         onChange={(e) =>
                           updateField(idx, "amount", e.target.value.replace(/[^\d]/g, ""))
                         }
+                        onKeyDown={(e) => onCellKeyDown(e, idx, showTypeColumn ? 3 : 2)}
                         placeholder="0"
                         className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-sm text-right font-mono"
                       />
                     </td>
                     <td className="px-2 py-1">
                       <input
+                        ref={setCellRef(idx, showTypeColumn ? 4 : 3)}
                         type="text"
                         value={r.description}
                         onChange={(e) => updateField(idx, "description", e.target.value)}
+                        onKeyDown={(e) => onCellKeyDown(e, idx, showTypeColumn ? 4 : 3)}
                         className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-sm"
                       />
                     </td>
@@ -493,7 +534,7 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
 
       <div className="text-xs text-gray-500">
         ※ 노란 배경 = 신규 행, 주황 배경 = 변경됨(저장 필요). 각 행의 ✓ 로 저장, ✕ 로 삭제.
-        일자도 셀에서 수정 가능합니다.
+        일자도 셀에서 수정 가능. ↑↓ 또는 Enter 로 같은 컬럼 위/아래 행 이동.
       </div>
     </div>
   );
