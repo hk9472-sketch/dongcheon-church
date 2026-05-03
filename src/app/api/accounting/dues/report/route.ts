@@ -124,12 +124,14 @@ async function memberReport(category: string, year: number) {
 
   const amtMap = new Map(amounts.map((a) => [a.memberId, a.amount]));
 
+  type DepositLite = { date: string; amount: number };
   type Row = {
     memberId: number;
     memberNo: number;
     name: string;
     monthlyDues: number;
     byInstallment: Record<number, number>;
+    byInstallmentDetails: Record<number, DepositLite[]>; // 회차별 입금 상세 (date+amount)
     total: number;
     expectedAnnual: number; // monthlyDues * 12
     unpaidInstallments: number[]; // 1-12 중 입금 = 0 인 회차
@@ -142,6 +144,7 @@ async function memberReport(category: string, year: number) {
       name: m.name,
       monthlyDues,
       byInstallment: {},
+      byInstallmentDetails: {},
       total: 0,
       expectedAnnual: monthlyDues * 12,
       unpaidInstallments: [],
@@ -153,6 +156,11 @@ async function memberReport(category: string, year: number) {
     const r = rowMap.get(d.memberId);
     if (!r) continue;
     r.byInstallment[d.installment] = (r.byInstallment[d.installment] || 0) + d.amount;
+    if (!r.byInstallmentDetails[d.installment]) r.byInstallmentDetails[d.installment] = [];
+    r.byInstallmentDetails[d.installment].push({
+      date: d.date.toISOString().slice(0, 10),
+      amount: d.amount,
+    });
     r.total += d.amount;
   }
   for (const r of rows) {
