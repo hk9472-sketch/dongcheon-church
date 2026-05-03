@@ -12,6 +12,7 @@ interface EntryItem {
   id: number;
   date: string;
   memberId: number | null;
+  memberNoAtDate?: number | null;
   member: { id: number; name: string; groupName: string | null } | null;
   offeringType: string;
   amount: number;
@@ -347,7 +348,7 @@ export default function OfferingListPage() {
                         <td className="px-4 py-2 text-gray-600">
                           {typeof e.date === "string" ? e.date.slice(0, 10) : ""}
                         </td>
-                        <td className="px-4 py-2 text-gray-600">{e.memberId ?? "-"}</td>
+                        <td className="px-4 py-2 text-gray-600">{e.memberNoAtDate ?? e.memberId ?? "-"}</td>
                         {hasMemberEdit && <td className="px-4 py-2 text-gray-800">{e.member?.name ?? "(개인번호없음)"}</td>}
                         <td className="px-4 py-2 text-gray-400">—</td>
                         <td className="px-4 py-2 text-right text-blue-700 font-medium">{fmtAmount(e.amount)}</td>

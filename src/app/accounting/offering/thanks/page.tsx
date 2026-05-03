@@ -8,6 +8,7 @@ interface ThanksEntry {
   id: number;
   date: string;
   memberId: number | null;
+  memberNoAtDate?: number | null;
   member: { id: number; name: string; groupName: string | null } | null;
   amount: number;
   description: string | null;
@@ -157,7 +158,7 @@ export default function ThanksOfferingPage() {
                       <td className="px-4 py-2.5 text-center text-gray-500">{idx + 1}</td>
                       {hasMemberEdit && (
                         <>
-                          <td className="px-4 py-2.5 text-gray-600 print:hidden">{e.memberId ?? "-"}</td>
+                          <td className="px-4 py-2.5 text-gray-600 print:hidden">{e.memberNoAtDate ?? e.memberId ?? "-"}</td>
                           <td className="px-4 py-2.5 text-gray-800 font-medium print:hidden">{e.member?.name ?? "(개인번호없음)"}</td>
                           <td className="px-4 py-2.5 text-gray-500 print:hidden">{e.member?.groupName || "-"}</td>
                           <td className="px-4 py-2.5 text-right text-blue-700 font-medium print:hidden">

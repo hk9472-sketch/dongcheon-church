@@ -156,7 +156,7 @@ export default function OfferingSummaryPage() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const arr: any[] = Array.isArray(d?.data) ? d.data : [];
           const rows: MemberSummaryRow[] = arr.map((g) => ({
-            memberId: g.member?.id ?? 0,
+            memberId: g.member?.currentNo ?? g.member?.id ?? 0,
             memberName: g.member?.name ?? "",
             groupName: g.member?.groupName ?? null,
             ...flattenByType(g.byType),

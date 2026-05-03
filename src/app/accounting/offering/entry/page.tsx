@@ -31,6 +31,7 @@ interface SavedEntry {
   id: number;
   date: string;
   memberId: number | null;
+  memberNoAtDate?: number | null;
   member: { id: number; name: string } | null;
   offeringType: string;
   amount: number;
@@ -704,7 +705,7 @@ export default function OfferingEntryPage() {
                       >
                         {isFirstOfGroup ? v : ""}
                       </td>
-                      <td className="px-3 py-2 text-gray-600">{e.memberId ?? "-"}</td>
+                      <td className="px-3 py-2 text-gray-600">{e.memberNoAtDate ?? e.memberId ?? "-"}</td>
                       {hasMemberEdit && (
                         <td className="px-3 py-2 text-gray-800">
                           {e.member?.name ?? "(개인번호없음)"}

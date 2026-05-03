@@ -12,6 +12,7 @@ function decryptRrnSafe(v: string | null | undefined): string | null {
 }
 import { checkAccAccess, hasMemberEdit } from "@/lib/accountAuth";
 import { attachMembers } from "@/lib/offeringMemberJoin";
+import { getMemberNosBulk } from "@/lib/offeringMemberNumber";
 
 /**
  * 날짜 문자열(YYYY-MM-DD)을 UTC 자정 Date로 변환
@@ -139,12 +140,18 @@ async function handleIndividual(
   }
 
   const data = Object.values(grouped);
-  const result = canSeeName
-    ? data
-    : data.map((g) => ({
-        ...g,
-        member: { id: g.member.id, name: "*", groupName: null },
-      }));
+  // 현재 표면 관리번호 매핑 — 회원별 현재 active row
+  const memberIds = data.map((g) => g.member.id).filter((id) => id > 0);
+  const currentNos = await getMemberNosBulk(memberIds, new Date());
+  const result = data.map((g) => ({
+    ...g,
+    member: {
+      id: g.member.id,
+      name: canSeeName ? g.member.name : "*",
+      groupName: canSeeName ? g.member.groupName : null,
+      currentNo: currentNos.get(g.member.id) ?? g.member.id,
+    },
+  }));
 
   return NextResponse.json({
     reportType: "individual",
@@ -318,12 +325,17 @@ async function handlePeriod(
   }
 
   const data = Object.values(grouped);
-  const result = canSeeName
-    ? data
-    : data.map((g) => ({
-        ...g,
-        member: { id: g.member.id, name: "*", groupName: null },
-      }));
+  const memberIds2 = data.map((g) => g.member.id).filter((id) => id > 0);
+  const currentNos2 = await getMemberNosBulk(memberIds2, new Date());
+  const result = data.map((g) => ({
+    ...g,
+    member: {
+      id: g.member.id,
+      name: canSeeName ? g.member.name : "*",
+      groupName: canSeeName ? g.member.groupName : null,
+      currentNo: currentNos2.get(g.member.id) ?? g.member.id,
+    },
+  }));
 
   return NextResponse.json({
     reportType: "period",
