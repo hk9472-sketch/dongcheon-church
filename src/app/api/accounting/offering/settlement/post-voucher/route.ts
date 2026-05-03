@@ -4,29 +4,37 @@ import prisma from "@/lib/db";
 import { checkAccAccess } from "@/lib/accountAuth";
 
 // POST /api/accounting/offering/settlement/post-voucher
-// body: { date, unitId, sundaySchool, seasonType }
-//   해당 일자의 OfferingEntry 카테고리 합계 + 주일학교를 수입(D) 전표 1건으로 생성.
-//   각 카테고리 → 같은 이름의 AccAccount 매칭 (대상 회계단위 안에서).
-//   절기 금액 > 0 이면 seasonType (부활감사/맥추감사/추수감사/성탄감사) 으로 매칭.
+// body: { date, sundaySchool, seasonType }
+//   해당 일자의 OfferingEntry 합계 + 주일학교를 회계단위별로 분리해서 수입(D) 전표 생성.
+//   카테고리 → 회계단위 매핑 (이름 후보 첫 매치):
+//     · 십일조연보       → 회계단위 "십일조회계"
+//     · 주일학교         → 회계단위 "주교회계"
+//     · 그 외 (주일/감사/특별/오일/절기) → 회계단위 "일반회계"
+//   각 단위 안에서 같은 이름의 AccAccount(type=D, isActive) 매칭.
+//   절기 금액 > 0 이면 seasonType (부활감사/맥추감사/추수감사/성탄감사) 1개 선택 필수.
 
 const SEASON_TYPES = ["부활감사", "맥추감사", "추수감사", "성탄감사"] as const;
 type SeasonType = (typeof SEASON_TYPES)[number];
 
-interface CategoryMapping {
-  /** OfferingEntry.offeringType 값 */
-  offeringType: string | null; // null = 주일학교(외부 입력)
-  /** 매칭할 계정과목 이름 후보들 (첫 매치 사용) */
-  accountNames: string[];
+// 카테고리 키 → { 회계단위 이름 후보, 계정과목 이름 후보 }
+interface CategoryMap {
+  unitNames: string[]; // 회계단위 이름 후보 (첫 매치)
+  accountNames: string[]; // 계정과목 이름 후보 (단위 안에서 첫 매치)
+  label: string;
 }
 
-const CATEGORY_MAP: Record<string, CategoryMapping> = {
-  tithe: { offeringType: "십일조연보", accountNames: ["십일조연보", "십일조"] },
-  sunday: { offeringType: "주일연보", accountNames: ["주일연보", "주일"] },
-  thanks: { offeringType: "감사연보", accountNames: ["감사연보", "감사"] },
-  special: { offeringType: "특별연보", accountNames: ["특별연보", "특별"] },
-  oil: { offeringType: "오일연보", accountNames: ["오일연보", "오일"] },
-  // season 은 동적 (seasonType 으로 결정)
-  sundaySchool: { offeringType: null, accountNames: ["주일학교"] },
+const TITHE_UNIT = ["십일조회계", "십일조"];
+const SS_UNIT = ["주교회계", "주일학교회계", "주교"];
+const GEN_UNIT = ["일반회계", "일반"];
+
+const CAT_MAPS: Record<string, CategoryMap> = {
+  tithe: { unitNames: TITHE_UNIT, accountNames: ["십일조연보", "십일조"], label: "십일조연보" },
+  sunday: { unitNames: GEN_UNIT, accountNames: ["주일연보", "주일"], label: "주일연보" },
+  thanks: { unitNames: GEN_UNIT, accountNames: ["감사연보", "감사"], label: "감사연보" },
+  special: { unitNames: GEN_UNIT, accountNames: ["특별연보", "특별"], label: "특별연보" },
+  oil: { unitNames: GEN_UNIT, accountNames: ["오일연보", "오일"], label: "오일연보" },
+  // season 은 동적: seasonType 으로 계정 이름 결정, 단위는 일반회계
+  sundaySchool: { unitNames: SS_UNIT, accountNames: ["주일학교"], label: "주일학교" },
 };
 
 export async function POST(req: NextRequest) {
@@ -35,7 +43,6 @@ export async function POST(req: NextRequest) {
 
   let body: {
     date?: string;
-    unitId?: number;
     sundaySchool?: number;
     seasonType?: SeasonType;
   };
@@ -51,11 +58,7 @@ export async function POST(req: NextRequest) {
   if (isNaN(date.getTime()))
     return NextResponse.json({ error: "잘못된 날짜" }, { status: 400 });
 
-  const unitId = typeof body.unitId === "number" ? body.unitId : 0;
-  if (!unitId)
-    return NextResponse.json({ error: "회계단위(unitId) 필수" }, { status: 400 });
-
-  // 해당 일자의 OfferingEntry 합계 (UTC 기준)
+  // 해당 일자 OfferingEntry 합계
   const dayStart = new Date(date);
   const dayEnd = new Date(date);
   dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
@@ -66,7 +69,7 @@ export async function POST(req: NextRequest) {
     _sum: { amount: true },
   });
 
-  const categorySums: Record<string, number> = {
+  const sums: Record<string, number> = {
     "십일조연보": 0,
     "주일연보": 0,
     "감사연보": 0,
@@ -75,9 +78,7 @@ export async function POST(req: NextRequest) {
     "절기연보": 0,
   };
   for (const r of rows) {
-    if (r.offeringType in categorySums) {
-      categorySums[r.offeringType] = r._sum.amount ?? 0;
-    }
+    if (r.offeringType in sums) sums[r.offeringType] = r._sum.amount ?? 0;
   }
 
   const sundaySchool =
@@ -85,8 +86,7 @@ export async function POST(req: NextRequest) {
       ? Math.floor(body.sundaySchool)
       : 0;
 
-  // 절기 매핑: 금액 > 0 이면 seasonType 필수
-  const seasonAmount = categorySums["절기연보"];
+  const seasonAmount = sums["절기연보"];
   let seasonType: SeasonType | null = null;
   if (seasonAmount > 0) {
     if (
@@ -102,12 +102,25 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 각 카테고리에 해당하는 AccAccount 찾기. 항목별로 (offeringType, accountId, amount).
-  type Item = { name: string; accountId: number; amount: number };
-  const items: Item[] = [];
-  const missing: string[] = [];
+  // 회계단위 이름 → id 캐시
+  const unitCache = new Map<string, number | null>();
+  async function findUnit(names: string[]): Promise<number | null> {
+    const key = names.join("|");
+    if (unitCache.has(key)) return unitCache.get(key)!;
+    for (const n of names) {
+      const u = await prisma.accUnit.findFirst({
+        where: { name: n, isActive: true },
+      });
+      if (u) {
+        unitCache.set(key, u.id);
+        return u.id;
+      }
+    }
+    unitCache.set(key, null);
+    return null;
+  }
 
-  async function findAccount(names: string[]): Promise<number | null> {
+  async function findAccount(unitId: number, names: string[]): Promise<number | null> {
     for (const n of names) {
       const a = await prisma.accAccount.findFirst({
         where: { unitId, name: n, type: "D", isActive: true },
@@ -117,111 +130,164 @@ export async function POST(req: NextRequest) {
     return null;
   }
 
-  // 십일조, 주일, 감사, 특별, 오일
-  const standardKeys = ["tithe", "sunday", "thanks", "special", "oil"] as const;
-  for (const k of standardKeys) {
-    const map = CATEGORY_MAP[k];
-    if (!map.offeringType) continue;
-    const amt = categorySums[map.offeringType];
-    if (amt <= 0) continue;
-    const accId = await findAccount(map.accountNames);
-    if (!accId) {
-      missing.push(map.offeringType);
+  // 단위별 항목 그룹핑
+  type Item = { name: string; accountId: number; amount: number };
+  const byUnit = new Map<number, Item[]>(); // unitId → items
+  const missingUnits: string[] = [];
+  const missingAccounts: string[] = [];
+
+  // 분류: [카테고리키, 금액, 라벨, unit 후보, account 후보]
+  type Plan = {
+    label: string;
+    amount: number;
+    unitNames: string[];
+    accountNames: string[];
+  };
+  const plans: Plan[] = [];
+
+  for (const k of ["tithe", "sunday", "thanks", "special", "oil"] as const) {
+    const cat = CAT_MAPS[k];
+    const amt = sums[cat.label];
+    if (amt > 0) {
+      plans.push({
+        label: cat.label,
+        amount: amt,
+        unitNames: cat.unitNames,
+        accountNames: cat.accountNames,
+      });
+    }
+  }
+  if (seasonAmount > 0 && seasonType) {
+    plans.push({
+      label: seasonType,
+      amount: seasonAmount,
+      unitNames: GEN_UNIT,
+      accountNames: [seasonType, "절기연보", "절기"],
+    });
+  }
+  if (sundaySchool > 0) {
+    plans.push({
+      label: "주일학교",
+      amount: sundaySchool,
+      unitNames: SS_UNIT,
+      accountNames: CAT_MAPS.sundaySchool.accountNames,
+    });
+  }
+
+  for (const p of plans) {
+    const unitId = await findUnit(p.unitNames);
+    if (!unitId) {
+      missingUnits.push(`${p.label}(회계단위 ${p.unitNames[0]})`);
       continue;
     }
-    items.push({ name: map.offeringType, accountId: accId, amount: amt });
+    const accId = await findAccount(unitId, p.accountNames);
+    if (!accId) {
+      missingAccounts.push(`${p.label}(${p.unitNames[0]} 안)`);
+      continue;
+    }
+    const list = byUnit.get(unitId) ?? [];
+    list.push({ name: p.label, accountId: accId, amount: p.amount });
+    byUnit.set(unitId, list);
   }
 
-  // 절기 (선택된 seasonType 으로)
-  if (seasonAmount > 0 && seasonType) {
-    const accId = await findAccount([seasonType, "절기연보", "절기"]);
-    if (!accId) missing.push(seasonType);
-    else items.push({ name: seasonType, accountId: accId, amount: seasonAmount });
-  }
-
-  // 주일학교
-  if (sundaySchool > 0) {
-    const accId = await findAccount(CATEGORY_MAP.sundaySchool.accountNames);
-    if (!accId) missing.push("주일학교");
-    else items.push({ name: "주일학교", accountId: accId, amount: sundaySchool });
-  }
-
-  if (items.length === 0) {
+  if (byUnit.size === 0) {
     return NextResponse.json(
-      { error: "반영할 금액이 없습니다." + (missing.length ? ` 또는 계정과목 미설정: ${missing.join(", ")}` : "") },
+      {
+        error:
+          "반영할 항목 없음." +
+          (missingUnits.length ? ` 회계단위 누락: ${missingUnits.join(", ")}` : "") +
+          (missingAccounts.length ? ` 계정과목 누락: ${missingAccounts.join(", ")}` : ""),
+      },
       { status: 400 },
     );
   }
 
-  // 마감 여부
+  // 마감 여부 — 어떤 단위라도 마감됐으면 그 단위만 거부 (전체 거부 X)
   const year = date.getUTCFullYear();
   const month = date.getUTCMonth() + 1;
-  const closing = await prisma.accClosing.findUnique({
-    where: { unitId_year_month: { unitId, year, month } },
-  });
-  if (closing && closing.closedAt) {
+  const closedUnits: string[] = [];
+  for (const unitId of byUnit.keys()) {
+    const closing = await prisma.accClosing.findUnique({
+      where: { unitId_year_month: { unitId, year, month } },
+    });
+    if (closing && closing.closedAt) {
+      const u = await prisma.accUnit.findUnique({ where: { id: unitId } });
+      closedUnits.push(u?.name ?? `unit ${unitId}`);
+    }
+  }
+  if (closedUnits.length > 0) {
     return NextResponse.json(
-      { error: `${year}년 ${month}월은 마감되어 전표를 추가할 수 없습니다.` },
+      { error: `${year}년 ${month}월 마감된 단위: ${closedUnits.join(", ")}` },
       { status: 409 },
     );
   }
 
   const operatorName = acc.user?.name ?? acc.user?.userId ?? "결산";
-  const totalAmount = items.reduce((s, i) => s + i.amount, 0);
-
-  // 전표번호 채번 (재시도 포함)
   const dateNoStr = date.toISOString().slice(0, 10).replace(/-/g, "");
-  const MAX_RETRIES = 3;
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    try {
-      const result = await prisma.$transaction(async (tx) => {
-        const existing = await tx.accVoucher.findMany({
-          where: { unitId, voucherNo: { startsWith: dateNoStr } },
-          orderBy: { voucherNo: "desc" },
-          take: 1,
-        });
-        const nextSeq =
-          existing.length > 0
-            ? parseInt(existing[0].voucherNo.split("-")[1], 10) + 1
-            : 1;
-        const voucherNo = `${dateNoStr}-${String(nextSeq).padStart(3, "0")}`;
-        const voucher = await tx.accVoucher.create({
-          data: {
-            unitId,
-            voucherNo,
-            type: "D",
-            date,
-            description: "연보 결산 자동 반영",
-            totalAmount,
-            createdBy: operatorName,
-            items: {
-              create: items.map((it, idx) => ({
-                seq: idx + 1,
-                accountId: it.accountId,
-                amount: it.amount,
-                description: it.name,
-                counterpart: null,
-              })),
-            },
-          },
-          include: { items: true },
-        });
-        return voucher;
-      });
 
-      return NextResponse.json({
-        ok: true,
-        voucher: { id: result.id, voucherNo: result.voucherNo },
-        items: result.items.length,
-        missing,
-      });
-    } catch (e) {
-      // 전표번호 충돌 재시도
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-        if (attempt < MAX_RETRIES - 1) continue;
+  // 단위별로 트랜잭션 분리 (전표번호 채번 충돌 격리)
+  const created: Array<{ unitName: string; voucherNo: string; items: number; total: number }> = [];
+
+  for (const [unitId, items] of byUnit.entries()) {
+    const totalAmount = items.reduce((s, i) => s + i.amount, 0);
+    const MAX_RETRIES = 3;
+    let succeeded = false;
+    for (let attempt = 0; attempt < MAX_RETRIES && !succeeded; attempt++) {
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+          const existing = await tx.accVoucher.findMany({
+            where: { unitId, voucherNo: { startsWith: dateNoStr } },
+            orderBy: { voucherNo: "desc" },
+            take: 1,
+          });
+          const nextSeq =
+            existing.length > 0
+              ? parseInt(existing[0].voucherNo.split("-")[1], 10) + 1
+              : 1;
+          const voucherNo = `${dateNoStr}-${String(nextSeq).padStart(3, "0")}`;
+          const voucher = await tx.accVoucher.create({
+            data: {
+              unitId,
+              voucherNo,
+              type: "D",
+              date,
+              description: "연보 결산 자동 반영",
+              totalAmount,
+              createdBy: operatorName,
+              items: {
+                create: items.map((it, idx) => ({
+                  seq: idx + 1,
+                  accountId: it.accountId,
+                  amount: it.amount,
+                  description: it.name,
+                  counterpart: null,
+                })),
+              },
+            },
+          });
+          const u = await tx.accUnit.findUnique({ where: { id: unitId } });
+          return { voucherNo: voucher.voucherNo, unitName: u?.name ?? "?" };
+        });
+        created.push({
+          unitName: result.unitName,
+          voucherNo: result.voucherNo,
+          items: items.length,
+          total: totalAmount,
+        });
+        succeeded = true;
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+          if (attempt < MAX_RETRIES - 1) continue;
+        }
+        throw e;
       }
-      throw e;
     }
   }
-  return NextResponse.json({ error: "전표 생성 실패" }, { status: 500 });
+
+  return NextResponse.json({
+    ok: true,
+    vouchers: created,
+    missingUnits,
+    missingAccounts,
+  });
 }
