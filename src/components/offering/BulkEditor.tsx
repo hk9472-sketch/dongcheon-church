@@ -79,7 +79,14 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
   ) => {
     if (e.key === "ArrowDown" || e.key === "Enter") {
       e.preventDefault();
-      focusCell(row + 1, col);
+      // 마지막 행에서 ↓ 누르면 새 빈 행 추가 후 그 행으로 이동
+      if (row === rows.length - 1) {
+        setRows((prev) => [...prev, blankRow(fixedType)]);
+        // 다음 tick 에 새 행에 ref 가 등록되므로 setTimeout
+        setTimeout(() => focusCell(row + 1, col), 0);
+      } else {
+        focusCell(row + 1, col);
+      }
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       focusCell(row - 1, col);
@@ -356,9 +363,17 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
         </button>
         <button
           type="button"
+          onClick={() => setRows((prev) => [...prev, blankRow(fixedType)])}
+          disabled={loading}
+          className="ml-auto rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+        >
+          + 줄 추가
+        </button>
+        <button
+          type="button"
           onClick={saveAllDirty}
           disabled={loading || !rows.some((r) => r.status === "dirty")}
-          className="ml-auto rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+          className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
         >
           변경분 일괄저장
         </button>
@@ -534,7 +549,8 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
 
       <div className="text-xs text-gray-500">
         ※ 노란 배경 = 신규 행, 주황 배경 = 변경됨(저장 필요). 각 행의 ✓ 로 저장, ✕ 로 삭제.
-        일자도 셀에서 수정 가능. ↑↓ 또는 Enter 로 같은 컬럼 위/아래 행 이동.
+        일자도 셀에서 수정 가능. ↑↓ 또는 Enter 로 같은 컬럼 위/아래 행 이동, 마지막 행에서
+        ↓ 누르면 빈 행이 자동 추가됨. 상단 "+ 줄 추가" 로도 즉시 행 생성 가능.
       </div>
     </div>
   );
