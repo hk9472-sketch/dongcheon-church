@@ -6,6 +6,7 @@ import type {
   DenomCounts,
   AllocationGroup,
 } from "@/lib/offeringAllocation";
+import { allocate as allocateFn } from "@/lib/offeringAllocation";
 import PostVoucherModal from "@/components/offering/PostVoucherModal";
 import AccountMappingPanel from "@/components/offering/AccountMappingPanel";
 
@@ -85,22 +86,32 @@ export default function OfferingSettlementPage() {
         residual: { ...prev.residual },
       };
       if (key === "check") {
-        // 수표는 금액 입력
+        // 수표 금액 — 한쪽 입력 시 다른쪽 = 총액 - 입력. 입력 후 알고리즘 재실행.
         next[side].check = n;
         const otherSide = side === "general" ? "tithe" : "general";
         next[otherSide].check = Math.max(0, counts.check - n);
+        // 즉시 client-side allocate 재실행 — 새 수표 분배로 amount 재산출
+        const finalSundayLocal = categories.amtSunday + Math.max(0, cashTotal - inputTotal);
+        const generalAmountLocal =
+          finalSundayLocal +
+          categories.amtThanks +
+          categories.amtSpecial +
+          categories.amtOil +
+          categories.amtSeason;
+        const titheAmountLocal = categories.amtTithe;
+        const newAlloc = allocateFn(counts, generalAmountLocal, titheAmountLocal, {
+          general: side === "general" ? n : Math.max(0, counts.check - n),
+          tithe: side === "tithe" ? n : Math.max(0, counts.check - n),
+        });
+        return newAlloc;
       } else {
+        // 매수 셀 직접 수정 — 한쪽 변경 시 다른쪽 = 전체 - 변경값 (자동 sync)
         const totalCnt = counts[key as keyof DenomCounts];
         next[side][key] = n;
         const otherSide = side === "general" ? "tithe" : "general";
         next[otherSide][key] = Math.max(0, totalCnt - n);
       }
-      // residual 재계산
-      next.residual.general =
-        categories.amtTithe + 0 // placeholder; 실제 계산 아래에서
-          ? 0
-          : 0;
-      // 재계산: residual = 목표 - 분배합. 목표는 차액 반영된 값
+      // residual 재계산 (매수만 변경한 경우)
       const finalSunday = categories.amtSunday + Math.max(0, cashTotal - inputTotal);
       const generalAmount =
         finalSunday +
@@ -154,6 +165,19 @@ export default function OfferingSettlementPage() {
   );
 
   const diff = cashTotal - inputTotal;
+
+  // 분배 목표 금액 — 일반 합계 = 주일+감사+특별+오일+절기 (+ 차액 양수면 주일에 가산)
+  const titheTarget = categories.amtTithe;
+  const generalTarget = useMemo(
+    () =>
+      categories.amtSunday +
+      categories.amtThanks +
+      categories.amtSpecial +
+      categories.amtOil +
+      categories.amtSeason +
+      (diff > 0 ? diff : 0),
+    [categories, diff],
+  );
 
   // 일자 선택 → 기존 결산 또는 카테고리 자동 로드
   const load = useCallback(async () => {
@@ -301,7 +325,14 @@ export default function OfferingSettlementPage() {
       const res = await fetch("/api/accounting/offering/settlement/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categories, denominations: counts }),
+        body: JSON.stringify({
+          categories,
+          denominations: counts,
+          // 사용자가 분배 표에서 수표 분배를 직접 수정했으면 그 값 유지
+          checkSplit: allocation
+            ? { general: allocation.general.check, tithe: allocation.tithe.check }
+            : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "미리보기 실패");
@@ -634,8 +665,15 @@ export default function OfferingSettlementPage() {
 
       {/* 분배 결과 */}
       <section className="rounded-lg border bg-white shadow-sm">
-        <header className="border-b bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700 flex items-center justify-between">
-          <span>4. 일반/십일조 분배 (참고용)</span>
+        <header className="border-b bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700 flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span>4. 일반/십일조 분배 (참고용)</span>
+            <span className="text-xs font-normal">
+              <span className="text-emerald-700">일반 {fmt(generalTarget)}</span>
+              <span className="mx-1.5 text-gray-400">/</span>
+              <span className="text-amber-700">십일조 {fmt(titheTarget)}</span>
+            </span>
+          </div>
           <button
             type="button"
             onClick={preview}
@@ -756,14 +794,7 @@ export default function OfferingSettlementPage() {
                       <td className="px-3 py-2 border-r">합계</td>
                       <td className="px-3 py-2 text-right">
                         {fmt(
-                          counts.w50000 +
-                            counts.w10000 +
-                            counts.w5000 +
-                            counts.w1000 +
-                            counts.w500 +
-                            counts.w100 +
-                            counts.w50 +
-                            counts.w10,
+                          counts.w50000 + counts.w10000 + counts.w5000 + counts.w1000,
                         )}
                       </td>
                       <td className="px-3 py-2 text-right border-r">{fmt(cashTotal)}</td>
@@ -879,6 +910,6 @@ function sumGroup(g: AllocationGroup): number {
 }
 
 function sumCount(g: AllocationGroup): number {
-  // 수표는 매수 개념 없으므로 제외
-  return g.w50000 + g.w10000 + g.w5000 + g.w1000 + g.w500 + g.w100 + g.w50 + g.w10;
+  // 매수 합계는 1000원 이상 지폐만 (수표는 매수 없음, 동전은 일반에 몰리므로 분배 표시에서 제외)
+  return g.w50000 + g.w10000 + g.w5000 + g.w1000;
 }

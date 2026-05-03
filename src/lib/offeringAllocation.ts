@@ -85,31 +85,47 @@ const KEY_TO_UNIT: Record<DenomKey, number> = {
 };
 
 /**
- * 매수를 일반/십일조 두 그룹으로 분배 — 부피 균형 우선.
+ * 매수를 일반/십일조 두 그룹으로 분배.
+ *
+ * @param checkSplit 사용자가 지정한 수표 분배. 미지정 시 일반/십일조 모두 0 (분배에서 제외).
+ *   지정 시 양쪽 amount 에서 그 값을 빼고 나머지를 동전+지폐로 채움.
  */
 export function allocate(
   counts: DenomCounts,
   generalAmount: number,
   titheAmount: number,
+  checkSplit?: { general: number; tithe: number },
 ): AllocationResult {
-  const total = generalAmount + titheAmount;
+  const checkGen = Math.max(0, Math.floor(checkSplit?.general ?? 0));
+  const checkTit = Math.max(0, Math.floor(checkSplit?.tithe ?? 0));
+
+  // 수표 제외한 나머지 amount = 동전 + 지폐가 채워야 할 양
+  const genTarget = Math.max(0, generalAmount - checkGen);
+  const titTarget = Math.max(0, titheAmount - checkTit);
+  const total = genTarget + titTarget;
   if (total <= 0) {
+    const g = emptyGroup();
+    const t = emptyGroup();
+    g.check = checkGen;
+    t.check = checkTit;
     return {
-      general: emptyGroup(),
-      tithe: emptyGroup(),
-      residual: { general: 0, tithe: 0 },
-      exact: total === 0,
+      general: g,
+      tithe: t,
+      residual: {
+        general: generalAmount - checkGen,
+        tithe: titheAmount - checkTit,
+      },
+      exact: total === 0 && generalAmount - checkGen === 0 && titheAmount - checkTit === 0,
     };
   }
 
   const general: AllocationGroup = emptyGroup();
   const tithe: AllocationGroup = emptyGroup();
 
-  // Phase 1: 십일조의 1000원 미만 부분(`titheAmount % 1000`) 만 작은 단위로 먼저 맞춤.
-  //   일반의 sub-1000 은 별도 처리 안 하고 leftover 가 흡수 (Phase 1.5).
+  // Phase 1: 십일조의 1000원 미만 부분(`titTarget % 1000`) 만 작은 단위로 먼저 맞춤.
   let gAmt = 0;
   let tAmt = 0;
-  let tNeedSub = titheAmount % 1000;
+  let tNeedSub = titTarget % 1000;
   const SMALL_KEYS: DenomKey[] = ["w500", "w100", "w50", "w10"];
   const remainingCounts: Record<DenomKey, number> = {
     w50000: counts.w50000,
@@ -131,6 +147,7 @@ export function allocate(
     }
   }
 
+  // (genTarget/titTarget 은 수표 제외 amount — 동전 + 지폐가 채울 목표)
   // Phase 1.5: Phase 1 후 남은 작은 단위(500/100/50/10) 는 모두 일반 우선.
   //   십일조에 sub-1000 부분이 있어 Phase 1 에서 일부 사용된 경우 *그만큼만* 십일조에 들어가고
   //   나머지 leftover 는 일반에 몰아줌. 일반 amount 가 부족하면 잔여는 십일조에.
@@ -139,8 +156,8 @@ export function allocate(
     if (cnt === 0) continue;
     const unit = KEY_TO_UNIT[key];
 
-    const remG = Math.max(0, generalAmount - gAmt);
-    const remT = Math.max(0, titheAmount - tAmt);
+    const remG = Math.max(0, genTarget - gAmt);
+    const remT = Math.max(0, titTarget - tAmt);
 
     // 일반 우선 — 가능한 만큼 일반에
     const maxG = Math.floor(remG / unit);
@@ -175,8 +192,8 @@ export function allocate(
     const unit = KEY_TO_UNIT[key];
     if (cnt === 0) continue;
 
-    const remG = Math.max(0, generalAmount - gAmt);
-    const remT = Math.max(0, titheAmount - tAmt);
+    const remG = Math.max(0, genTarget - gAmt);
+    const remT = Math.max(0, titTarget - tAmt);
     if (remG + remT === 0) {
       // 양쪽 다 채워짐 — 부피 균형용 50/50
       const half = cnt >> 1;
@@ -214,7 +231,9 @@ export function allocate(
   const BIG_ASC: DenomKey[] = ["w1000", "w5000", "w10000", "w50000"];
   let amtSafety = 200;
   while (amtSafety-- > 0) {
-    const amtDiff = generalAmount - groupTotal(general);
+    // groupTotal 은 check 포함 — Phase 2.7 시점엔 check 0 이라 동전+지폐만 합산.
+    // 목표는 genTarget (수표 제외 amount). 차이 0 이 될 때까지 매수 이동.
+    const amtDiff = genTarget - groupTotal(general);
     if (amtDiff === 0) break;
     if (amtDiff > 0) {
       // 일반 부족 — 십일조 → 일반 매수 이동
@@ -299,12 +318,12 @@ export function allocate(
     }
     if (!swapped) break;
   }
-  // 수표는 분배 대상이 아님 — 양쪽 모두 0 (담당자가 별도 처리).
-  general.check = 0;
-  tithe.check = 0;
+  // 수표 분배는 사용자가 지정한 값을 그대로 사용 (미지정 시 0/0).
+  general.check = checkGen;
+  tithe.check = checkTit;
 
-  // residual = 목표 - 실제 분배 합계 (수표/동전 제외 amount 가 부족하면 양수).
-  // 작은 동전(500/100/50/10) 의 잔여(일반·십일조 양쪽 amount 한도 초과분) 도 여기 포함.
+  // residual = 목표 - 실제 분배 합계 (수표 + 동전 + 지폐 합).
+  // 모든 게 정확히 맞으면 0/0.
   const residual = {
     general: generalAmount - groupTotal(general),
     tithe: titheAmount - groupTotal(tithe),

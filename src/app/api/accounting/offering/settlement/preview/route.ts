@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
       amtSeason?: number;
     };
     denominations?: DenomCounts;
+    checkSplit?: { general?: number; tithe?: number };
   };
   let body: Body;
   try {
@@ -65,7 +66,13 @@ export async function POST(req: NextRequest) {
     int(cat.amtOil) +
     int(cat.amtSeason);
   const titheAmount = int(cat.amtTithe);
-  const allocation = allocate(counts, generalAmount, titheAmount);
+  const checkSplit = body.checkSplit
+    ? {
+        general: int(body.checkSplit.general),
+        tithe: int(body.checkSplit.tithe),
+      }
+    : undefined;
+  const allocation = allocate(counts, generalAmount, titheAmount, checkSplit);
 
   return NextResponse.json({
     inputTotal,
