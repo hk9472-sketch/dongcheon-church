@@ -9,7 +9,7 @@ function toDateOnly(s: string): Date {
 type RouteParams = { params: Promise<{ id: string }> };
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
-  const acc = await checkAccAccess("offering");
+  const acc = await checkAccAccess("dues");
   if (!acc.ok) return NextResponse.json({ error: acc.error }, { status: acc.status });
 
   const { id: idStr } = await params;
@@ -54,7 +54,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: RouteParams) {
-  const acc = await checkAccAccess("offering");
+  const acc = await checkAccAccess("dues");
   if (!acc.ok) return NextResponse.json({ error: acc.error }, { status: acc.status });
 
   const { id: idStr } = await params;

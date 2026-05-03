@@ -10,7 +10,7 @@ function toDateOnly(s: string): Date {
 
 // GET /api/accounting/dues/deposits?category=...&dateFrom=...&dateTo=...&memberId=...
 export async function GET(req: NextRequest) {
-  const acc = await checkAccAccess("offering");
+  const acc = await checkAccAccess("dues");
   if (!acc.ok) return NextResponse.json({ error: acc.error }, { status: acc.status });
 
   const sp = req.nextUrl.searchParams;
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/accounting/dues/deposits — 신규 1건
 export async function POST(req: NextRequest) {
-  const acc = await checkAccAccess("offering");
+  const acc = await checkAccAccess("dues");
   if (!acc.ok) return NextResponse.json({ error: acc.error }, { status: acc.status });
 
   type Body = {

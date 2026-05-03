@@ -7,7 +7,7 @@ const VALID_CATEGORIES = ["전도회", "건축"] as const;
 // GET /api/accounting/dues/amounts?category=전도회&year=2026
 //   해당 단위 + 연도의 모든 회원 월정액 (회원 미등록자도 amount 0 으로 포함)
 export async function GET(req: NextRequest) {
-  const acc = await checkAccAccess("offering");
+  const acc = await checkAccAccess("dues");
   if (!acc.ok) return NextResponse.json({ error: acc.error }, { status: acc.status });
 
   const category = req.nextUrl.searchParams.get("category") || "";
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 //   body: { category, year, memberId, amount }
 //   upsert by (category, year, memberId)
 export async function PUT(req: NextRequest) {
-  const acc = await checkAccAccess("offering");
+  const acc = await checkAccAccess("dues");
   if (!acc.ok) return NextResponse.json({ error: acc.error }, { status: acc.status });
 
   let body: { category?: string; year?: number; memberId?: number; amount?: number };

@@ -33,6 +33,7 @@ interface MemberData {
   accountAccess: boolean;
   accLedgerAccess: boolean;
   accOfferingAccess: boolean;
+  accDuesAccess: boolean;
   accMemberEditAccess: boolean;
   phone: string | null;
   createdAt: string;
@@ -57,6 +58,7 @@ export default function AdminMemberEditPage() {
   const [councilAccess, setCouncilAccess] = useState(false);
   const [accLedgerAccess, setAccLedgerAccess] = useState(false);
   const [accOfferingAccess, setAccOfferingAccess] = useState(false);
+  const [accDuesAccess, setAccDuesAccess] = useState(false);
   const [accMemberEditAccess, setAccMemberEditAccess] = useState(false);
   const [permissions, setPermissions] = useState<Record<number, { canEdit: boolean; canDelete: boolean }>>({});
   const [councilDepts, setCouncilDepts] = useState<CouncilDept[]>([]);
@@ -76,6 +78,7 @@ export default function AdminMemberEditPage() {
         setCouncilAccess(data.user.councilAccess);
         setAccLedgerAccess(data.user.accLedgerAccess ?? data.user.accountAccess ?? false);
         setAccOfferingAccess(data.user.accOfferingAccess ?? data.user.accountAccess ?? false);
+        setAccDuesAccess(data.user.accDuesAccess ?? false);
         setAccMemberEditAccess(data.user.accMemberEditAccess ?? false);
         setCouncilDepts(data.councilDepts || []);
         setGroupAccessIds(data.groupAccess || []);
@@ -114,7 +117,7 @@ export default function AdminMemberEditPage() {
       const res = await fetch(`/api/admin/members/${memberId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isAdmin, level, councilAccess, accLedgerAccess, accOfferingAccess, accMemberEditAccess, boardPermissions, groupAccessIds }),
+        body: JSON.stringify({ isAdmin, level, councilAccess, accLedgerAccess, accOfferingAccess, accDuesAccess, accMemberEditAccess, boardPermissions, groupAccessIds }),
       });
 
       if (res.ok) {
@@ -254,6 +257,15 @@ export default function AdminMemberEditPage() {
                     className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-40"
                   />
                   <span className={`text-sm ${accOfferingAccess ? "text-gray-700" : "text-gray-400"}`}>관리번호 입력/수정 (성명 조회 포함)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={accDuesAccess}
+                    onChange={(e) => setAccDuesAccess(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm text-gray-700">월정관리 (전도회/건축 회원·월정·입금)</span>
                 </label>
               </div>
             </div>

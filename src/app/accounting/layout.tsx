@@ -13,6 +13,7 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
   const [isAdmin, setIsAdmin] = useState(false);
   const [hasLedger, setHasLedger] = useState(false);
   const [hasOffering, setHasOffering] = useState(false);
+  const [hasDues, setHasDues] = useState(false);
   const [hasMemberEdit, setHasMemberEdit] = useState(false);
   const [reauthed, setReauthed] = useState(false);
   const [reauthChecked, setReauthChecked] = useState(false);
@@ -50,9 +51,10 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
         const admin = u.isAdmin <= 2;
         const ledger = admin || u.accLedgerAccess || u.accountAccess;
         const offering = admin || u.accOfferingAccess || u.accountAccess;
+        const dues = admin || u.accDuesAccess;
         const memberEdit = admin || u.accMemberEditAccess;
 
-        if (!ledger && !offering) {
+        if (!ledger && !offering && !dues) {
           router.replace(`/auth/login?redirect=${encodeURIComponent(pathname)}`);
           return;
         }
@@ -65,14 +67,22 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
           pathname.startsWith("/accounting/closing") ||
           pathname.startsWith("/accounting/settings");
         const isOfferingPath = pathname.startsWith("/accounting/offering");
+        const isDuesPath = pathname.startsWith("/accounting/dues");
 
-        if (isLedgerPath && !ledger) { router.replace("/accounting/offering/entry"); return; }
-        if (isOfferingPath && !offering) { router.replace("/accounting/entry"); return; }
+        const firstAvailable = ledger
+          ? "/accounting/entry"
+          : offering
+            ? "/accounting/offering/entry"
+            : "/accounting/dues/jeondo/dues";
+        if (isLedgerPath && !ledger) { router.replace(firstAvailable); return; }
+        if (isOfferingPath && !offering) { router.replace(firstAvailable); return; }
+        if (isDuesPath && !dues) { router.replace(firstAvailable); return; }
 
         setAuthorized(true);
         setIsAdmin(admin);
         setHasLedger(ledger);
         setHasOffering(offering);
+        setHasDues(dues);
         setHasMemberEdit(memberEdit);
 
         // admin 계정은 재인증 면제
@@ -163,7 +173,7 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
     ...(hasLedger ? ledgerItems : []),
     ...(hasLedger && isAdmin ? settingsItems : []),
     ...(hasOffering ? visibleOfferingItems : []),
-    ...(hasOffering ? duesItems : []),
+    ...(hasDues ? duesItems : []),
   ];
 
   return (
@@ -250,7 +260,7 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
               </>
             )}
             {/* 월정관리 */}
-            {hasOffering && (
+            {hasDues && (
               <>
                 <button
                   type="button"

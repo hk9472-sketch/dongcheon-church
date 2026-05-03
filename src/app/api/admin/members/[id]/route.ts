@@ -35,6 +35,7 @@ export async function GET(
       accountAccess: true,
       accLedgerAccess: true,
       accOfferingAccess: true,
+      accDuesAccess: true,
       accMemberEditAccess: true,
       phone: true,
       createdAt: true,
@@ -98,6 +99,7 @@ export async function PUT(
         accountAccess: (body.accLedgerAccess || body.accOfferingAccess) ?? false,
         accLedgerAccess: body.accLedgerAccess ?? false,
         accOfferingAccess: body.accOfferingAccess ?? false,
+        accDuesAccess: body.accDuesAccess ?? false,
         accMemberEditAccess: body.accMemberEditAccess ?? false,
       },
     });

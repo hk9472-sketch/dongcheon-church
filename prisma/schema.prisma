@@ -62,6 +62,7 @@ model User {
   accountAccess        Boolean @default(false)   // 하위 호환용 (true면 회계+연보 모두)
   accLedgerAccess      Boolean @default(false)   // 회계관리 (전표, 보고서, 마감)
   accOfferingAccess    Boolean @default(false)   // 연보관리 (연보입력, 내역, 집계 등)
+  accDuesAccess        Boolean @default(false)   // 월정관리 (전도회/건축 회원·월정·입금)
   accMemberEditAccess  Boolean @default(false)   // 관리번호 입력/수정 권한 (성명 조회 포함)
 
   createdAt     DateTime  @default(now())

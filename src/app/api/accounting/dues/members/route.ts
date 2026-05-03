@@ -7,7 +7,7 @@ const VALID_CATEGORIES = ["전도회", "건축"] as const;
 // GET /api/accounting/dues/members?category=전도회
 //   해당 단위의 활성 회원 목록 (memberNo asc)
 export async function GET(req: NextRequest) {
-  const acc = await checkAccAccess("offering");
+  const acc = await checkAccAccess("dues");
   if (!acc.ok) return NextResponse.json({ error: acc.error }, { status: acc.status });
 
   const category = req.nextUrl.searchParams.get("category") || "";
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 //   body: { category, memberNo?, name }
 //   memberNo 미지정 시 다음 번호 자동 채번. 지정 시 해당 번호로 등록 (충돌 시 409).
 export async function POST(req: NextRequest) {
-  const acc = await checkAccAccess("offering");
+  const acc = await checkAccAccess("dues");
   if (!acc.ok) return NextResponse.json({ error: acc.error }, { status: acc.status });
 
   let body: { category?: string; memberNo?: number; name?: string };

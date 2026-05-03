@@ -1,7 +1,7 @@
 import prisma from "./db";
 import { getCurrentUser } from "./auth";
 
-export type AccPermission = "ledger" | "offering" | "memberEdit";
+export type AccPermission = "ledger" | "offering" | "dues" | "memberEdit";
 
 export interface AccAccessResult {
   ok: boolean;
@@ -39,6 +39,7 @@ export async function checkAccAccess(
       accountAccess: true,
       accLedgerAccess: true,
       accOfferingAccess: true,
+      accDuesAccess: true,
       accMemberEditAccess: true,
     },
   });
@@ -54,6 +55,9 @@ export async function checkAccAccess(
     return { ok: true, userId: user.id, isAdmin: false, user };
   }
   if (permission === "offering" && (user.accOfferingAccess || legacyFull)) {
+    return { ok: true, userId: user.id, isAdmin: false, user };
+  }
+  if (permission === "dues" && user.accDuesAccess) {
     return { ok: true, userId: user.id, isAdmin: false, user };
   }
   if (permission === "memberEdit" && user.accMemberEditAccess) {
