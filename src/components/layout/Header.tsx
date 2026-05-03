@@ -47,11 +47,44 @@ export default function Header() {
       .catch(() => {});
   }, []);
 
+  // 탭 활성화·포커스 복귀 시 세션 재확인 — 다른 탭에서 로그아웃했거나 세션 만료된 경우
+  // 보호된 영역에 있으면 메인으로 이동.
+  useEffect(() => {
+    const recheck = () => {
+      fetch("/api/auth/me")
+        .then((r) => r.json())
+        .then((d) => {
+          const u = d.user || null;
+          setUser(u);
+          if (!u) {
+            const path = window.location.pathname;
+            const protectedPrefixes = ["/admin", "/council", "/accounting"];
+            if (protectedPrefixes.some((p) => path.startsWith(p))) {
+              router.push("/");
+            }
+          }
+        })
+        .catch(() => {});
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") recheck();
+    };
+    window.addEventListener("focus", recheck);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", recheck);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [router]);
+
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     setUser(null);
     const path = window.location.pathname;
-    if (path.startsWith("/admin") || path.startsWith("/council")) {
+    // 인증·권한이 필요한 영역에서 로그아웃하면 메인으로 이동.
+    // 그렇지 않으면 현재 페이지 새로고침 (헤더 상태 갱신).
+    const protectedPrefixes = ["/admin", "/council", "/accounting"];
+    if (protectedPrefixes.some((p) => path.startsWith(p))) {
       router.push("/");
     } else {
       router.refresh();
