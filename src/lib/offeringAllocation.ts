@@ -105,12 +105,10 @@ export function allocate(
   const general: AllocationGroup = emptyGroup();
   const tithe: AllocationGroup = emptyGroup();
 
-  // Phase 1: 1000원 미만 부분(`amount % 1000`)을 작은 단위(500/100/50/10) 로 먼저 맞춤.
-  //   각 측의 sub-1000 잔여를 큰 작은단위(500)부터 그리디로 채워나감.
-  //   sub-1000 모두 0 이면 phase 1 noop.
+  // Phase 1: 십일조의 1000원 미만 부분(`titheAmount % 1000`) 만 작은 단위로 먼저 맞춤.
+  //   일반의 sub-1000 은 별도 처리 안 하고 leftover 가 흡수 (Phase 1.5).
   let gAmt = 0;
   let tAmt = 0;
-  let gNeedSub = generalAmount % 1000;
   let tNeedSub = titheAmount % 1000;
   const SMALL_KEYS: DenomKey[] = ["w500", "w100", "w50", "w10"];
   const remainingCounts: Record<DenomKey, number> = {
@@ -125,12 +123,6 @@ export function allocate(
   };
   for (const key of SMALL_KEYS) {
     const unit = KEY_TO_UNIT[key];
-    while (gNeedSub >= unit && remainingCounts[key] > 0) {
-      general[key] += 1;
-      remainingCounts[key] -= 1;
-      gNeedSub -= unit;
-      gAmt += unit;
-    }
     while (tNeedSub >= unit && remainingCounts[key] > 0) {
       tithe[key] += 1;
       remainingCounts[key] -= 1;
@@ -175,8 +167,9 @@ export function allocate(
   //   각 단위마다 현재까지의 매수 차이(delta)를 보정하는 방향으로 분배 (적은 쪽에 더).
   //   단, 금액 제약(remG, remT) 을 넘지 않게 clamp.
   const BIG_ASCENDING: DenomKey[] = ["w1000", "w5000", "w10000", "w50000"];
+  // 매수 균형 기준: 1000원 이상 지폐만 (사용자 요구) — 작은 단위는 일반 우선이라 제외
   const sumCount = (g: AllocationGroup) =>
-    g.w50000 + g.w10000 + g.w5000 + g.w1000 + g.w500 + g.w100 + g.w50 + g.w10;
+    g.w50000 + g.w10000 + g.w5000 + g.w1000;
   for (const key of BIG_ASCENDING) {
     const cnt = remainingCounts[key];
     const unit = KEY_TO_UNIT[key];
@@ -218,6 +211,8 @@ export function allocate(
   //   예: gen 의 50000 1매 ↔ tit 의 10000 5매 (둘 다 50000원) — 금액 보존, gen +4 / tit -4
   //   gen 매수가 적으면 큰 단위(50000) 를 작은 단위(10000) 로 쪼개서 가져옴.
   //   양쪽 매수 차이가 줄어드는 swap 만 실행.
+  // swap 대상도 1000원 이상으로 제한 — 작은 단위는 일반에 두고 흔들지 않음
+  const SWAP_KEYS: DenomKey[] = ["w50000", "w10000", "w5000", "w1000"];
   let swapSafety = 500;
   while (swapSafety-- > 0) {
     const gC = sumCount(general);
@@ -230,10 +225,10 @@ export function allocate(
     const receiver = cDelta > 0 ? tithe : general;
     let swapped = false;
     // 큰 단위 1매를 받고 작은 단위 N매로 돌려줘 매수 차이를 줄임
-    for (const big of [...DENOM_KEYS]) { // 50000 → 10
+    for (const big of SWAP_KEYS) { // 50000 → 1000
       const bigUnit = KEY_TO_UNIT[big];
       if (receiver[big] === 0) continue; // receiver 가 갖고 있어야 양도 가능
-      for (const small of [...DENOM_KEYS].reverse()) { // 10 → 50000
+      for (const small of [...SWAP_KEYS].reverse()) { // 1000 → 50000
         if (small === big) continue;
         const smallUnit = KEY_TO_UNIT[small];
         if (smallUnit >= bigUnit) continue;
@@ -255,37 +250,12 @@ export function allocate(
     }
     if (!swapped) break;
   }
-  // 3) 수표 slack — 양쪽 다 양수일 때만 그대로 사용. 음수면 매수 이동 시도 후
-  //    그래도 안 풀리면 수표 0 으로 clip 하고 부족분을 residual 로 보고.
-  let gCheck = generalAmount - gAmt;
-  let tCheck = counts.check - gCheck;
+  // 수표는 분배 대상이 아님 — 양쪽 모두 0 (담당자가 별도 처리).
+  general.check = 0;
+  tithe.check = 0;
 
-  // 매수 이동 보정 (작은 단위부터 — over-shoot 최소화)
-  const ASCENDING: DenomKey[] = [...DENOM_KEYS].reverse();
-  let safety = 1000;
-  while (safety-- > 0 && (gCheck < 0 || tCheck < 0)) {
-    if (gCheck < 0) {
-      const need = -gCheck;
-      let u = moveOne(ASCENDING, general, tithe, need);
-      if (!u) u = moveAny(ASCENDING, general, tithe);
-      if (!u) break;
-      gCheck += u;
-      tCheck -= u;
-    } else {
-      const need = -tCheck;
-      let u = moveOne(ASCENDING, tithe, general, need);
-      if (!u) u = moveAny(ASCENDING, tithe, general);
-      if (!u) break;
-      gCheck -= u;
-      tCheck += u;
-    }
-  }
-
-  // 수표가 여전히 음수면 0 으로 clip — 잔여는 residual 로 따로 보고
-  general.check = Math.max(0, gCheck);
-  tithe.check = Math.max(0, tCheck);
-
-  // residual = 목표 - 실제 분배 합계 (양수면 그 만큼 부족, 담당자가 처리)
+  // residual = 목표 - 실제 분배 합계 (수표/동전 제외 amount 가 부족하면 양수).
+  // 작은 동전(500/100/50/10) 의 잔여(일반·십일조 양쪽 amount 한도 초과분) 도 여기 포함.
   const residual = {
     general: generalAmount - groupTotal(general),
     tithe: titheAmount - groupTotal(tithe),
