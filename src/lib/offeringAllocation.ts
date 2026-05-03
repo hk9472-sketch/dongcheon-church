@@ -207,6 +207,55 @@ export function allocate(
     tAmt += tCnt * unit;
   }
 
+  // Phase 2.7: 금액 정확도 보정 — Phase 2 후 잔여 amount 가 있으면 1000원 이상 매수
+  //   이동으로 정확히 0 이 되게 맞춤. 매수 균형보다 금액 정확도 우선 (사용자 요구).
+  //   캐노니컬 단위(50000/10000/5000/1000) 라 greedy 로 항상 수렴.
+  const BIG_DESC: DenomKey[] = ["w50000", "w10000", "w5000", "w1000"];
+  const BIG_ASC: DenomKey[] = ["w1000", "w5000", "w10000", "w50000"];
+  let amtSafety = 200;
+  while (amtSafety-- > 0) {
+    const amtDiff = generalAmount - groupTotal(general);
+    if (amtDiff === 0) break;
+    if (amtDiff > 0) {
+      // 일반 부족 — 십일조 → 일반 매수 이동
+      let moved = false;
+      // 1) 정확 fit (단위 ≤ 부족분, 큰 단위부터)
+      for (const k of BIG_DESC) {
+        const u = KEY_TO_UNIT[k];
+        if (u <= amtDiff && tithe[k] > 0) {
+          tithe[k] -= 1; general[k] += 1; moved = true; break;
+        }
+      }
+      // 2) over-shoot (가장 작은 단위 — 다음 iter 에 역방향 미세조정)
+      if (!moved) {
+        for (const k of BIG_ASC) {
+          if (tithe[k] > 0) {
+            tithe[k] -= 1; general[k] += 1; moved = true; break;
+          }
+        }
+      }
+      if (!moved) break;
+    } else {
+      // 일반 과다 — 일반 → 십일조
+      const need = -amtDiff;
+      let moved = false;
+      for (const k of BIG_DESC) {
+        const u = KEY_TO_UNIT[k];
+        if (u <= need && general[k] > 0) {
+          general[k] -= 1; tithe[k] += 1; moved = true; break;
+        }
+      }
+      if (!moved) {
+        for (const k of BIG_ASC) {
+          if (general[k] > 0) {
+            general[k] -= 1; tithe[k] += 1; moved = true; break;
+          }
+        }
+      }
+      if (!moved) break;
+    }
+  }
+
   // Phase 2.5: 같은 금액 등가 swap 으로 매수 균형 추가 미세조정.
   //   예: gen 의 50000 1매 ↔ tit 의 10000 5매 (둘 다 50000원) — 금액 보존, gen +4 / tit -4
   //   gen 매수가 적으면 큰 단위(50000) 를 작은 단위(10000) 로 쪼개서 가져옴.
