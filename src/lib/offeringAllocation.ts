@@ -139,22 +139,42 @@ export function allocate(
     }
   }
 
+  // Phase 1.5: Phase 1 후 남은 작은 단위(500/100/50/10) 는 모두 일반 우선.
+  //   십일조에 sub-1000 부분이 있어 Phase 1 에서 일부 사용된 경우 *그만큼만* 십일조에 들어가고
+  //   나머지 leftover 는 일반에 몰아줌. 일반 amount 가 부족하면 잔여는 십일조에.
+  for (const key of SMALL_KEYS) {
+    const cnt = remainingCounts[key];
+    if (cnt === 0) continue;
+    const unit = KEY_TO_UNIT[key];
+
+    const remG = Math.max(0, generalAmount - gAmt);
+    const remT = Math.max(0, titheAmount - tAmt);
+
+    // 일반 우선 — 가능한 만큼 일반에
+    const maxG = Math.floor(remG / unit);
+    const gCnt = Math.min(cnt, maxG);
+    let restCnt = cnt - gCnt;
+
+    // 일반 다 채웠는데도 남으면 십일조에
+    let tCnt = 0;
+    if (restCnt > 0) {
+      const maxT = Math.floor(remT / unit);
+      tCnt = Math.min(restCnt, maxT);
+      restCnt -= tCnt;
+      // restCnt > 0 이면 양쪽 amount 모두 못 받음 → residual 로 빠짐
+    }
+
+    general[key] += gCnt;
+    tithe[key] += tCnt;
+    remainingCounts[key] -= gCnt + tCnt;
+    gAmt += gCnt * unit;
+    tAmt += tCnt * unit;
+  }
+
   // Phase 2: 1000원 이상 단위를 *작은 단위부터* 처리하면서 "매수 균형" 을 목표로.
   //   각 단위마다 현재까지의 매수 차이(delta)를 보정하는 방향으로 분배 (적은 쪽에 더).
   //   단, 금액 제약(remG, remT) 을 넘지 않게 clamp.
-  //   1000원 같은 작은 단위는 적은 쪽에 몰아주면 매수가 빠르게 채워지면서 금액은 적게 드는 이점.
-  //   큰 단위(50000) 는 마지막에 남은 금액 차이를 채움.
-  // Phase 1 후 남은 모든 단위(작은 것부터) 를 Phase 2 에서 분배 — w500 같은 leftover 도 포함
-  const BIG_ASCENDING: DenomKey[] = [
-    "w10",
-    "w50",
-    "w100",
-    "w500",
-    "w1000",
-    "w5000",
-    "w10000",
-    "w50000",
-  ];
+  const BIG_ASCENDING: DenomKey[] = ["w1000", "w5000", "w10000", "w50000"];
   const sumCount = (g: AllocationGroup) =>
     g.w50000 + g.w10000 + g.w5000 + g.w1000 + g.w500 + g.w100 + g.w50 + g.w10;
   for (const key of BIG_ASCENDING) {

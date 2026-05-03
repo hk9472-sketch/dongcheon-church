@@ -175,12 +175,39 @@ export async function POST(req: NextRequest) {
   const missingUnits: string[] = [];
   const missingAccounts: string[] = [];
 
-  // 분류: [카테고리키, 금액, 라벨, unit 후보, account 후보]
+  // 1) OfferingAccountMapping 우선 — 명시적 매핑이 있으면 그 accountId 사용
+  const allMappings = await prisma.offeringAccountMapping.findMany();
+  const mappingMap: Record<string, number> = {};
+  for (const m of allMappings) mappingMap[m.offeringKey] = m.accountId;
+
+  // 매핑된 accountId → 그 계정의 unitId 캐시
+  const accountUnitCache = new Map<number, { unitId: number } | null>();
+  async function resolveAccount(
+    accountId: number,
+  ): Promise<{ accountId: number; unitId: number } | null> {
+    if (accountUnitCache.has(accountId)) {
+      const cached = accountUnitCache.get(accountId);
+      return cached ? { accountId, unitId: cached.unitId } : null;
+    }
+    const a = await prisma.accAccount.findUnique({
+      where: { id: accountId },
+      select: { id: true, unitId: true, type: true, isActive: true },
+    });
+    if (!a || a.type !== "D" || !a.isActive) {
+      accountUnitCache.set(accountId, null);
+      return null;
+    }
+    accountUnitCache.set(accountId, { unitId: a.unitId });
+    return { accountId, unitId: a.unitId };
+  }
+
+  // 처리할 항목 목록: [offeringKey, label, amount, fallback unit/account 이름]
   type Plan = {
+    offeringKey: string;
     label: string;
     amount: number;
-    unitNames: string[];
-    accountNames: string[];
+    unitNames: string[]; // 매핑 없을 때 fallback
+    accountNames: string[]; // 매핑 없을 때 fallback
   };
   const plans: Plan[] = [];
 
@@ -189,6 +216,7 @@ export async function POST(req: NextRequest) {
     const amt = sums[cat.label];
     if (amt > 0) {
       plans.push({
+        offeringKey: k,
         label: cat.label,
         amount: amt,
         unitNames: cat.unitNames,
@@ -197,7 +225,15 @@ export async function POST(req: NextRequest) {
     }
   }
   if (seasonAmount > 0 && seasonType) {
+    // seasonType 별 매핑 키
+    const seasonKeyMap: Record<SeasonType, string> = {
+      "부활감사": "easter",
+      "맥추감사": "midyear",
+      "추수감사": "harvest",
+      "성탄감사": "christmas",
+    };
     plans.push({
+      offeringKey: seasonKeyMap[seasonType],
       label: seasonType,
       amount: seasonAmount,
       unitNames: GEN_UNIT,
@@ -206,6 +242,7 @@ export async function POST(req: NextRequest) {
   }
   if (sundaySchool > 0) {
     plans.push({
+      offeringKey: "sundaySchool",
       label: "주일학교",
       amount: sundaySchool,
       unitNames: SS_UNIT,
@@ -214,19 +251,29 @@ export async function POST(req: NextRequest) {
   }
 
   for (const p of plans) {
-    const unitId = await findUnit(p.unitNames);
-    if (!unitId) {
-      missingUnits.push(`${p.label}(회계단위 ${p.unitNames[0]})`);
-      continue;
+    let resolved: { accountId: number; unitId: number } | null = null;
+
+    // 1차: 명시적 매핑 우선
+    const mappedAccId = mappingMap[p.offeringKey];
+    if (mappedAccId) {
+      resolved = await resolveAccount(mappedAccId);
     }
-    const accId = await findAccount(unitId, p.accountNames);
-    if (!accId) {
-      missingAccounts.push(`${p.label}(${p.unitNames[0]} 안)`);
-      continue;
+    // 2차: 매핑 없으면 fallback (회계단위 + 이름 매칭)
+    if (!resolved) {
+      const unitId = await findUnit(p.unitNames);
+      if (unitId) {
+        const accId = await findAccount(unitId, p.accountNames);
+        if (accId) resolved = { accountId: accId, unitId };
+        else missingAccounts.push(`${p.label}(${p.unitNames[0]} 안)`);
+      } else {
+        missingUnits.push(`${p.label}(회계단위 ${p.unitNames[0]})`);
+      }
     }
-    const list = byUnit.get(unitId) ?? [];
-    list.push({ name: p.label, accountId: accId, amount: p.amount });
-    byUnit.set(unitId, list);
+
+    if (!resolved) continue;
+    const list = byUnit.get(resolved.unitId) ?? [];
+    list.push({ name: p.label, accountId: resolved.accountId, amount: p.amount });
+    byUnit.set(resolved.unitId, list);
   }
 
   if (byUnit.size === 0) {

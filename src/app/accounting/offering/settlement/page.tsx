@@ -7,6 +7,7 @@ import type {
   AllocationGroup,
 } from "@/lib/offeringAllocation";
 import PostVoucherModal from "@/components/offering/PostVoucherModal";
+import AccountMappingPanel from "@/components/offering/AccountMappingPanel";
 
 interface Categories {
   amtTithe: number;
@@ -64,6 +65,7 @@ export default function OfferingSettlementPage() {
   const [counts, setCounts] = useState<DenomCounts>(ZERO_COUNTS);
   const [allocation, setAllocation] = useState<AllocationResult | null>(null);
   const [voucherOpen, setVoucherOpen] = useState(false);
+  const [tab, setTab] = useState<"settlement" | "mapping">("settlement");
 
   // 분배표의 매수 셀을 편집할 때 호출 — 일반/십일조 매수를 직접 수정.
   // 매수 변경 시 같은 단위의 다른 측 매수는 (전체 매수 - 변경값) 으로 자동 sync.
@@ -345,26 +347,56 @@ export default function OfferingSettlementPage() {
     <div className="mx-auto max-w-5xl p-4 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold text-gray-800">연보 일별 결산</h1>
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="rounded border border-gray-300 px-2 py-1 text-sm"
-          />
-          <button
-            type="button"
-            onClick={refreshCategories}
-            disabled={loading}
-            className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
-            title="해당 일자의 연보 입력 합계를 다시 불러옵니다 (매수 입력은 유지)"
-          >
-            연보 다시 불러오기
-          </button>
-        </div>
+        {tab === "settlement" && (
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="rounded border border-gray-300 px-2 py-1 text-sm"
+            />
+            <button
+              type="button"
+              onClick={refreshCategories}
+              disabled={loading}
+              className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
+              title="해당 일자의 연보 입력 합계를 다시 불러옵니다 (매수 입력은 유지)"
+            >
+              연보 다시 불러오기
+            </button>
+          </div>
+        )}
       </div>
 
-      {error && (
+      {/* 탭 */}
+      <div className="flex border-b border-gray-200">
+        <button
+          type="button"
+          onClick={() => setTab("settlement")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 ${
+            tab === "settlement"
+              ? "border-teal-600 text-teal-700"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          결산
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("mapping")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 ${
+            tab === "mapping"
+              ? "border-teal-600 text-teal-700"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          계정과목 매핑
+        </button>
+      </div>
+
+      {tab === "mapping" && <AccountMappingPanel />}
+
+      {tab === "settlement" && error && (
         <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
         </div>
