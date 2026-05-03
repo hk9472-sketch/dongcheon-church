@@ -19,7 +19,8 @@ const OFFERING_TYPES = [
 interface EntryRow {
   key: string;
   groupKey: string;          // 같은 묶음(연보종류 6행) 식별자 — memberId 가 같아도 묶음마다 unique
-  memberId: string;
+  memberId: string;          // 사용자 입력값(표면 관리번호) — display
+  internalMemberId: number | null; // 그 일자에 해석된 내부 OfferingMember.id (저장 시 사용)
   memberName: string;
   offeringType: string;
   amount: string;
@@ -90,6 +91,7 @@ function emptyRow(): EntryRow {
     key: nextKey(),
     groupKey: nextGroupKey(),  // 빈 행도 자기만의 그룹키 — 입력 시 그 그룹키로 6행 확장
     memberId: "",
+    internalMemberId: null,
     memberName: "",
     offeringType: OFFERING_TYPES[0],
     amount: "",
@@ -98,12 +100,13 @@ function emptyRow(): EntryRow {
 }
 
 /** 하나의 개인번호에 대해 연보종류별 6행 생성 — 같은 묶음은 동일 groupKey */
-function memberRows(memberId: string, memberName: string): EntryRow[] {
+function memberRows(memberId: string, internalMemberId: number | null, memberName: string): EntryRow[] {
   const gk = nextGroupKey();
   return OFFERING_TYPES.map((t) => ({
     key: nextKey(),
     groupKey: gk,
     memberId,
+    internalMemberId,
     memberName,
     offeringType: t,
     amount: "",
@@ -208,7 +211,7 @@ export default function OfferingEntryPage() {
       return;
     }
 
-    const expandRows = (name: string) => {
+    const expandRows = (name: string, internalId: number | null) => {
       setRows((prev) => {
         const idx = prev.findIndex((r) => r.key === key);
         if (idx < 0) return prev;
@@ -221,7 +224,7 @@ export default function OfferingEntryPage() {
         ) {
           return prev;
         }
-        const newRows = memberRows(String(id), name);
+        const newRows = memberRows(String(id), internalId, name);
         const result = [...prev];
         result.splice(idx, 1, ...newRows);
         const last = result[result.length - 1];
@@ -235,11 +238,15 @@ export default function OfferingEntryPage() {
       });
     };
 
-    fetch(`/api/accounting/offering/members/${id}`)
+    // (memberNo, 입력일자) → 내부 OfferingMember.id 해석. 관리번호가 시기별 변경됐어도
+    // 그 일자에 해당하는 내부 id 를 찾아 저장.
+    fetch(
+      `/api/accounting/offering/lookup-member?memberNo=${id}&date=${encodeURIComponent(date)}`,
+    )
       .then(async (r) => {
         if (r.status === 404) {
-          // 미등록 번호 — 그냥 입력된 번호처럼 처리 (6행 확장)
-          expandRows("(미등록)");
+          // 미등록 번호 — 그냥 입력된 번호 그대로 사용 (소프트 FK)
+          expandRows("(미등록)", id);
           return null;
         }
         if (!r.ok) {
@@ -248,12 +255,13 @@ export default function OfferingEntryPage() {
         }
         const d = await r.json();
         const name = d.name || "(미등록)";
-        expandRows(name);
+        const internalId = typeof d.id === "number" ? d.id : id;
+        expandRows(name, internalId);
         return null;
       })
       .catch(() => {
         // 네트워크 오류여도 미등록처럼 일단 확장 (오프라인에서도 입력 가능)
-        expandRows("(미등록)");
+        expandRows("(미등록)", id);
       });
   }
 
@@ -331,10 +339,17 @@ export default function OfferingEntryPage() {
 
     const payload = {
       entries: validRows.map((r) => {
-        const mid = parseInt(r.memberId, 10);
+        // 내부 id 우선 (lookup-member 로 해석된 값). 없으면 입력값 그대로 (legacy/미등록).
+        const fallback = parseInt(r.memberId, 10);
+        const memberIdFinal =
+          r.internalMemberId != null
+            ? r.internalMemberId
+            : Number.isFinite(fallback) && fallback > 0
+              ? fallback
+              : null;
         return {
           date,
-          memberId: Number.isFinite(mid) && mid > 0 ? mid : null,
+          memberId: memberIdFinal,
           offeringType: r.offeringType,
           amount: parseAmount(r.amount),
           description: r.description || null,
@@ -376,11 +391,11 @@ export default function OfferingEntryPage() {
 
   /* ---- select member from search popup ---- */
   function selectMember(key: string, id: number, name: string) {
-    // 검색으로 선택 → 6줄 확장
+    // 검색으로 선택 → 6줄 확장 (검색은 내부 id 를 직접 받으므로 그대로 사용)
     setRows((prev) => {
       const idx = prev.findIndex((r) => r.key === key);
       if (idx < 0) return prev;
-      const newRows = memberRows(String(id), name);
+      const newRows = memberRows(String(id), id, name);
       const result = [...prev];
       result.splice(idx, 1, ...newRows);
       const last = result[result.length - 1];
@@ -444,7 +459,7 @@ export default function OfferingEntryPage() {
                 const next = prev.length > 0 && !prev[prev.length - 1].memberId && !prev[prev.length - 1].amount
                   ? prev.slice(0, -1)
                   : prev;
-                return [...next, ...memberRows("0", "(무기명)"), emptyRow()];
+                return [...next, ...memberRows("0", null, "(무기명)"), emptyRow()];
               });
             }}
             className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
