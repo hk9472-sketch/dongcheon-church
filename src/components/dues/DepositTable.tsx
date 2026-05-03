@@ -410,17 +410,17 @@ export default function DepositTable({ category }: Props) {
                         type="button"
                         onClick={() => saveRow(idx)}
                         disabled={r.status === "saving"}
-                        className="rounded bg-blue-600 px-1.5 py-0.5 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
+                        className="rounded bg-blue-600 px-2 py-0.5 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
                       >
-                        ✓
+                        저장
                       </button>
                       {!isNew && (
                         <button
                           type="button"
                           onClick={() => deleteRow(idx)}
-                          className="rounded bg-red-500 px-1.5 py-0.5 text-xs text-white hover:bg-red-600"
+                          className="rounded bg-red-500 px-2 py-0.5 text-xs text-white hover:bg-red-600"
                         >
-                          ✕
+                          삭제
                         </button>
                       )}
                     </div>
