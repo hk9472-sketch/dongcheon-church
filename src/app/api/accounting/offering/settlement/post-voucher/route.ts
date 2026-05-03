@@ -65,12 +65,15 @@ export async function POST(req: NextRequest) {
   const dayEnd = new Date(date);
   dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
-  // 과거 "결산차액" entry 는 카테고리 합계에서 제외 (소실 기능의 잔재).
+  // 과거 "결산차액" entry 만 제외 (NULL description 이 함께 빠지지 않도록 OR 명시).
   const rows = await prisma.offeringEntry.groupBy({
     by: ["offeringType"],
     where: {
       date: { gte: dayStart, lt: dayEnd },
-      NOT: { description: "결산차액" },
+      OR: [
+        { description: null },
+        { description: { not: "결산차액" } },
+      ],
     },
     _sum: { amount: true },
   });
