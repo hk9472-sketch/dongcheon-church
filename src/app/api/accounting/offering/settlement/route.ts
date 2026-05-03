@@ -116,6 +116,14 @@ export async function POST(req: NextRequest) {
     allocation?: AllocationResult; // 작업자가 수동 조정한 분배 결과 (있으면 저장)
     sundaySchool?: number; // 주일학교 금액 (작업자 수동 입력)
     envelopeCount?: number; // 봉투수 (작업자 수동 입력)
+    categories?: {
+      amtTithe?: number;
+      amtSunday?: number;
+      amtThanks?: number;
+      amtSpecial?: number;
+      amtOil?: number;
+      amtSeason?: number;
+    }; // 작업자가 화면에서 수정한 카테고리 (있으면 우선)
   };
   try {
     body = await req.json();
@@ -145,8 +153,19 @@ export async function POST(req: NextRequest) {
     w10: int(d.w10),
   };
 
-  // 카테고리 합계 (저장 시점 스냅샷)
-  const cat = await loadCategoryTotals(date);
+  // 카테고리 합계 — 작업자가 client 에서 수정해 보낸 값(예: 차액을 주일연보에 반영)
+  // 이 있으면 그대로 사용. 없으면 OfferingEntry 합산해서 계산.
+  const recomputed = await loadCategoryTotals(date);
+  const cat = body.categories
+    ? {
+        amtTithe: int(body.categories.amtTithe ?? recomputed.amtTithe),
+        amtSunday: int(body.categories.amtSunday ?? recomputed.amtSunday),
+        amtThanks: int(body.categories.amtThanks ?? recomputed.amtThanks),
+        amtSpecial: int(body.categories.amtSpecial ?? recomputed.amtSpecial),
+        amtOil: int(body.categories.amtOil ?? recomputed.amtOil),
+        amtSeason: int(body.categories.amtSeason ?? recomputed.amtSeason),
+      }
+    : recomputed;
   const inputTotal =
     cat.amtTithe + cat.amtSunday + cat.amtThanks + cat.amtSpecial + cat.amtOil + cat.amtSeason;
   const cashTotal = totalOf(counts);

@@ -320,10 +320,11 @@ export default function OfferingSettlementPage() {
         body: JSON.stringify({
           date,
           denominations: counts,
-          // 작업자가 분배 매수를 수동 조정했으면 그대로 저장
           allocation: allocation || undefined,
           sundaySchool,
           envelopeCount,
+          // 작업자가 차액을 주일연보로 반영한 경우 등 categories 수동 조정 보존
+          categories,
         }),
       });
       const data = await res.json();
@@ -574,10 +575,26 @@ export default function OfferingSettlementPage() {
             ※ 분배 계산은 차액을 일반(주일연보)에 더해 일반/십일조 비율 산정에 반영합니다.
           </div>
           {diff > 0 && (
-            <div className="pt-2 border-t mt-2 text-xs text-gray-600">
-              💡 차액 <strong className="text-emerald-700">{fmt(diff)}</strong> 원은
-              하단 "전표 반영" 버튼을 누르면 <strong>주일연보 금액에 자동 추가</strong>되어
-              전표로 처리됩니다 (재반영 시 덮어쓰기 확인 후 재계산).
+            <div className="pt-2 border-t mt-2 flex items-center justify-between gap-2">
+              <div className="text-xs text-gray-600 flex-1">
+                💡 차액 <strong className="text-emerald-700">{fmt(diff)}</strong> 원을
+                상단 주일연보에 반영하면 합계가 매수합과 일치합니다. 저장 시 함께 보존되며,
+                "연보 다시 불러오기" 누르면 원상태로 되돌아갑니다.
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setCategories((prev) => ({
+                    ...prev,
+                    amtSunday: prev.amtSunday + diff,
+                  }));
+                  setAllocation(null);
+                }}
+                disabled={loading}
+                className="rounded bg-amber-600 px-3 py-1 text-xs text-white hover:bg-amber-700 disabled:opacity-50 whitespace-nowrap"
+              >
+                주일연보에 반영
+              </button>
             </div>
           )}
         </div>
