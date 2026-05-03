@@ -13,6 +13,23 @@ export default function CouncilLayout({ children }: { children: React.ReactNode 
   const [isAdmin, setIsAdmin] = useState(false);
   const [reauthed, setReauthed] = useState(false);
   const [reauthChecked, setReauthChecked] = useState(false);
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem("councilSidebarCollapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleCollapse = () => {
+    setCollapsed((p) => {
+      const next = !p;
+      try {
+        localStorage.setItem("councilSidebarCollapsed", next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -100,9 +117,15 @@ export default function CouncilLayout({ children }: { children: React.ReactNode 
         {/* 사이드바 - 데스크톱 (인쇄 시 숨김) */}
         <aside className="w-48 shrink-0 hidden lg:block print:hidden">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden sticky top-24">
-            <div className="px-4 py-3 bg-indigo-800 text-white">
+            <button
+              type="button"
+              onClick={toggleCollapse}
+              className="w-full px-4 py-3 bg-indigo-800 text-white flex items-center justify-between hover:bg-indigo-900 transition-colors"
+            >
               <h2 className="text-sm font-bold">권찰회</h2>
-            </div>
+              <span className="text-xs">{collapsed ? "▶" : "▼"}</span>
+            </button>
+            {!collapsed && (
             <nav className="py-1">
               {menuItems.map((item) => (
                 <Link
@@ -137,6 +160,7 @@ export default function CouncilLayout({ children }: { children: React.ReactNode 
                 </>
               )}
             </nav>
+            )}
           </div>
         </aside>
 

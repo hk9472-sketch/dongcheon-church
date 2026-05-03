@@ -17,6 +17,26 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
   const [reauthed, setReauthed] = useState(false);
   const [reauthChecked, setReauthChecked] = useState(false);
 
+  // 사이드바 섹션 접기/펼치기 상태 — localStorage 에 저장돼 새 페이지에서도 유지
+  type SectionKey = "ledger" | "offering" | "dues";
+  const [collapsed, setCollapsed] = useState<Record<SectionKey, boolean>>(() => {
+    if (typeof window === "undefined") return { ledger: false, offering: false, dues: false };
+    try {
+      const raw = localStorage.getItem("accountingSidebarCollapsed");
+      if (raw) return { ledger: false, offering: false, dues: false, ...JSON.parse(raw) };
+    } catch {}
+    return { ledger: false, offering: false, dues: false };
+  });
+  const toggleSection = (k: SectionKey) => {
+    setCollapsed((prev) => {
+      const next = { ...prev, [k]: !prev[k] };
+      try {
+        localStorage.setItem("accountingSidebarCollapsed", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
@@ -112,6 +132,17 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
     { href: "/accounting/offering/certificate", label: "소속증명서" },
   ];
 
+  const duesItems = [
+    { href: "/accounting/dues/jeondo/dues", label: "전도회월정" },
+    { href: "/accounting/dues/jeondo/deposit", label: "전도회입금" },
+    { href: "/accounting/dues/jeondo/by-period", label: "전도회 기간별 현황" },
+    { href: "/accounting/dues/jeondo/by-member", label: "전도회 회원별 현황" },
+    { href: "/accounting/dues/build/dues", label: "건축월정" },
+    { href: "/accounting/dues/build/deposit", label: "건축입금" },
+    { href: "/accounting/dues/build/by-period", label: "건축 기간별 현황" },
+    { href: "/accounting/dues/build/by-member", label: "건축 회원별 현황" },
+  ];
+
   const settingsItems = [
     { href: "/accounting/settings/accounts", label: "계정과목" },
     { href: "/accounting/settings/units", label: "회계단위" },
@@ -132,6 +163,7 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
     ...(hasLedger ? ledgerItems : []),
     ...(hasLedger && isAdmin ? settingsItems : []),
     ...(hasOffering ? visibleOfferingItems : []),
+    ...(hasOffering ? duesItems : []),
   ];
 
   return (
@@ -162,9 +194,15 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
             {/* 행정실 (회계) */}
             {hasLedger && (
               <>
-                <div className="px-4 py-3 bg-teal-700 text-white">
+                <button
+                  type="button"
+                  onClick={() => toggleSection("ledger")}
+                  className="w-full px-4 py-3 bg-teal-700 text-white flex items-center justify-between hover:bg-teal-800 transition-colors"
+                >
                   <h2 className="text-sm font-bold">행정실</h2>
-                </div>
+                  <span className="text-xs">{collapsed.ledger ? "▶" : "▼"}</span>
+                </button>
+                {!collapsed.ledger && (
                 <nav className="py-1">
                   {ledgerItems.map((item) => (
                     <Link key={item.href} href={item.href}
@@ -185,14 +223,21 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
                     </>
                   )}
                 </nav>
+                )}
               </>
             )}
             {/* 연보관리 */}
             {hasOffering && (
               <>
-                <div className={`px-4 py-3 bg-indigo-700 text-white ${hasLedger ? "border-t border-gray-200" : ""}`}>
+                <button
+                  type="button"
+                  onClick={() => toggleSection("offering")}
+                  className={`w-full px-4 py-3 bg-indigo-700 text-white flex items-center justify-between hover:bg-indigo-800 transition-colors ${hasLedger ? "border-t border-gray-200" : ""}`}
+                >
                   <h2 className="text-sm font-bold">연보관리</h2>
-                </div>
+                  <span className="text-xs">{collapsed.offering ? "▶" : "▼"}</span>
+                </button>
+                {!collapsed.offering && (
                 <nav className="py-1">
                   {visibleOfferingItems.map((item) => (
                     <Link key={item.href} href={item.href}
@@ -201,6 +246,39 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
                       }`}>{item.label}</Link>
                   ))}
                 </nav>
+                )}
+              </>
+            )}
+            {/* 월정관리 */}
+            {hasOffering && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => toggleSection("dues")}
+                  className="w-full px-4 py-3 bg-fuchsia-700 text-white flex items-center justify-between hover:bg-fuchsia-800 transition-colors border-t border-gray-200"
+                >
+                  <h2 className="text-sm font-bold">월정관리</h2>
+                  <span className="text-xs">{collapsed.dues ? "▶" : "▼"}</span>
+                </button>
+                {!collapsed.dues && (
+                  <nav className="py-1">
+                    <div className="px-4 py-1.5 text-[11px] text-gray-400 font-bold tracking-wider">전도회</div>
+                    {duesItems.filter((i) => i.href.includes("/jeondo/")).map((item) => (
+                      <Link key={item.href} href={item.href}
+                        className={`block px-4 py-2.5 text-sm transition-colors ${
+                          pathname === item.href ? "bg-fuchsia-50 text-fuchsia-700 font-medium border-r-2 border-fuchsia-700" : "text-gray-600 hover:bg-gray-50"
+                        }`}>{item.label}</Link>
+                    ))}
+                    <div className="border-t border-gray-200 my-1" />
+                    <div className="px-4 py-1.5 text-[11px] text-gray-400 font-bold tracking-wider">건축</div>
+                    {duesItems.filter((i) => i.href.includes("/build/")).map((item) => (
+                      <Link key={item.href} href={item.href}
+                        className={`block px-4 py-2.5 text-sm transition-colors ${
+                          pathname === item.href ? "bg-fuchsia-50 text-fuchsia-700 font-medium border-r-2 border-fuchsia-700" : "text-gray-600 hover:bg-gray-50"
+                        }`}>{item.label}</Link>
+                    ))}
+                  </nav>
+                )}
               </>
             )}
           </div>

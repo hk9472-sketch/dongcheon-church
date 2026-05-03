@@ -30,6 +30,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [loading, setLoading] = useState(true);
   const [reauthed, setReauthed] = useState(false);
   const [reauthChecked, setReauthChecked] = useState(false);
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem("adminSidebarCollapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleCollapse = () => {
+    setCollapsed((p) => {
+      const next = !p;
+      try {
+        localStorage.setItem("adminSidebarCollapsed", next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -105,9 +122,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* 사이드바 (인쇄 시 숨김) */}
         <aside className="w-52 shrink-0 hidden lg:block print:hidden">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden sticky top-24">
-            <div className="px-4 py-3 bg-gray-800 text-white">
+            <button
+              type="button"
+              onClick={toggleCollapse}
+              className="w-full px-4 py-3 bg-gray-800 text-white flex items-center justify-between hover:bg-gray-900 transition-colors"
+            >
               <h2 className="text-sm font-bold">관리자 메뉴</h2>
-            </div>
+              <span className="text-xs">{collapsed ? "▶" : "▼"}</span>
+            </button>
+            {!collapsed && (
             <nav className="py-1">
               {ADMIN_MENU.map((item) => {
                 const active = !item.external && pathname === item.href;
@@ -132,6 +155,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 );
               })}
             </nav>
+            )}
           </div>
         </aside>
 
