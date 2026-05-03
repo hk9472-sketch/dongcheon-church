@@ -45,6 +45,8 @@ export async function POST(req: NextRequest) {
     date?: string;
     sundaySchool?: number;
     seasonType?: SeasonType;
+    /** true 면 기존 자동생성 전표 삭제 후 새로 생성. false/미지정이면 기존 발견 시 409 로 안내. */
+    force?: boolean;
   };
   try {
     body = await req.json();
@@ -220,6 +222,41 @@ export async function POST(req: NextRequest) {
       { error: `${year}년 ${month}월 마감된 단위: ${closedUnits.join(", ")}` },
       { status: 409 },
     );
+  }
+
+  // 기존 자동생성 전표 검사 (description="연보 결산 자동 반영" + 같은 일자 + 영향 단위)
+  const affectedUnitIds = Array.from(byUnit.keys());
+  const existingAuto = await prisma.accVoucher.findMany({
+    where: {
+      unitId: { in: affectedUnitIds },
+      date: dayStart,
+      description: "연보 결산 자동 반영",
+    },
+    include: { unit: { select: { name: true } } },
+  });
+
+  if (existingAuto.length > 0 && !body.force) {
+    // 덮어쓰기 확인 필요 — 기존 전표 정보 반환
+    return NextResponse.json(
+      {
+        needsConfirm: true,
+        existing: existingAuto.map((v) => ({
+          unitName: v.unit.name,
+          voucherNo: v.voucherNo,
+          totalAmount: v.totalAmount,
+          createdAt: v.createdAt,
+        })),
+        message: `이 일자에 이미 자동생성된 결산 전표가 ${existingAuto.length}건 있습니다. 덮어쓸까요?`,
+      },
+      { status: 409 },
+    );
+  }
+
+  // force 모드 — 기존 자동전표 삭제 (CASCADE 로 items 도 같이 삭제)
+  if (existingAuto.length > 0) {
+    await prisma.accVoucher.deleteMany({
+      where: { id: { in: existingAuto.map((v) => v.id) } },
+    });
   }
 
   const operatorName = acc.user?.name ?? acc.user?.userId ?? "결산";

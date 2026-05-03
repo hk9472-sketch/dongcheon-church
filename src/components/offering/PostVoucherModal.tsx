@@ -51,6 +51,22 @@ export default function PostVoucherModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // 실제 POST 요청 — force 옵션으로 덮어쓰기 강제
+  const callApi = async (force: boolean) => {
+    const res = await fetch("/api/accounting/offering/settlement/post-voucher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        date,
+        sundaySchool,
+        seasonType: seasonType || undefined,
+        force,
+      }),
+    });
+    const data = await res.json();
+    return { ok: res.ok, status: res.status, data };
+  };
+
   const submit = async () => {
     setError(null);
     if (seasonAmount > 0 && !seasonType) {
@@ -59,17 +75,33 @@ export default function PostVoucherModal({
     }
     setBusy(true);
     try {
-      const res = await fetch("/api/accounting/offering/settlement/post-voucher", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date,
-          sundaySchool,
-          seasonType: seasonType || undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "전표 반영 실패");
+      // 1차 시도: force=false. 기존 자동전표 있으면 409+needsConfirm 응답
+      let res = await callApi(false);
+
+      if (res.status === 409 && res.data?.needsConfirm) {
+        const existing = (res.data.existing || []) as Array<{
+          unitName: string;
+          voucherNo: string;
+          totalAmount: number;
+        }>;
+        const list = existing
+          .map((e) => `· ${e.unitName} ${e.voucherNo} (${fmt(e.totalAmount)}원)`)
+          .join("\n");
+        const ok = confirm(
+          `이 일자에 이미 자동생성된 결산 전표가 ${existing.length}건 있습니다.\n\n${list}\n\n` +
+            `덮어쓰면 위 전표를 삭제하고 현재 데이터로 새로 생성합니다.\n계속하시겠습니까?`,
+        );
+        if (!ok) {
+          setBusy(false);
+          return;
+        }
+        // 2차 시도: force=true
+        res = await callApi(true);
+      }
+
+      if (!res.ok) throw new Error(res.data?.error || "전표 반영 실패");
+
+      const data = res.data;
       let msg = `회계단위별 전표 ${data.vouchers.length}건 생성됨:\n\n`;
       for (const v of data.vouchers) {
         msg += `· ${v.unitName} : ${v.voucherNo} (${v.items}건, ${fmt(v.total)}원)\n`;
