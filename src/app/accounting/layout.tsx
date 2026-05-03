@@ -102,6 +102,8 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
     { href: "/accounting/offering/members", label: "관리번호" },
     { href: "/accounting/offering/donor-info", label: "관리상세" },
     { href: "/accounting/offering/entry", label: "연보입력" },
+    { href: "/accounting/offering/by-type", label: "연보별입력" },
+    { href: "/accounting/offering/edit", label: "연보일괄수정" },
     { href: "/accounting/offering/settlement", label: "일별결산" },
     { href: "/accounting/offering/list", label: "연보내역" },
     { href: "/accounting/offering/thanks", label: "감사연보현황" },
