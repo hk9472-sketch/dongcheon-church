@@ -60,6 +60,7 @@ export default function OfferingSettlementPage() {
 
   const [categories, setCategories] = useState<Categories>(ZERO_CAT);
   const [sundaySchool, setSundaySchool] = useState(0); // 장년반계와 별도, 매수·분배 로직엔 미반영
+  const [envelopeCount, setEnvelopeCount] = useState(0); // 봉투수 (인쇄용)
   const [counts, setCounts] = useState<DenomCounts>(ZERO_COUNTS);
   const [allocation, setAllocation] = useState<AllocationResult | null>(null);
   const [voucherOpen, setVoucherOpen] = useState(false);
@@ -174,6 +175,7 @@ export default function OfferingSettlementPage() {
           amtSeason: s.amtSeason,
         });
         setSundaySchool(s.amtSundaySchool ?? 0);
+        setEnvelopeCount(s.envelopeCount ?? 0);
         setCounts({
           check: s.cashCheck,
           w50000: s.cnt50000,
@@ -190,6 +192,7 @@ export default function OfferingSettlementPage() {
       } else {
         setCategories(data.categories);
         setSundaySchool(0);
+        setEnvelopeCount(0);
         setCounts(ZERO_COUNTS);
       }
     } catch (e) {
@@ -348,6 +351,7 @@ export default function OfferingSettlementPage() {
           // 작업자가 분배 매수를 수동 조정했으면 그대로 저장
           allocation: allocation || undefined,
           sundaySchool,
+          envelopeCount,
         }),
       });
       const data = await res.json();
@@ -425,7 +429,24 @@ export default function OfferingSettlementPage() {
               </td>
             </tr>
             <tr className="border-t font-bold">
-              <td className="px-4 py-2">장년반계</td>
+              <td className="px-4 py-2">
+                장년반계
+                <span className="ml-3 text-xs font-normal text-gray-600">
+                  봉투수
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={envelopeCount === 0 ? "" : envelopeCount.toLocaleString()}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value.replace(/[^\d]/g, ""), 10) || 0;
+                      setEnvelopeCount(n);
+                    }}
+                    placeholder="0"
+                    className="ml-1 w-16 rounded border border-gray-300 px-1.5 py-0.5 text-right text-xs"
+                  />
+                  매
+                </span>
+              </td>
               <td className="px-4 py-2 text-right">{fmt(inputTotal)}</td>
             </tr>
             <tr className="border-t">
@@ -452,7 +473,16 @@ export default function OfferingSettlementPage() {
             </tr>
           </tbody>
         </table>
-        <div className="border-t px-4 py-2 flex justify-end">
+        <div className="border-t px-4 py-2 flex justify-end gap-2">
+          <a
+            href={`/accounting/offering/settlement/print?date=${date}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+            title="수입내역서 인쇄용 페이지"
+          >
+            인쇄
+          </a>
           <button
             type="button"
             onClick={() => setVoucherOpen(true)}

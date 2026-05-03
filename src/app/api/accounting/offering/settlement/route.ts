@@ -106,6 +106,7 @@ export async function POST(req: NextRequest) {
     denominations?: DenomCounts;
     allocation?: AllocationResult; // 작업자가 수동 조정한 분배 결과 (있으면 저장)
     sundaySchool?: number; // 주일학교 금액 (작업자 수동 입력)
+    envelopeCount?: number; // 봉투수 (작업자 수동 입력)
   };
   try {
     body = await req.json();
@@ -156,10 +157,14 @@ export async function POST(req: NextRequest) {
   const sundaySchool = typeof body.sundaySchool === "number" && body.sundaySchool >= 0
     ? Math.floor(body.sundaySchool)
     : 0;
+  const envelopeCount = typeof body.envelopeCount === "number" && body.envelopeCount >= 0
+    ? Math.floor(body.envelopeCount)
+    : 0;
   const data = {
     date,
     ...cat, // 원본 카테고리 (차액 미반영 — UI 에서 확인용)
     amtSundaySchool: sundaySchool,
+    envelopeCount,
     cashCheck: counts.check,
     cnt50000: counts.w50000,
     cnt10000: counts.w10000,
