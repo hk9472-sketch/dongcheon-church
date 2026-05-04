@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import HelpButton from "@/components/HelpButton";
 import MediaBaseUrlSetting from "@/components/admin/MediaBaseUrlSetting";
 import MediaFtpSetting from "@/components/admin/MediaFtpSetting";
+import LiveWorshipSetting from "@/components/admin/LiveWorshipSetting";
 import SettingsPreview from "@/components/admin/SettingsPreview";
 import { AdminDbContent } from "@/app/admin/db/page";
 
@@ -744,6 +745,7 @@ export default function AdminSettingsPage() {
       {/* ==================== 기타 탭 ==================== */}
       {activeTab === "other" && (
         <div className="space-y-4">
+          <LiveWorshipSetting />
           <MediaBaseUrlSetting />
           <MediaFtpSetting />
         </div>

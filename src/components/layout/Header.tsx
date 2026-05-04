@@ -27,6 +27,7 @@ export default function Header() {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [navMenu, setNavMenu] = useState<NavMenuItem[]>([]);
   const [mottoHtml, setMottoHtml] = useState<string | null>(null);
+  const [liveEnabled, setLiveEnabled] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -44,6 +45,11 @@ export default function Header() {
     fetch("/api/board/motto")
       .then((r) => r.json())
       .then((d) => setMottoHtml(d.content || null))
+      .catch(() => {});
+
+    fetch("/api/settings/live-worship")
+      .then((r) => r.json())
+      .then((d) => setLiveEnabled(!!d.enabled))
       .catch(() => {});
   }, []);
 
@@ -129,6 +135,16 @@ export default function Header() {
 
             {/* 로그인 상태 */}
             <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+              {liveEnabled && (
+                <Link
+                  href="/live-worship"
+                  className="px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-red-600 to-rose-600 rounded-lg hover:from-red-700 hover:to-rose-700 shadow-sm hover:shadow transition-all flex items-center gap-1.5"
+                  title="실시간 예배 / 집회"
+                >
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                  내계집회
+                </Link>
+              )}
               {user ? (
                 <>
                   <span className="text-sm text-gray-500">
@@ -250,6 +266,16 @@ export default function Header() {
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pt-3 border-t border-gray-100">
+            {liveEnabled && (
+              <Link
+                href="/live-worship"
+                onClick={() => setMenuOpen(false)}
+                className="px-3 py-1 text-xs font-bold text-white bg-gradient-to-r from-red-600 to-rose-600 rounded-lg shadow-sm flex items-center gap-1.5"
+              >
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                내계집회
+              </Link>
+            )}
             {user ? (
               <>
                 <span className="text-sm text-gray-600 font-medium">{user.name}님</span>
