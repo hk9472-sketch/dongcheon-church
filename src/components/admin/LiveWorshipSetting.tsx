@@ -58,14 +58,13 @@ export default function LiveWorshipSetting() {
   const dirty = enabled !== initial.enabled || url.trim() !== initial.url;
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-3">
+    <div className="bg-white rounded-lg border-2 border-red-200 p-5 space-y-3">
       <div>
-        <h3 className="text-base font-bold text-gray-800">내계집회 (실시간 예배)</h3>
-        <p className="text-xs text-gray-500 mt-1">
+        <p className="text-xs text-gray-500">
           헤더의 빨간 <strong className="text-red-600">[내계집회]</strong> 버튼 표시 여부와 송출
           유튜브 URL 을 설정합니다. 보이기로 두면 모든 방문자에게 노출되며,
           버튼을 누르면 <code className="bg-gray-100 px-1 rounded">/live-worship</code> 페이지에서
-          영상이 자동 재생됩니다.
+          영상이 자동 재생됩니다. URL 은 자주 바뀔 수 있으므로 매번 여기서 갱신하세요.
         </p>
       </div>
 

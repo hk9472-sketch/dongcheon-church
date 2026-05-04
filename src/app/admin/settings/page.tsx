@@ -745,9 +745,16 @@ export default function AdminSettingsPage() {
       {/* ==================== 기타 탭 ==================== */}
       {activeTab === "other" && (
         <div className="space-y-4">
-          <LiveWorshipSetting />
           <MediaBaseUrlSetting />
           <MediaFtpSetting />
+          <div className="pt-2">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="inline-block w-1 h-5 bg-red-600 rounded-full" />
+              <h2 className="text-sm font-bold text-red-700">내계집회중계</h2>
+              <span className="text-xs text-gray-400">— 헤더 [내계집회] 버튼 / 실시간 예배 송출 URL</span>
+            </div>
+            <LiveWorshipSetting />
+          </div>
         </div>
       )}
 
