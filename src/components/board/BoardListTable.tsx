@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import FloppyIcon from "@/components/icons/FloppyIcon";
 import PostBadge from "@/components/board/PostBadge";
+import PostManageActions from "@/components/board/PostManageActions";
 
 interface PostItem {
   id: number;
@@ -23,8 +24,15 @@ interface PostItem {
   hasRecentComment?: boolean;
 }
 
+interface Category {
+  id: number;
+  name: string;
+}
+
 interface Props {
   boardSlug: string;
+  boardId: number;
+  categories: Category[];
   notices: PostItem[];
   posts: PostItem[];
   isAdmin: boolean;
@@ -59,6 +67,8 @@ function truncateSubject(subject: string, maxLength: number): string {
 
 export default function BoardListTable({
   boardSlug,
+  boardId,
+  categories,
   notices,
   posts,
   isAdmin,
@@ -349,12 +359,19 @@ export default function BoardListTable({
         </table>
       </div>
 
-      {/* 관리자: 선택 삭제 버튼 */}
+      {/* 관리자: 선택 액션 (카테고리 변경 / 게시판 이동 / 삭제) */}
       {manageMode && checked.size > 0 && (
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm text-gray-600">
             {checked.size}개 선택
           </span>
+          <PostManageActions
+            selectedIds={[...checked]}
+            currentBoardId={boardId}
+            currentCategories={categories}
+            useCategory={useCategory}
+            onDone={() => setChecked(new Set())}
+          />
           <button
             onClick={handleBulkDelete}
             disabled={deleting}

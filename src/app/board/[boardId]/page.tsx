@@ -213,6 +213,8 @@ export default async function BoardListPage({ params, searchParams }: PageProps)
       {/* 게시글 테이블 */}
       <BoardListTable
         boardSlug={boardId}
+        boardId={board.id}
+        categories={board.categories.map((c) => ({ id: c.id, name: c.name }))}
         notices={serializePosts(notices)}
         posts={serializePosts(posts)}
         isAdmin={isBoardAdmin}
