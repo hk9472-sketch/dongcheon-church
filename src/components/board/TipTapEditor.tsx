@@ -70,7 +70,28 @@ const StyledOrderedList = OrderedList.extend({
   },
 });
 
-// 표 셀 / 헤더 셀에 배경색 속성 추가
+// 셀에 배경색 + 보더색 속성을 inline style 로 합쳐서 렌더.
+// 두 속성이 동시에 있으면 단일 style 문자열로 결합해 다음 attribute 가 앞을 덮지 않도록.
+function buildCellStyle(attrs: Record<string, unknown>): {
+  "data-bg"?: string;
+  "data-bc"?: string;
+  style?: string;
+} {
+  const out: { "data-bg"?: string; "data-bc"?: string; style?: string } = {};
+  const parts: string[] = [];
+  if (attrs.backgroundColor) {
+    out["data-bg"] = attrs.backgroundColor as string;
+    parts.push(`background-color: ${attrs.backgroundColor}`);
+  }
+  if (attrs.borderColor) {
+    out["data-bc"] = attrs.borderColor as string;
+    parts.push(`border-color: ${attrs.borderColor}`);
+  }
+  if (parts.length > 0) out.style = parts.join("; ");
+  return out;
+}
+
+// 표 셀 / 헤더 셀에 배경색 + 보더색 속성 추가
 const StyledTableCell = TableCell.extend({
   addAttributes() {
     return {
@@ -83,13 +104,17 @@ const StyledTableCell = TableCell.extend({
           const bg = (el as HTMLElement).style.backgroundColor;
           return bg && bg !== "transparent" ? bg : null;
         },
-        renderHTML: (attrs: Record<string, unknown>) =>
-          attrs.backgroundColor
-            ? {
-                "data-bg": attrs.backgroundColor as string,
-                style: `background-color: ${attrs.backgroundColor}`,
-              }
-            : {},
+        renderHTML: () => ({}),
+      },
+      borderColor: {
+        default: null,
+        parseHTML: (el) => {
+          const dataBc = el.getAttribute("data-bc");
+          if (dataBc) return dataBc;
+          const bc = (el as HTMLElement).style.borderColor;
+          return bc && bc !== "transparent" ? bc : null;
+        },
+        renderHTML: (attrs: Record<string, unknown>) => buildCellStyle(attrs),
       },
     };
   },
@@ -107,11 +132,40 @@ const StyledTableHeader = TableHeader.extend({
           const bg = (el as HTMLElement).style.backgroundColor;
           return bg && bg !== "transparent" ? bg : null;
         },
+        renderHTML: () => ({}),
+      },
+      borderColor: {
+        default: null,
+        parseHTML: (el) => {
+          const dataBc = el.getAttribute("data-bc");
+          if (dataBc) return dataBc;
+          const bc = (el as HTMLElement).style.borderColor;
+          return bc && bc !== "transparent" ? bc : null;
+        },
+        renderHTML: (attrs: Record<string, unknown>) => buildCellStyle(attrs),
+      },
+    };
+  },
+});
+
+// 표 자체에 보더색 속성 추가 — 표 내 모든 셀의 기본 보더색이 됨 (셀 단위 색상이 우선).
+// CSS var --cell-border 로 표시. 셀 보더는 var(--cell-border, #d1d5db) 폴백.
+const StyledTable = Table.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      borderColor: {
+        default: null,
+        parseHTML: (el) => {
+          const dataBc = el.getAttribute("data-bc");
+          if (dataBc) return dataBc;
+          return null;
+        },
         renderHTML: (attrs: Record<string, unknown>) =>
-          attrs.backgroundColor
+          attrs.borderColor
             ? {
-                "data-bg": attrs.backgroundColor as string,
-                style: `background-color: ${attrs.backgroundColor}`,
+                "data-bc": attrs.borderColor as string,
+                style: `--cell-border: ${attrs.borderColor}`,
               }
             : {},
       },
@@ -675,7 +729,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       }),
       // resizable: true → 컬럼 경계를 마우스로 드래그해 폭 조정.
       // 행 높이는 CSS resize: vertical 로 셀마다 개별 조절(아래 globals.css 참고).
-      Table.configure({ resizable: true, handleWidth: 6, cellMinWidth: 40 }),
+      StyledTable.configure({ resizable: true, handleWidth: 6, cellMinWidth: 40 }),
       TableRow,
       StyledTableCell,
       StyledTableHeader,
@@ -1686,6 +1740,70 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
               title="셀 배경색 (직접 선택)"
               className="w-7 h-7 rounded cursor-pointer border border-gray-300"
             />
+
+            {/* 표 외곽선 색상 — 표 전체 (셀 단위 색이 우선) */}
+            <span className="inline-flex items-center gap-0.5 ml-1">
+              <span className="text-[11px] text-gray-500 select-none">표</span>
+              <input
+                type="color"
+                onChange={(e) => {
+                  editor
+                    .chain()
+                    .focus()
+                    .updateAttributes("table", { borderColor: e.target.value })
+                    .run();
+                }}
+                title="표 외곽선 색상 — 표 안 모든 셀에 적용 (셀 단위 색이 우선)"
+                className="w-7 h-7 rounded cursor-pointer border border-gray-300"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  editor
+                    .chain()
+                    .focus()
+                    .updateAttributes("table", { borderColor: null })
+                    .run()
+                }
+                title="표 외곽선 색상 초기화"
+                className="px-1 text-xs text-gray-500 hover:text-red-600 leading-none"
+              >
+                ✕
+              </button>
+            </span>
+
+            {/* 셀 외곽선 색상 — 현재 선택 셀만 (드래그로 다중 선택 시 모두 적용) */}
+            <span className="inline-flex items-center gap-0.5">
+              <span className="text-[11px] text-gray-500 select-none">셀</span>
+              <input
+                type="color"
+                onChange={(e) => {
+                  editor
+                    .chain()
+                    .focus()
+                    .updateAttributes("tableCell", { borderColor: e.target.value })
+                    .updateAttributes("tableHeader", { borderColor: e.target.value })
+                    .run();
+                }}
+                title="셀 외곽선 색상 — 선택한 셀에만 적용"
+                className="w-7 h-7 rounded cursor-pointer border border-gray-300"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  editor
+                    .chain()
+                    .focus()
+                    .updateAttributes("tableCell", { borderColor: null })
+                    .updateAttributes("tableHeader", { borderColor: null })
+                    .run()
+                }
+                title="셀 외곽선 색상 초기화"
+                className="px-1 text-xs text-gray-500 hover:text-red-600 leading-none"
+              >
+                ✕
+              </button>
+            </span>
           </>
         )}
       </div>

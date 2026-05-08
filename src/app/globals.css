@@ -274,6 +274,8 @@ html {
   max-width: 100%;
   height: auto;
 }
+/* 표 외곽선 색상 — 표 attribute(--cell-border) > 셀 inline style > 기본값 #d1d5db 순서.
+   .ProseMirror table 과 .prose table 양쪽에서 동일하게 동작. */
 .tiptap-editor .ProseMirror table {
   border-collapse: collapse;
   /* width: 100% → 고정폭 기반 resize 가 먹도록 제거. 컬럼 합계가 자동 폭 */
@@ -283,7 +285,7 @@ html {
 }
 .tiptap-editor .ProseMirror td,
 .tiptap-editor .ProseMirror th {
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--cell-border, #d1d5db);
   padding: 0.4rem 0.6rem;
   min-width: 60px;
   vertical-align: top;
@@ -452,10 +454,12 @@ html {
 .prose table {
   table-layout: fixed;
   word-break: break-word;
+  border-collapse: collapse;
 }
 .prose td,
 .prose th {
   vertical-align: top;
+  border: 1px solid var(--cell-border, #d1d5db);
 }
 .tiptap-editor .ProseMirror hr {
   border-top: 1px solid #d1d5db;
