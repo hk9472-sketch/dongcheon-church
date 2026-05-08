@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import HelpButton from "@/components/HelpButton";
 import CaptchaField from "@/components/CaptchaField";
 import FloppyIcon from "@/components/icons/FloppyIcon";
+import BoardGuideBox from "@/components/board/BoardGuideBox";
 
 // TipTap 은 무거운 에디터 (@tiptap/* + prosemirror 다수). 글쓰기 진입 시에만 로드하도록
 // 동적 import 로 분리해 초기 번들 사이즈 감소.
@@ -313,9 +314,7 @@ function WriteForm({ boardId }: { boardId: string }) {
         </div>
       </div>
 
-      <div className="px-4 py-2.5 bg-blue-50/60 border border-blue-100 rounded text-xs text-gray-500 italic leading-relaxed whitespace-pre-line">
-        {guideText || "예배당처럼 아끼고 서로 조심하셨으면 합니다.\n주로 우리 교인들이 사용하겠지만 혹 손님들이 오시더라도 깨끗한 우리의 모습을 보였으면 좋겠고, 서로의 신앙에 유익이 되도록 했으면 좋겠습니다."}
-      </div>
+      <BoardGuideBox text={guideText} />
 
       <form onSubmit={handleSubmit} className="space-y-4" style={{ fontFamily: "var(--skin-write-font)", fontSize: "var(--skin-write-font-size)", color: "var(--skin-write-font-color)" }}>
         {/* ─── 작성자 정보 섹션 ─── */}

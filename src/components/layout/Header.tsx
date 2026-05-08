@@ -3,7 +3,25 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { sanitizeHtml } from "@/lib/sanitize";
+import MottoBanner from "@/components/layout/MottoBanner";
+
+interface TextStyle {
+  fontFamily?: string;
+  fontSize?: string;
+  fontWeight?: string;
+  fontStyle?: string;
+}
+
+interface MottoData {
+  mode: "admin" | "legacy";
+  text?: string;
+  subtext?: string;
+  textStyle?: TextStyle;
+  subtextStyle?: TextStyle;
+  legacyHtml?: string | null;
+  bannerInterval: number;
+  color: string;
+}
 
 interface NavMenuItem {
   label: string;
@@ -26,7 +44,7 @@ export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [navMenu, setNavMenu] = useState<NavMenuItem[]>([]);
-  const [mottoHtml, setMottoHtml] = useState<string | null>(null);
+  const [motto, setMotto] = useState<MottoData | null>(null);
   const [liveEnabled, setLiveEnabled] = useState(false);
 
   useEffect(() => {
@@ -44,7 +62,28 @@ export default function Header() {
 
     fetch("/api/board/motto")
       .then((r) => r.json())
-      .then((d) => setMottoHtml(d.content || null))
+      .then((d) => {
+        if (d?.mode === "admin") {
+          setMotto({
+            mode: "admin",
+            text: d.text || "",
+            subtext: d.subtext || "",
+            textStyle: d.textStyle || {},
+            subtextStyle: d.subtextStyle || {},
+            bannerInterval: typeof d.bannerInterval === "number" ? d.bannerInterval : 0,
+            color: d.color || "",
+          });
+        } else if (d?.content) {
+          setMotto({
+            mode: "legacy",
+            legacyHtml: d.content,
+            bannerInterval: typeof d.bannerInterval === "number" ? d.bannerInterval : 0,
+            color: d.color || "",
+          });
+        } else {
+          setMotto(null);
+        }
+      })
       .catch(() => {});
 
     fetch("/api/settings/live-worship")
@@ -120,10 +159,17 @@ export default function Header() {
             </Link>
 
             {/* 표어 또는 성구 (데스크톱) */}
-            {mottoHtml ? (
-              <div
-                className="hidden md:block text-center leading-snug flex-1 mx-4 prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: sanitizeHtml(mottoHtml) }}
+            {motto ? (
+              <MottoBanner
+                mode={motto.mode}
+                text={motto.text}
+                subtext={motto.subtext}
+                textStyle={motto.textStyle}
+                subtextStyle={motto.subtextStyle}
+                legacyHtml={motto.legacyHtml || undefined}
+                intervalSec={motto.bannerInterval}
+                color={motto.color}
+                className="hidden md:flex items-center justify-center text-center leading-snug flex-1 mx-4 max-w-none min-h-[3rem]"
               />
             ) : (
               <p className="hidden md:block text-lg text-gray-500 italic text-right leading-snug">
@@ -242,10 +288,17 @@ export default function Header() {
       {menuOpen && (
         <nav className="md:hidden bg-white border-b border-gray-200 pb-3">
           {/* 표어 또는 성구 (모바일) */}
-          {mottoHtml ? (
-            <div
-              className="px-4 py-3 text-xs border-b border-gray-100 leading-relaxed text-center prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: sanitizeHtml(mottoHtml) }}
+          {motto ? (
+            <MottoBanner
+              mode={motto.mode}
+              text={motto.text}
+              subtext={motto.subtext}
+              textStyle={motto.textStyle}
+              subtextStyle={motto.subtextStyle}
+              legacyHtml={motto.legacyHtml || undefined}
+              intervalSec={motto.bannerInterval}
+              color={motto.color}
+              className="px-4 py-3 text-xs border-b border-gray-100 leading-relaxed text-center max-w-none flex items-center justify-center min-h-[3rem]"
             />
           ) : (
             <p className="px-4 py-3 text-xs text-gray-500 italic border-b border-gray-100 leading-relaxed">

@@ -395,6 +395,169 @@ export default function AdminSettingsPage() {
             </div>
           </div>
 
+          {/* 표어 / 성구 */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+              <h2 className="text-sm font-semibold text-gray-700">표어 / 성구</h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                헤더 상단 중앙에 표시될 표어 + 보조 문구. 비워두면 게시판 <code className="bg-gray-100 px-1 rounded">DcNotice → 표어</code> 카테고리 글을 사용합니다.
+                두 칸 합쳐서 한 표어로 표시되며, 각각 폰트/크기/굵기/기울기를 따로 지정할 수 있습니다.
+              </p>
+            </div>
+            <div className="p-5 space-y-5">
+              {/* 표어 문구 + 인라인 스타일 컨트롤 */}
+              <div className="space-y-2">
+                <div className="flex items-start gap-4">
+                  <label className="w-32 shrink-0 text-sm font-medium text-gray-700 mt-1">표어 문구</label>
+                  <textarea
+                    rows={2}
+                    value={values.theme_motto_text || ""}
+                    onChange={(e) => handleChange("theme_motto_text", e.target.value)}
+                    placeholder="예: 그러나 너는 배우고 확신한 일에 거하라"
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pl-36 text-xs">
+                  <select
+                    value={values.theme_motto_text_font || ""}
+                    onChange={(e) => handleChange("theme_motto_text_font", e.target.value)}
+                    className="px-2 py-1 border border-gray-300 rounded text-xs"
+                    title="폰트"
+                  >
+                    {FONT_OPTIONS.map((f) => (
+                      <option key={f.value} value={f.value} style={{ fontFamily: f.value || "inherit" }}>{f.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={values.theme_motto_text_size || ""}
+                    onChange={(e) => handleChange("theme_motto_text_size", e.target.value)}
+                    placeholder="18px"
+                    className="w-20 px-2 py-1 border border-gray-300 rounded font-mono text-xs"
+                    title="크기 (예: 18px, 1.2rem)"
+                  />
+                  <select
+                    value={values.theme_motto_text_weight || "normal"}
+                    onChange={(e) => handleChange("theme_motto_text_weight", e.target.value)}
+                    className="px-2 py-1 border border-gray-300 rounded text-xs"
+                    title="굵기"
+                  >
+                    <option value="300">가늘게</option>
+                    <option value="normal">보통</option>
+                    <option value="bold">굵게</option>
+                  </select>
+                  <select
+                    value={values.theme_motto_text_style || "normal"}
+                    onChange={(e) => handleChange("theme_motto_text_style", e.target.value)}
+                    className="px-2 py-1 border border-gray-300 rounded text-xs"
+                    title="기울기"
+                  >
+                    <option value="normal">보통</option>
+                    <option value="italic">기울임</option>
+                  </select>
+                  <ResetBtn fieldKey="theme_motto_text_size" />
+                </div>
+              </div>
+
+              {/* () 보조 문구 + 인라인 스타일 컨트롤 */}
+              <div className="space-y-2">
+                <div className="flex items-start gap-4">
+                  <label className="w-32 shrink-0 text-sm font-medium text-gray-700 mt-1">( ) 보조 문구</label>
+                  <textarea
+                    rows={1}
+                    value={values.theme_motto_subtext || ""}
+                    onChange={(e) => handleChange("theme_motto_subtext", e.target.value)}
+                    placeholder="예: (딤후 3:14)"
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pl-36 text-xs">
+                  <select
+                    value={values.theme_motto_subtext_font || ""}
+                    onChange={(e) => handleChange("theme_motto_subtext_font", e.target.value)}
+                    className="px-2 py-1 border border-gray-300 rounded text-xs"
+                    title="폰트"
+                  >
+                    {FONT_OPTIONS.map((f) => (
+                      <option key={f.value} value={f.value} style={{ fontFamily: f.value || "inherit" }}>{f.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={values.theme_motto_subtext_size || ""}
+                    onChange={(e) => handleChange("theme_motto_subtext_size", e.target.value)}
+                    placeholder="13px"
+                    className="w-20 px-2 py-1 border border-gray-300 rounded font-mono text-xs"
+                    title="크기"
+                  />
+                  <select
+                    value={values.theme_motto_subtext_weight || "normal"}
+                    onChange={(e) => handleChange("theme_motto_subtext_weight", e.target.value)}
+                    className="px-2 py-1 border border-gray-300 rounded text-xs"
+                    title="굵기"
+                  >
+                    <option value="300">가늘게</option>
+                    <option value="normal">보통</option>
+                    <option value="bold">굵게</option>
+                  </select>
+                  <select
+                    value={values.theme_motto_subtext_style || "normal"}
+                    onChange={(e) => handleChange("theme_motto_subtext_style", e.target.value)}
+                    className="px-2 py-1 border border-gray-300 rounded text-xs"
+                    title="기울기"
+                  >
+                    <option value="normal">보통</option>
+                    <option value="italic">기울임</option>
+                  </select>
+                  <ResetBtn fieldKey="theme_motto_subtext_size" />
+                </div>
+              </div>
+
+              {/* 공통 — 색상 + 배너 회전 간격 */}
+              <div className="border-t border-gray-100 pt-4 space-y-3">
+                <div className="flex items-center gap-4">
+                  <label className="w-32 shrink-0 text-sm font-medium text-gray-700">글씨 색상</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={values.theme_motto_color || "#374151"}
+                      onChange={(e) => handleChange("theme_motto_color", e.target.value)}
+                      className="w-10 h-10 rounded cursor-pointer border border-gray-300"
+                    />
+                    <input
+                      type="text"
+                      value={values.theme_motto_color || ""}
+                      onChange={(e) => handleChange("theme_motto_color", e.target.value)}
+                      className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                      placeholder="#374151"
+                    />
+                    <ResetBtn fieldKey="theme_motto_color" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="w-32 shrink-0 text-sm font-medium text-gray-700">배너 회전 간격</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step={0.1}
+                      min={0}
+                      max={10}
+                      value={values.theme_motto_banner_interval || "0"}
+                      onChange={(e) => handleChange("theme_motto_banner_interval", e.target.value)}
+                      className="w-24 px-3 py-1.5 text-sm border border-gray-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                      placeholder="0"
+                    />
+                    <span className="text-xs text-gray-400">초 — <strong>0 이면 고정 표시</strong>, 1~2 권장</span>
+                    <ResetBtn fieldKey="theme_motto_banner_interval" />
+                  </div>
+                </div>
+                <p className="text-[11px] text-gray-400 leading-relaxed pl-36">
+                  간격 &gt; 0 이면 단어 1개씩 회전. 표어가 짧으면 (≤ 3 단어 또는 15자 미만) 한 줄에 큰 글씨로 정적 표시.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* 메뉴바 글꼴 */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">

@@ -11,6 +11,18 @@ const THEME_KEYS = [
   "theme_footer_from",
   "theme_footer_to",
   "theme_header_bg",
+  "theme_motto_text",
+  "theme_motto_text_font",
+  "theme_motto_text_size",
+  "theme_motto_text_weight",
+  "theme_motto_text_style",
+  "theme_motto_subtext",
+  "theme_motto_subtext_font",
+  "theme_motto_subtext_size",
+  "theme_motto_subtext_weight",
+  "theme_motto_subtext_style",
+  "theme_motto_color",
+  "theme_motto_banner_interval",
 ] as const;
 
 const SKIN_KEYS = [
@@ -73,6 +85,18 @@ const THEME_DEFAULTS: Record<string, string> = {
   theme_nav_font_size: "14px",
   theme_nav_font_color: "#dbeafe",
   theme_header_bg: "#eff6ff",
+  theme_motto_text: "그러나 너는 배우고 확신한 일에 거하라\n네가 뉘게서 배운 것을 알며",
+  theme_motto_text_font: "",
+  theme_motto_text_size: "18px",
+  theme_motto_text_weight: "normal",
+  theme_motto_text_style: "italic",
+  theme_motto_subtext: "(딤후 3:14)",
+  theme_motto_subtext_font: "",
+  theme_motto_subtext_size: "13px",
+  theme_motto_subtext_weight: "normal",
+  theme_motto_subtext_style: "normal",
+  theme_motto_color: "#6b7280",
+  theme_motto_banner_interval: "0",
 };
 
 const SKIN_DEFAULTS: Record<string, string> = {

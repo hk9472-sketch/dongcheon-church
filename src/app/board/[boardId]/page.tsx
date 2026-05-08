@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import Pagination from "@/components/board/Pagination";
 import SearchBar from "@/components/board/SearchBar";
 import BoardListTable from "@/components/board/BoardListTable";
+import BoardGuideBox from "@/components/board/BoardGuideBox";
 
 // ============================================================
 // 게시판 목록 페이지 (제로보드 zboard.php 대체)
@@ -175,9 +176,7 @@ export default async function BoardListPage({ params, searchParams }: PageProps)
       </div>
 
       {/* 게시판 안내 문구 */}
-      <div className="px-4 py-2.5 bg-blue-50/60 border border-blue-100 rounded text-xs text-gray-500 italic leading-relaxed whitespace-pre-line">
-        {board.guideText || "예배당처럼 아끼고 서로 조심하셨으면 합니다.\n주로 우리 교인들이 사용하겠지만 혹 손님들이 오시더라도 깨끗한 우리의 모습을 보였으면 좋겠고, 서로의 신앙에 유익이 되도록 했으면 좋겠습니다."}
-      </div>
+      <BoardGuideBox text={board.guideText} />
 
       {/* 카테고리 선택 (제로보드: $a_category) */}
       {board.useCategory && board.categories.length > 0 && (

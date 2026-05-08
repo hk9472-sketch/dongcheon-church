@@ -3,6 +3,7 @@ import Image from "next/image";
 import prisma from "@/lib/db";
 import { calcPagination, formatDate } from "@/lib/utils";
 import Pagination from "@/components/board/Pagination";
+import BoardGuideBox from "@/components/board/BoardGuideBox";
 
 // ============================================================
 // 갤러리 모드 (제로보드 daerew_BASICgallery 스킨 대체)
@@ -84,9 +85,7 @@ export default async function GalleryPage({ params, searchParams }: PageProps) {
       </div>
 
       {/* 게시판 안내 문구 */}
-      <div className="px-4 py-2.5 bg-blue-50/60 border border-blue-100 rounded text-xs text-gray-500 italic leading-relaxed whitespace-pre-line">
-        {board.guideText || "예배당처럼 아끼고 서로 조심하셨으면 합니다.\n주로 우리 교인들이 사용하겠지만 혹 손님들이 오시더라도 깨끗한 우리의 모습을 보였으면 좋겠고, 서로의 신앙에 유익이 되도록 했으면 좋겠습니다."}
-      </div>
+      <BoardGuideBox text={board.guideText} />
 
       {/* 갤러리 그리드 */}
       {posts.length > 0 ? (
