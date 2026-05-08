@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/db";
 import { backupPosts } from "@/lib/operationBackup";
 
@@ -81,14 +82,63 @@ export async function POST(request: NextRequest) {
     select: { id: true, boardId: true, headnum: true, createdAt: true },
   });
 
-  // 3) 이미 대상 게시판에 있는 글이 섞여있으면 거부
-  if (allMembers.some((m) => m.boardId === targetBoardId)) {
+  // 3) 이동 유형 판정
+  //    - 모든 멤버가 이미 target board 안 → "같은 게시판 내 카테고리 변경" 모드
+  //    - 모든 멤버가 target board 외부 → "게시판 간 이동" 모드 (기존 동작)
+  //    - 섞여 있으면 거부 (비일관 선택)
+  const allInTarget = allMembers.every((m) => m.boardId === targetBoardId);
+  const noneInTarget = allMembers.every((m) => m.boardId !== targetBoardId);
+  if (!allInTarget && !noneInTarget) {
     return NextResponse.json(
-      { message: "선택된 글 중 일부가 이미 대상 게시판에 있습니다." },
+      {
+        message:
+          "선택된 글 중 일부만 대상 게시판에 있습니다. 모두 이동하거나 모두 카테고리 변경이 되도록 선택을 일관되게 해주세요.",
+      },
       { status: 400 }
     );
   }
 
+  const allMemberIds = allMembers.map((m) => m.id);
+
+  // 같은 게시판 내 — 카테고리만 변경. headnum/위치 유지.
+  if (allInTarget) {
+    const backup = await backupPosts(
+      "bulk-move",
+      `${allMemberIds.length}건 카테고리 변경 → "${target.title}"${
+        targetCategoryId ? ` (카테고리 ${targetCategoryId})` : " (카테고리 없음)"
+      }`,
+      allMemberIds,
+      admin.userId
+    );
+
+    await prisma.$transaction(async (tx) => {
+      if (targetCategoryId !== null) {
+        await tx.$executeRaw`
+          UPDATE posts
+          SET categoryId = ${targetCategoryId}
+          WHERE id IN (${Prisma.join(allMemberIds)})
+        `;
+      } else {
+        await tx.$executeRaw`
+          UPDATE posts
+          SET categoryId = NULL
+          WHERE id IN (${Prisma.join(allMemberIds)})
+        `;
+      }
+    });
+
+    return NextResponse.json({
+      success: true,
+      treeCount: treeKeys.length,
+      movedCount: allMembers.length,
+      mode: "category-change",
+      targetSlug: target.slug,
+      targetTitle: target.title,
+      backupId: backup.id,
+    });
+  }
+
+  // 게시판 간 이동 — 기존 로직
   // 4) 트리 키별 MIN(createdAt) — 트리 위치 결정용
   const treeAge = new Map<string, Date>();
   for (const m of allMembers) {
@@ -111,7 +161,6 @@ export async function POST(request: NextRequest) {
   const baseMin = targetMin._min.headnum ?? 0;
 
   // 5.5) 작업 직전 백업 — 영향받는 모든 트리 멤버의 현재 상태 snapshot
-  const allMemberIds = allMembers.map((m) => m.id);
   const backup = await backupPosts(
     "bulk-move",
     `${allMemberIds.length}건 → 게시판 "${target.title}"${
@@ -150,6 +199,7 @@ export async function POST(request: NextRequest) {
     success: true,
     treeCount: treesSorted.length,
     movedCount: allMembers.length,
+    mode: "board-move",
     targetSlug: target.slug,
     targetTitle: target.title,
     backupId: backup.id,

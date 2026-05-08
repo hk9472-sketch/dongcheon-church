@@ -133,16 +133,23 @@ export default function BulkMovePage() {
       setMessage({ type: "err", text: "대상 게시판을 선택하세요." });
       return;
     }
-    if (sourceBoardId === targetBoardId) {
-      setMessage({ type: "err", text: "원본과 대상 게시판이 같습니다." });
+    const isSameBoard = sourceBoardId === targetBoardId;
+    if (isSameBoard && targetCategoryId === "") {
+      setMessage({ type: "err", text: "같은 게시판으로 이동할 때는 대상 카테고리를 명시해 주세요." });
       return;
     }
     const targetCat = targetCategories.find(
       (c) => typeof targetCategoryId === "number" && c.id === targetCategoryId
     );
-    const confirmMsg = `${selected.size}개 글(답글 포함 트리 단위)을 "${
-      boards.find((b) => b.id === targetBoardId)?.title || ""
-    }${targetCat ? ` / ${targetCat.name}` : ""}" 게시판으로 이동합니다. 진행할까요?`;
+    const targetBoardTitle = boards.find((b) => b.id === targetBoardId)?.title || "";
+    const targetCatLabel = targetCat
+      ? targetCat.name
+      : targetCategoryId === "none"
+        ? "(카테고리 없음)"
+        : "";
+    const confirmMsg = isSameBoard
+      ? `${selected.size}개 글(답글 포함 트리 단위)의 카테고리를 "${targetCatLabel}" 으로 변경합니다. headnum 위치는 유지됩니다. 진행할까요?`
+      : `${selected.size}개 글(답글 포함 트리 단위)을 "${targetBoardTitle}${targetCatLabel ? ` / ${targetCatLabel}` : ""}" 게시판으로 이동합니다. 진행할까요?`;
     if (!confirm(confirmMsg)) return;
 
     setMoving(true);
@@ -162,9 +169,12 @@ export default function BulkMovePage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "이동 실패");
+      const isCatChange = data.mode === "category-change";
       setMessage({
         type: "ok",
-        text: `${data.treeCount}개 트리(글 ${data.movedCount}건)를 "${data.targetTitle}" 으로 이동했습니다. 백업 ID: ${data.backupId} (관리메뉴 → 작업 백업/복원에서 되돌릴 수 있음)`,
+        text: isCatChange
+          ? `${data.treeCount}개 트리(글 ${data.movedCount}건)의 카테고리를 변경했습니다. 백업 ID: ${data.backupId} (관리메뉴 → 작업 백업/복원에서 되돌릴 수 있음)`
+          : `${data.treeCount}개 트리(글 ${data.movedCount}건)를 "${data.targetTitle}" 으로 이동했습니다. 백업 ID: ${data.backupId} (관리메뉴 → 작업 백업/복원에서 되돌릴 수 있음)`,
       });
       // 목록 재조회
       fetchPosts();
@@ -180,10 +190,12 @@ export default function BulkMovePage() {
       <div>
         <h1 className="text-xl font-bold text-gray-800">게시글 일괄 이동</h1>
         <p className="mt-1 text-sm text-gray-500">
-          원본 게시판에서 글을 선택해 다른 게시판/카테고리로 한번에 이동합니다.
-          답글이 있는 글은 트리 전체가 함께 이동하며, 대상 게시판 기준으로
-          headnum 이 최신(가장 위) 위치로 새로 부여됩니다.
+          원본 게시판에서 글을 선택해 일괄 이동합니다. 답글이 있는 글은 트리 전체가 함께 처리됩니다.
         </p>
+        <ul className="mt-1.5 text-xs text-gray-500 list-disc list-inside space-y-0.5">
+          <li><strong>다른 게시판</strong> 으로 이동: 대상 기준 headnum 이 최신(가장 위)으로 새로 부여</li>
+          <li><strong>같은 게시판 내 카테고리 변경</strong>: 대상 카테고리만 변경, headnum 위치 유지</li>
+        </ul>
       </div>
 
       {message && (
@@ -369,13 +381,11 @@ export default function BulkMovePage() {
                 className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
               >
                 <option value="">선택...</option>
-                {boards
-                  .filter((b) => b.id !== sourceBoardId)
-                  .map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.title} ({b.slug})
-                    </option>
-                  ))}
+                {boards.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.title} ({b.slug}){b.id === sourceBoardId ? " — 같은 게시판 (카테고리 변경)" : ""}
+                  </option>
+                ))}
               </select>
             </div>
 
