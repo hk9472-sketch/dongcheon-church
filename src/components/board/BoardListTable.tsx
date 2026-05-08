@@ -226,13 +226,6 @@ export default function BoardListTable({
                     href={`/board/${boardSlug}/${post.id}`}
                     className="text-gray-900 font-medium hover:text-blue-700"
                   >
-                    {post.hasRecentComment && (
-                      <span
-                        className="inline-block w-1.5 h-1.5 mr-1.5 rounded-full bg-red-500 align-middle animate-pulse"
-                        title="최근 댓글 있음"
-                        aria-label="최근 댓글 있음"
-                      />
-                    )}
                     {useCategory && post.categoryName && (
                       <span className="text-xs text-blue-600 font-normal mr-1.5">[{post.categoryName}]</span>
                     )}
@@ -301,13 +294,6 @@ export default function BoardListTable({
                         href={`/board/${boardSlug}/${post.id}`}
                         className="text-gray-800 hover:text-blue-700"
                       >
-                        {post.hasRecentComment && (
-                          <span
-                            className="inline-block w-1.5 h-1.5 mr-1.5 rounded-full bg-red-500 align-middle animate-pulse"
-                            title="최근 댓글 있음"
-                            aria-label="최근 댓글 있음"
-                          />
-                        )}
                         {useCategory && post.categoryName && (
                           <span className="text-xs text-blue-600 mr-1.5">[{post.categoryName}]</span>
                         )}

@@ -476,7 +476,7 @@ function BoardWidget({ board, rows }: {
             {post ? (
               <Link
                 href={`/board/${board.slug}/${post.id}`}
-                className="flex items-center px-2.5 sm:px-3 hover:bg-gray-50 transition-colors group w-full"
+                className="flex items-center px-2.5 sm:px-3 hover:bg-gray-50 transition-colors group w-full min-w-0"
               >
                 <span
                   className="flex-shrink-0 mr-1.5 sm:mr-2 font-mono"
@@ -484,38 +484,38 @@ function BoardWidget({ board, rows }: {
                 >
                   {formatShortDate(post.createdAt)}
                 </span>
+                {/* 제목 영역 — 제목만 truncate, 그 외 prefix/suffix 는 shrink-0 로 항상 보이게 */}
                 <span
-                  className="group-hover:opacity-80 truncate flex-1 mr-1 sm:mr-2"
+                  className="group-hover:opacity-80 flex items-center min-w-0 flex-1 mr-1 sm:mr-2"
                   style={{ fontFamily: "var(--skin-widget-post-font)", fontSize: "var(--skin-widget-post-size)", color: "var(--skin-widget-post-color)", fontWeight: "var(--skin-widget-post-weight)" as never, textDecoration: "var(--skin-widget-post-decoration)" as never, fontStyle: "var(--skin-widget-post-style)" as never }}
                 >
-                  {post.hasRecentComment && (
-                    <span
-                      className="inline-block w-1.5 h-1.5 mr-1 rounded-full bg-red-500 align-middle animate-pulse"
-                      title="최근 댓글 있음"
-                      aria-label="최근 댓글 있음"
-                    />
-                  )}
                   {post.depth > 0 && (
-                    <span className="text-gray-400 text-[10px] sm:text-xs mr-0.5">└</span>
+                    <span className="shrink-0 text-gray-400 text-[10px] sm:text-xs mr-0.5">└</span>
                   )}
                   {post.isNotice && (
-                    <span className="inline-block text-[10px] sm:text-xs text-blue-600 font-bold mr-1 sm:mr-1.5">[공지]</span>
+                    <span className="shrink-0 inline-block text-[10px] sm:text-xs text-blue-600 font-bold mr-1 sm:mr-1.5">[공지]</span>
                   )}
                   {post.isSecret && (
-                    <span className="inline-block text-[10px] sm:text-xs mr-0.5 align-middle" title="비밀글">🔒</span>
+                    <span className="shrink-0 inline-block text-[10px] sm:text-xs mr-0.5 align-middle" title="비밀글">🔒</span>
                   )}
-                  {post.subject}
-                  {post.hasAttachment && <FloppyIcon className="ml-1 w-3.5 h-3.5 text-blue-600" />}
-                  {" "}
+                  {/* 제목 — 길면 ... 으로 잘림 */}
+                  <span className="truncate min-w-0">
+                    {post.subject}
+                  </span>
+                  {/* 끝 뱃지 — 제목이 잘려도 항상 보임 */}
+                  {post.hasAttachment && <FloppyIcon className="shrink-0 ml-1 w-3.5 h-3.5 text-blue-600" />}
                   <span
+                    className="shrink-0 ml-1"
                     style={{ fontFamily: "var(--skin-widget-author-font)", fontSize: "var(--skin-widget-author-size)", color: "var(--skin-widget-author-color)", fontWeight: "var(--skin-widget-author-weight)" as never, textDecoration: "var(--skin-widget-author-decoration)" as never, fontStyle: "var(--skin-widget-author-style)" as never }}
                   >
                     [{post.authorName}]
                   </span>
-                  <PostBadge createdAt={post.createdAt} updatedAt={post.updatedAt} />
+                  <span className="shrink-0">
+                    <PostBadge createdAt={post.createdAt} updatedAt={post.updatedAt} />
+                  </span>
                   {post.totalComment > 0 && (
                     <span
-                      className={`inline-block ml-1 text-[10px] sm:text-xs font-bold align-middle ${
+                      className={`shrink-0 inline-block ml-1 text-[10px] sm:text-xs font-bold align-middle ${
                         post.hasRecentComment
                           ? "text-red-500"
                           : "text-gray-400"
@@ -573,7 +573,7 @@ function RecentPostsWidget({ posts, rows }: { posts: RecentPost[]; rows: number 
             {post ? (
               <Link
                 href={`/board/${post.boardSlug}/${post.id}`}
-                className="flex items-center px-2.5 sm:px-3 hover:bg-gray-50 transition-colors group w-full"
+                className="flex items-center px-2.5 sm:px-3 hover:bg-gray-50 transition-colors group w-full min-w-0"
               >
                 <span
                   className="flex-shrink-0 mr-1.5 sm:mr-2 font-mono"
@@ -582,20 +582,21 @@ function RecentPostsWidget({ posts, rows }: { posts: RecentPost[]; rows: number 
                   {formatShortDate(post.updatedAt)}
                 </span>
                 <span
-                  className="group-hover:opacity-80 truncate flex-1 mr-1 sm:mr-2"
+                  className="group-hover:opacity-80 flex items-center min-w-0 flex-1 mr-1 sm:mr-2"
                   style={{ fontFamily: "var(--skin-widget-post-font)", fontSize: "var(--skin-widget-post-size)", color: "var(--skin-widget-post-color)", fontWeight: "var(--skin-widget-post-weight)" as never }}
                 >
                   {post.depth > 0 && (
-                    <span className="text-gray-400 text-[10px] sm:text-xs mr-0.5">└</span>
+                    <span className="shrink-0 text-gray-400 text-[10px] sm:text-xs mr-0.5">└</span>
                   )}
-                  {post.isSecret && <span className="text-[10px] sm:text-xs mr-0.5 align-middle" title="비밀글">🔒</span>}
-                  {post.subject}
-                  {post.hasAttachment && <FloppyIcon className="ml-1 w-3.5 h-3.5 text-blue-600" />}
-                  {" "}
-                  <span style={{ fontFamily: "var(--skin-widget-author-font)", fontSize: "var(--skin-widget-author-size)", color: "var(--skin-widget-author-color)", fontWeight: "var(--skin-widget-author-weight)" as never }}>
+                  {post.isSecret && <span className="shrink-0 text-[10px] sm:text-xs mr-0.5 align-middle" title="비밀글">🔒</span>}
+                  <span className="truncate min-w-0">{post.subject}</span>
+                  {post.hasAttachment && <FloppyIcon className="shrink-0 ml-1 w-3.5 h-3.5 text-blue-600" />}
+                  <span className="shrink-0 ml-1" style={{ fontFamily: "var(--skin-widget-author-font)", fontSize: "var(--skin-widget-author-size)", color: "var(--skin-widget-author-color)", fontWeight: "var(--skin-widget-author-weight)" as never }}>
                     [{post.authorName}]
                   </span>
-                  <PostBadge createdAt={post.createdAt} updatedAt={post.updatedAt} />
+                  <span className="shrink-0">
+                    <PostBadge createdAt={post.createdAt} updatedAt={post.updatedAt} />
+                  </span>
                 </span>
               </Link>
             ) : (
@@ -644,7 +645,7 @@ function RecentCommentsWidget({ comments, rows }: { comments: RecentComment[]; r
             {comment ? (
               <Link
                 href={`/board/${comment.post.board.slug}/${comment.postId}`}
-                className="flex items-center px-2.5 sm:px-3 hover:bg-gray-50 transition-colors group w-full"
+                className="flex items-center px-2.5 sm:px-3 hover:bg-gray-50 transition-colors group w-full min-w-0"
               >
                 <span
                   className="flex-shrink-0 mr-1.5 sm:mr-2 font-mono"
@@ -653,15 +654,18 @@ function RecentCommentsWidget({ comments, rows }: { comments: RecentComment[]; r
                   {formatShortDate(comment.updatedAt)}
                 </span>
                 <span
-                  className="group-hover:opacity-80 truncate flex-1 mr-1 sm:mr-2"
+                  className="group-hover:opacity-80 flex items-center min-w-0 flex-1 mr-1 sm:mr-2"
                   style={{ fontFamily: "var(--skin-widget-post-font)", fontSize: "var(--skin-widget-post-size)", color: "var(--skin-widget-post-color)", fontWeight: "var(--skin-widget-post-weight)" as never }}
                 >
-                  {comment.content.replace(/<[^>]*>/g, "").substring(0, 50)}
-                  {" "}
-                  <span style={{ fontFamily: "var(--skin-widget-author-font)", fontSize: "var(--skin-widget-author-size)", color: "var(--skin-widget-author-color)", fontWeight: "var(--skin-widget-author-weight)" as never }}>
+                  <span className="truncate min-w-0">
+                    {comment.content.replace(/<[^>]*>/g, "").substring(0, 50)}
+                  </span>
+                  <span className="shrink-0 ml-1" style={{ fontFamily: "var(--skin-widget-author-font)", fontSize: "var(--skin-widget-author-size)", color: "var(--skin-widget-author-color)", fontWeight: "var(--skin-widget-author-weight)" as never }}>
                     [{comment.authorName}]
                   </span>
-                  <PostBadge createdAt={comment.createdAt} updatedAt={comment.updatedAt} />
+                  <span className="shrink-0">
+                    <PostBadge createdAt={comment.createdAt} updatedAt={comment.updatedAt} />
+                  </span>
                 </span>
               </Link>
             ) : (
