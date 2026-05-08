@@ -9,8 +9,12 @@ import { usePathname } from "next/navigation";
  * 페이지 이동 시 /api/visitor 로 POST 요청을 보내 방문 기록을 저장합니다.
  * - 같은 세션에서 동일 경로 새로고침 시 중복 전송하지 않음
  * - 서버 측에서도 같은 IP는 하루 1회만 카운트
+ * - 페이지 진입 후 DWELL_MS 동안 머물러야 카운트 (히트앤런 봇 거름)
+ *   3초 안에 떠나면 cleanup 에서 setTimeout 취소되어 POST 자체가 안 나감
  * 렌더링되는 UI 요소는 없습니다.
  */
+const DWELL_MS = 3000;
+
 export default function VisitorTracker() {
   const pathname = usePathname();
   const sentPaths = useRef<Set<string>>(new Set());
@@ -60,18 +64,24 @@ export default function VisitorTracker() {
     }
     sentPaths.current.add(pathname);
 
-    // 방문 기록 전송 (fire-and-forget)
-    fetch("/api/visitor", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        path: pathname,
-        referer: document.referrer || null,
-        userAgent: navigator.userAgent,
-      }),
-    }).catch(() => {
-      // 방문자 추적 실패는 무시 (사용자 경험에 영향 없음)
-    });
+    // 페이지 진입 후 DWELL_MS 동안 머문 경우에만 방문 기록 전송.
+    // 페이지 떠나면 (pathname 변경 → cleanup 실행) clearTimeout 으로 취소되어
+    // hit-and-run 봇은 카운트되지 않음. 첫 방문자라도 페이지 본 사람은 보존.
+    const timer = setTimeout(() => {
+      fetch("/api/visitor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: pathname,
+          referer: document.referrer || null,
+          userAgent: navigator.userAgent,
+        }),
+      }).catch(() => {
+        // 방문자 추적 실패는 무시 (사용자 경험에 영향 없음)
+      });
+    }, DWELL_MS);
+
+    return () => clearTimeout(timer);
   }, [pathname]);
 
   return null;
