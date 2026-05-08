@@ -13,6 +13,7 @@ import ResizableImage from "./ResizableImage";
 import MediaNode, { detectMediaKind, youtubeEmbedUrl } from "./MediaExtension";
 import MediaRow from "./MediaRow";
 import MediaUrlDialog from "./MediaUrlDialog";
+import TableBorderPicker from "./TableBorderPicker";
 import Link from "@tiptap/extension-link";
 import { Table } from "@tiptap/extension-table";
 import { CellSelection, selectionCell } from "prosemirror-tables";
@@ -1741,69 +1742,55 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
               className="w-7 h-7 rounded cursor-pointer border border-gray-300"
             />
 
-            {/* 표 외곽선 색상 — 표 전체 (셀 단위 색이 우선) */}
-            <span className="inline-flex items-center gap-0.5 ml-1">
-              <span className="text-[11px] text-gray-500 select-none">표</span>
-              <input
-                type="color"
-                onChange={(e) => {
-                  editor
-                    .chain()
-                    .focus()
-                    .updateAttributes("table", { borderColor: e.target.value })
-                    .run();
-                }}
-                title="표 외곽선 색상 — 표 안 모든 셀에 적용 (셀 단위 색이 우선)"
-                className="w-7 h-7 rounded cursor-pointer border border-gray-300"
-              />
-              <button
-                type="button"
-                onClick={() =>
-                  editor
-                    .chain()
-                    .focus()
-                    .updateAttributes("table", { borderColor: null })
-                    .run()
-                }
-                title="표 외곽선 색상 초기화"
-                className="px-1 text-xs text-gray-500 hover:text-red-600 leading-none"
-              >
-                ✕
-              </button>
-            </span>
+            {/* 표 외곽선 색상 — 16색 팔레트 + 적용 버튼 */}
+            <TableBorderPicker
+              label="표"
+              title="표 외곽선 색상 — 표 안 모든 셀에 적용 (셀 단위 색이 우선)"
+              current={
+                (editor.getAttributes("table").borderColor as string | null) ?? null
+              }
+              onApply={(color) => {
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("table", { borderColor: color })
+                  .run();
+              }}
+              onReset={() => {
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("table", { borderColor: null })
+                  .run();
+              }}
+            />
 
             {/* 셀 외곽선 색상 — 현재 선택 셀만 (드래그로 다중 선택 시 모두 적용) */}
-            <span className="inline-flex items-center gap-0.5">
-              <span className="text-[11px] text-gray-500 select-none">셀</span>
-              <input
-                type="color"
-                onChange={(e) => {
-                  editor
-                    .chain()
-                    .focus()
-                    .updateAttributes("tableCell", { borderColor: e.target.value })
-                    .updateAttributes("tableHeader", { borderColor: e.target.value })
-                    .run();
-                }}
-                title="셀 외곽선 색상 — 선택한 셀에만 적용"
-                className="w-7 h-7 rounded cursor-pointer border border-gray-300"
-              />
-              <button
-                type="button"
-                onClick={() =>
-                  editor
-                    .chain()
-                    .focus()
-                    .updateAttributes("tableCell", { borderColor: null })
-                    .updateAttributes("tableHeader", { borderColor: null })
-                    .run()
-                }
-                title="셀 외곽선 색상 초기화"
-                className="px-1 text-xs text-gray-500 hover:text-red-600 leading-none"
-              >
-                ✕
-              </button>
-            </span>
+            <TableBorderPicker
+              label="셀"
+              title="셀 외곽선 색상 — 선택한 셀에만 적용"
+              current={
+                (editor.getAttributes("tableCell").borderColor as string | null) ??
+                (editor.getAttributes("tableHeader").borderColor as string | null) ??
+                null
+              }
+              onApply={(color) => {
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("tableCell", { borderColor: color })
+                  .updateAttributes("tableHeader", { borderColor: color })
+                  .run();
+              }}
+              onReset={() => {
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("tableCell", { borderColor: null })
+                  .updateAttributes("tableHeader", { borderColor: null })
+                  .run();
+              }}
+            />
           </>
         )}
       </div>
