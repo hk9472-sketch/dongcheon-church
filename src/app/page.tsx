@@ -488,6 +488,13 @@ function BoardWidget({ board, rows }: {
                   className="group-hover:opacity-80 truncate flex-1 mr-1 sm:mr-2"
                   style={{ fontFamily: "var(--skin-widget-post-font)", fontSize: "var(--skin-widget-post-size)", color: "var(--skin-widget-post-color)", fontWeight: "var(--skin-widget-post-weight)" as never, textDecoration: "var(--skin-widget-post-decoration)" as never, fontStyle: "var(--skin-widget-post-style)" as never }}
                 >
+                  {post.hasRecentComment && (
+                    <span
+                      className="inline-block w-1.5 h-1.5 mr-1 rounded-full bg-red-500 align-middle animate-pulse"
+                      title="최근 댓글 있음"
+                      aria-label="최근 댓글 있음"
+                    />
+                  )}
                   {post.depth > 0 && (
                     <span className="text-gray-400 text-[10px] sm:text-xs mr-0.5">└</span>
                   )}

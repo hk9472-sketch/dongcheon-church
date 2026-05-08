@@ -226,6 +226,13 @@ export default function BoardListTable({
                     href={`/board/${boardSlug}/${post.id}`}
                     className="text-gray-900 font-medium hover:text-blue-700"
                   >
+                    {post.hasRecentComment && (
+                      <span
+                        className="inline-block w-1.5 h-1.5 mr-1.5 rounded-full bg-red-500 align-middle animate-pulse"
+                        title="최근 댓글 있음"
+                        aria-label="최근 댓글 있음"
+                      />
+                    )}
                     {useCategory && post.categoryName && (
                       <span className="text-xs text-blue-600 font-normal mr-1.5">[{post.categoryName}]</span>
                     )}
@@ -248,7 +255,11 @@ export default function BoardListTable({
                 <td className="py-2.5 text-center text-gray-600 hidden sm:table-cell">
                   {post.authorName}
                 </td>
-                <td className="py-2.5 text-center text-gray-500 hidden md:table-cell">
+                <td
+                  className={`py-2.5 text-center hidden md:table-cell ${
+                    post.hasRecentComment ? "text-red-500 font-medium" : "text-gray-500"
+                  }`}
+                >
                   {formatDate(post.createdAt)}
                 </td>
                 <td className="py-2.5 text-center text-gray-500 hidden md:table-cell">
@@ -290,6 +301,13 @@ export default function BoardListTable({
                         href={`/board/${boardSlug}/${post.id}`}
                         className="text-gray-800 hover:text-blue-700"
                       >
+                        {post.hasRecentComment && (
+                          <span
+                            className="inline-block w-1.5 h-1.5 mr-1.5 rounded-full bg-red-500 align-middle animate-pulse"
+                            title="최근 댓글 있음"
+                            aria-label="최근 댓글 있음"
+                          />
+                        )}
                         {useCategory && post.categoryName && (
                           <span className="text-xs text-blue-600 mr-1.5">[{post.categoryName}]</span>
                         )}
@@ -314,7 +332,11 @@ export default function BoardListTable({
                   <td className="py-2.5 text-center text-gray-600 hidden sm:table-cell">
                     {post.authorName}
                   </td>
-                  <td className="py-2.5 text-center text-gray-500 text-xs hidden md:table-cell">
+                  <td
+                    className={`py-2.5 text-center text-xs hidden md:table-cell ${
+                      post.hasRecentComment ? "text-red-500 font-medium" : "text-gray-500"
+                    }`}
+                  >
                     {formatDate(post.createdAt)}
                   </td>
                   <td className="py-2.5 text-center text-gray-500 hidden md:table-cell">
