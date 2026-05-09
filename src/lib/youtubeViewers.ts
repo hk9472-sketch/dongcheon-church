@@ -1,10 +1,12 @@
 import prisma from "@/lib/db";
+import { classifyService, loadWindows } from "@/lib/liveService";
 
 // ============================================================
 // YouTube 동시 시청자 폴링 + 누적 추적
 //
 // - YouTube Data API v3: videos.list?id=VIDEO_ID&part=liveStreamingDetails&key=API_KEY
-// - 30초 캐시 (호출 quota 보호)
+// - 5초 캐시 — 단, 서비스 윈도우(예배 시간) 안에서만 외부 호출
+// - 서비스 시간 외엔 cached state 그대로 반환 (quota 절약)
 // - state 는 site_settings.live_youtube_state 에 JSON 저장
 //   { date, concurrent, cumulative, polledAt, videoId }
 // - concurrent 가 직전 샘플보다 늘어나면 그 차이만큼 cumulative 증가
@@ -24,7 +26,7 @@ const STATE_KEY = "live_youtube_state";
 const URL_KEY = "live_worship_url";
 const API_KEY = "youtube_api_key";
 
-const POLL_INTERVAL_MS = 30 * 1000;
+const POLL_INTERVAL_MS = 5 * 1000;
 
 function todayKstYmd(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -129,7 +131,36 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
   const prev = await loadState();
   const now = Date.now();
 
-  // 캐시 적용 — videoId 같고 날짜 같고 30s 이내면 그대로 반환
+  // 서비스 윈도우(예배 시간) 안인지 판정 — force 가 아니면 윈도우 밖에선 외부 호출 X
+  const windows = await loadWindows();
+  const svc = classifyService(new Date(now), windows);
+  const inServiceWindow = svc.inProgress;
+
+  if (!force && !inServiceWindow) {
+    // 서비스 시간 외 — cached state 반환 (quota 절약). 누적은 그대로 유지.
+    if (prev && prev.videoId === videoId && prev.date === today) {
+      return {
+        ok: true,
+        hasApiKey: true,
+        videoId,
+        concurrent: prev.concurrent,
+        cumulative: prev.cumulative,
+        polledAt: prev.polledAt,
+        cached: true,
+      };
+    }
+    return {
+      ok: true,
+      hasApiKey: true,
+      videoId,
+      concurrent: 0,
+      cumulative: prev?.date === today ? prev.cumulative : 0,
+      polledAt: prev?.polledAt ?? 0,
+      cached: true,
+    };
+  }
+
+  // 서비스 윈도우 안 — 5s 캐시 적용
   if (
     !force &&
     prev &&

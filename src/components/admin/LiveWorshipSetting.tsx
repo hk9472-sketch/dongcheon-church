@@ -148,7 +148,9 @@ export default function LiveWorshipSetting() {
         <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
           Google Cloud Console → API & Services → Credentials → API key. <br />
           YouTube Data API v3 활성화 필요. 무료 quota 일 10,000 units (videos.list = 1 unit/호출).
-          설정 후 30초 캐시로 폴링 — 일 ~2,880 호출 사용.
+          <br />
+          <strong>예배 시간(서비스 윈도우)에만 5초 간격 폴링</strong> — 윈도우 밖에선 호출 X.
+          평균 일 ~2,300 호출 사용 (예배 총 ~3시간/일 기준).
         </p>
       </div>
 
