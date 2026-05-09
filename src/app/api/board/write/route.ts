@@ -294,9 +294,9 @@ export async function POST(request: NextRequest) {
             sitelink2,
             categoryId,
             commentPolicy,
-            // 회원이 비밀글에 새 unlock 비번 입력한 경우 password 도 갱신.
+            // 비번 갱신 — 회원이 새 비번 입력하면 password 갱신 (비밀글 unlock 또는 일반글 수정 비번).
             // 비번 빈 값이면 기존 password 유지 (필드 미포함).
-            ...(isSessionValid && isSecret && passwordRaw
+            ...(isSessionValid && passwordRaw && passwordRaw.trim().length > 0
               ? { password: await hashPassword(passwordRaw) }
               : {}),
             ...(isSessionValid && sessionUserId ? {

@@ -649,6 +649,17 @@ function WriteForm({ boardId }: { boardId: string }) {
                   className="px-2.5 py-1 text-sm border border-red-300 bg-red-50/30 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors w-72"
                 />
               )}
+              {/* 회원 + 일반글 — 선택적 비번 (있으면 비로그인 사용자도 비번으로 수정/삭제 가능) */}
+              {isLoggedIn && !isSecret && (
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="(선택) 비번 입력 — 다른 디바이스/비로그인에서 수정용"
+                  autoComplete="off"
+                  className="px-2.5 py-1 text-sm border border-gray-300 bg-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors w-72"
+                />
+              )}
               <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none hover:text-gray-900 transition-colors">
                 <input
                   type="checkbox"
