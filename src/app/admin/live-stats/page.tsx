@@ -55,6 +55,8 @@ export default function LiveStatsPage() {
   const [recent, setRecent] = useState<RecentDay[]>([]);
   const [today, setToday] = useState<RecentDay | null>(null);
   const [current, setCurrent] = useState<{ label: string; inProgress: boolean; currentCount: number } | null>(null);
+  // 탭 — windows / stats / log
+  const [tab, setTab] = useState<"windows" | "stats" | "log">("windows");
   // 기간 — 기본은 최근 14일
   const todayStr = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
   const fourteenAgoStr = new Date(Date.now() + 9 * 3600 * 1000 - 13 * 24 * 3600 * 1000)
@@ -223,7 +225,7 @@ export default function LiveStatsPage() {
         <p className="text-sm text-gray-500 mt-1">/live, /live-worship 페이지 자동 방문 카운트 — 서비스 시간별 분류.</p>
       </div>
 
-      {/* 현재 진행 */}
+      {/* 현재 진행 (모든 탭 공통) */}
       {current && (
         <div className={`rounded-lg p-4 border-2 ${current.inProgress ? "border-emerald-300 bg-emerald-50" : "border-gray-200 bg-gray-50"}`}>
           <div className="flex items-center justify-between">
@@ -234,14 +236,38 @@ export default function LiveStatsPage() {
               </p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-gray-500">{current.inProgress ? "현재까지 누적" : "최근 5분 접속"}</p>
+              <p className="text-xs text-gray-500">{current.inProgress ? "현재까지 누적" : "최근 30초 접속"}</p>
               <p className="text-3xl font-bold text-emerald-700">{current.currentCount}</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* 일자×서비스 매트릭스 */}
+      {/* 탭 네비게이션 */}
+      <div className="flex border-b border-gray-200">
+        {[
+          { key: "windows", label: "서비스 시간 설정", icon: "⏰" },
+          { key: "stats", label: "기간 일자별 통계", icon: "📊" },
+          { key: "log", label: "방문 로그", icon: "📋" },
+        ].map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key as "windows" | "stats" | "log")}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              tab === t.key
+                ? "border-blue-600 text-blue-700 bg-blue-50/50"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+          >
+            <span className="mr-1">{t.icon}</span>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* === 탭 2: 기간 일자별 통계 === */}
+      {tab === "stats" && (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-sm font-bold text-gray-700">일자별 통계</h2>
@@ -306,7 +332,10 @@ export default function LiveStatsPage() {
         </div>
       </div>
 
-      {/* 서비스 시간 윈도우 편집 */}
+      )}
+
+      {/* === 탭 1: 서비스 시간 윈도우 편집 === */}
+      {tab === "windows" && (
       <div className="bg-white rounded-lg shadow-sm border-2 border-amber-200 overflow-hidden">
         <div className="px-4 py-3 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
           <div>
@@ -411,7 +440,10 @@ export default function LiveStatsPage() {
         </div>
       </div>
 
-      {/* 기간 로그 조회 */}
+      )}
+
+      {/* === 탭 3: 기간 방문 로그 === */}
+      {tab === "log" && (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
           <h2 className="text-sm font-bold text-gray-700">기간 방문 로그</h2>
@@ -472,6 +504,7 @@ export default function LiveStatsPage() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
