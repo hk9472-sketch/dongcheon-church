@@ -35,7 +35,7 @@ export default function PostManageActions({
   onDone,
 }: Props) {
   const router = useRouter();
-  const [openMenu, setOpenMenu] = useState<"none" | "cat" | "board">("none");
+  const [openMenu, setOpenMenu] = useState<"none" | "cat" | "board" | "pw">("none");
   const [submitting, setSubmitting] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -47,6 +47,9 @@ export default function PostManageActions({
   const [pickedBoardId, setPickedBoardId] = useState<number | "">("");
   const [targetCategories, setTargetCategories] = useState<Category[]>([]);
   const [pickedTargetCatId, setPickedTargetCatId] = useState<number | "none" | "">("");
+
+  // 비번 설정 상태
+  const [pwInput, setPwInput] = useState("");
 
   // 외부 클릭 닫기
   useEffect(() => {
@@ -171,6 +174,37 @@ export default function PostManageActions({
     }
   }
 
+  async function applyPasswordSet() {
+    if (selectedIds.length === 0) return;
+    const pw = pwInput.trim();
+    const isClear = pw.length === 0;
+    const action = isClear ? "비번을 모두 제거" : `'${pw}' 비번을 설정`;
+    if (!confirm(`선택한 ${selectedIds.length}건의 글에 ${action}할까요?`)) return;
+    setSubmitting(true);
+    try {
+      const results = await Promise.all(
+        selectedIds.map((id) =>
+          fetch(`/api/admin/posts/${id}/password`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password: pw }),
+          }).then((r) => r.ok),
+        ),
+      );
+      const ok = results.filter(Boolean).length;
+      const fail = results.length - ok;
+      alert(`완료 — 성공 ${ok}건${fail > 0 ? ` / 실패 ${fail}건` : ""}.`);
+      setOpenMenu("none");
+      setPwInput("");
+      onDone();
+      router.refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "비번 설정 실패");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="relative inline-flex items-center gap-1.5" ref={ref}>
       {/* 카테고리 변경 — useCategory 인 게시판에서만 의미 있음 */}
@@ -192,6 +226,16 @@ export default function PostManageActions({
         className="px-3 py-1 text-xs border border-purple-300 text-purple-700 rounded hover:bg-purple-50"
       >
         게시판 이동 ▾
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setOpenMenu(openMenu === "pw" ? "none" : "pw")}
+        disabled={submitting}
+        className="px-3 py-1 text-xs border border-amber-300 text-amber-700 rounded hover:bg-amber-50"
+        title="선택 글에 비밀번호 설정/제거 — 비번 부여 후 비로그인 사용자도 비번으로 수정 가능"
+      >
+        비번 설정 🔑
       </button>
 
       {openMenu === "cat" && (
@@ -294,6 +338,42 @@ export default function PostManageActions({
               className="px-3 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-40"
             >
               적용
+            </button>
+          </div>
+        </div>
+      )}
+
+      {openMenu === "pw" && (
+        <div className="absolute z-30 top-full right-0 mt-1 w-72 rounded-md border border-amber-300 bg-white shadow-lg p-3 space-y-2">
+          <div className="text-xs font-semibold text-amber-800">비번 설정 / 제거</div>
+          <p className="text-[10px] text-gray-500 leading-relaxed">
+            선택한 <strong>{selectedIds.length}건</strong> 의 글에 비밀번호 설정 또는 제거.
+            <br />
+            비번 부여 후엔 <strong>비로그인 사용자도 그 비번으로 [수정 🔑] 가능</strong>.
+          </p>
+          <input
+            type="text"
+            value={pwInput}
+            onChange={(e) => setPwInput(e.target.value)}
+            placeholder="설정할 비번 (비우면 비번 제거)"
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded font-mono"
+            autoComplete="off"
+          />
+          <div className="flex justify-end gap-1.5">
+            <button
+              type="button"
+              onClick={() => setOpenMenu("none")}
+              className="px-2.5 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={applyPasswordSet}
+              disabled={submitting}
+              className="px-3 py-1 text-xs bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-40"
+            >
+              {pwInput.trim().length === 0 ? "제거" : "설정"}
             </button>
           </div>
         </div>
