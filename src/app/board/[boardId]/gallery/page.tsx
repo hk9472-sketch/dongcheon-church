@@ -59,10 +59,13 @@ export default async function GalleryPage({ params, searchParams }: PageProps) {
     return /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(name);
   }
 
-  // 본문 HTML 의 첫 <img src="..."> 추출
-  function getContentImageSrc(html: string): string | null {
-    const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
-    return m ? m[1] : null;
+  // 본문 HTML 의 모든 <img src="..."> 추출
+  function getContentImageSrcs(html: string): string[] {
+    const out: string[] = [];
+    const re = /<img[^>]+src=["']([^"']+)["']/gi;
+    let m;
+    while ((m = re.exec(html)) !== null) out.push(m[1]);
+    return out;
   }
 
   // HTML 제거 + 공백 정리 + 길이 컷 — 호버 툴팁용
@@ -81,13 +84,25 @@ export default async function GalleryPage({ params, searchParams }: PageProps) {
     return text.length > max ? text.slice(0, max) + "…" : text;
   }
 
-  function getThumbnailSrc(post: typeof posts[0]): string | null {
-    // 1) 첨부에서 이미지 우선
-    const img = post.attachments.find((a) => isImage(a.fileName));
-    if (img) return `/api/image?attachmentId=${img.id}`;
-    // 2) 본문 첫 이미지 fallback
-    return getContentImageSrc(post.content);
+  // 한 글의 모든 이미지 src 를 순서대로 수집 — 첨부 이미지 → 본문 임베드 이미지
+  function collectImageSrcs(post: typeof posts[0]): string[] {
+    const srcs: string[] = [];
+    for (const a of post.attachments) {
+      if (isImage(a.fileName)) srcs.push(`/api/image?attachmentId=${a.id}`);
+    }
+    for (const s of getContentImageSrcs(post.content)) srcs.push(s);
+    return srcs;
   }
+
+  // posts → 카드 엔트리 펼침. 이미지 1장이면 1카드, N장이면 N카드 (모두 같은 글 링크)
+  const cardEntries = posts.flatMap((post) => {
+    const srcs = collectImageSrcs(post);
+    const total = srcs.length;
+    if (total === 0) {
+      return [{ post, src: null as string | null, idx: 1, total: 1 }];
+    }
+    return srcs.map((src, i) => ({ post, src, idx: i + 1, total }));
+  });
 
   return (
     <div className="space-y-4">
@@ -116,20 +131,22 @@ export default async function GalleryPage({ params, searchParams }: PageProps) {
       <BoardGuideBox text={board.guideText} />
 
       {/* 갤러리 그리드 */}
-      {posts.length > 0 ? (
+      {cardEntries.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {posts.map((post) => (
+          {cardEntries.map((e, i) => (
             <GalleryCard
-              key={post.id}
-              href={`/board/${boardId}/${post.id}`}
-              thumbSrc={getThumbnailSrc(post)}
-              subject={post.subject}
-              authorName={post.authorName}
-              createdAtLabel={formatDate(post.createdAt)}
-              hit={post.hit}
-              vote={post.vote}
-              totalComment={post.totalComment}
-              contentSnippet={getContentSnippet(post.content)}
+              key={`${e.post.id}-${i}`}
+              href={`/board/${boardId}/${e.post.id}`}
+              thumbSrc={e.src}
+              subject={e.post.subject}
+              authorName={e.post.authorName}
+              createdAtLabel={formatDate(e.post.createdAt)}
+              hit={e.post.hit}
+              vote={e.post.vote}
+              totalComment={e.post.totalComment}
+              contentSnippet={getContentSnippet(e.post.content)}
+              imageIndex={e.idx}
+              imageTotal={e.total}
             />
           ))}
         </div>

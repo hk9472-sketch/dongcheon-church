@@ -15,6 +15,9 @@ interface Props {
   totalComment: number;
   /** 호버 툴팁용 본문 텍스트 (HTML 제거 + 200자 컷). 비어있으면 툴팁 안 뜸 */
   contentSnippet?: string;
+  /** 한 글에 이미지가 여러 장인 경우 — 1-based 현재 인덱스 / 총 개수 (없으면 표시 안 함) */
+  imageIndex?: number;
+  imageTotal?: number;
 }
 
 export default function GalleryCard({
@@ -27,7 +30,10 @@ export default function GalleryCard({
   vote,
   totalComment,
   contentSnippet,
+  imageIndex,
+  imageTotal,
 }: Props) {
+  const showIdxBadge = imageIndex && imageTotal && imageTotal > 1;
   const [hover, setHover] = useState(false);
   const showTooltip = hover && !!contentSnippet;
 
@@ -64,7 +70,16 @@ export default function GalleryCard({
               </svg>
             </div>
           )}
-          {/* 댓글 수 뱃지 */}
+          {/* 좌상단: 한 글에 이미지 여러 장이면 인덱스 뱃지 */}
+          {showIdxBadge && (
+            <span
+              className="absolute top-2 left-2 px-1.5 py-0.5 text-xs font-medium bg-black/60 text-white rounded"
+              title="같은 글의 이미지"
+            >
+              {imageIndex} / {imageTotal}
+            </span>
+          )}
+          {/* 우상단: 댓글 수 뱃지 */}
           {totalComment > 0 && (
             <span className="absolute top-2 right-2 px-1.5 py-0.5 text-xs font-bold bg-orange-500 text-white rounded">
               {totalComment}
