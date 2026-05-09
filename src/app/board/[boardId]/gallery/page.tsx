@@ -86,6 +86,46 @@ export default async function GalleryPage({ params, searchParams }: PageProps) {
     return false;
   }
 
+  // 단일 패스 엔티티 디코더 — name / decimal / hex 모두 처리.
+  // 알 수 없는 엔티티는 공백으로 (살아남아 toolitp 에 노출되지 않도록).
+  const NAMED_ENTITIES: Record<string, string> = {
+    nbsp: " ",
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    ensp: " ",
+    emsp: " ",
+    thinsp: " ",
+  };
+  function decodeEntitiesOnce(input: string): string {
+    return input.replace(
+      /&(?:#x([0-9a-fA-F]+)|#([0-9]+)|([a-zA-Z][a-zA-Z0-9]*));/g,
+      (_, hex, dec, name) => {
+        if (hex) {
+          const cp = parseInt(hex, 16);
+          if (Number.isFinite(cp) && cp >= 0 && cp <= 0x10ffff) {
+            return String.fromCodePoint(cp);
+          }
+          return " ";
+        }
+        if (dec) {
+          const cp = parseInt(dec, 10);
+          if (Number.isFinite(cp) && cp >= 0 && cp <= 0x10ffff) {
+            return String.fromCodePoint(cp);
+          }
+          return " ";
+        }
+        if (name) {
+          const lower = name.toLowerCase();
+          return NAMED_ENTITIES[lower] ?? " ";
+        }
+        return " ";
+      },
+    );
+  }
+
   // HTML 제거 + 엔티티 디코드 + 공백/특수문자 정리 + 길이 컷 — 호버 툴팁용
   function getContentSnippet(html: string, max = 200): string {
     // 1) 줄바꿈 의미 태그를 공백으로 → 모든 태그 제거
@@ -94,25 +134,15 @@ export default async function GalleryPage({ params, searchParams }: PageProps) {
       .replace(/<\/?(p|div|h[1-6]|li|tr|td)[^>]*>/gi, " ")
       .replace(/<[^>]*>/g, " ");
 
-    // 2) 엔티티 디코드 — 더블 인코딩(&amp;nbsp; 같은 케이스) 고려해 안정화될 때까지 반복
-    for (let i = 0; i < 4; i++) {
+    // 2) 엔티티 디코드 — 더블/트리플 인코딩(&amp;#160; / &amp;amp;#160; 등) 까지 안정화될 때까지 반복
+    for (let i = 0; i < 6; i++) {
       const before = text;
-      text = text
-        .replace(/&nbsp;/gi, " ")
-        .replace(/&lt;/gi, "<")
-        .replace(/&gt;/gi, ">")
-        .replace(/&quot;/gi, '"')
-        .replace(/&#39;/gi, "'")
-        .replace(/&apos;/gi, "'")
-        .replace(/&#(\d+);/g, (_, n) =>
-          String.fromCodePoint(Math.max(0, Math.min(0x10ffff, parseInt(n, 10) || 0))),
-        )
-        .replace(/&amp;/gi, "&");
+      text = decodeEntitiesOnce(text);
       if (text === before) break;
     }
 
-    // 3) 남은 알 수 없는 엔티티 제거
-    text = text.replace(/&[a-z#0-9]+;/gi, " ");
+    // 3) 마지막 안전망 — 어떤 형태든 남은 &xxx; 패턴은 모두 공백으로
+    text = text.replace(/&[^;\s]{1,20};/g, " ");
 
     // 4) 제어/invisible 문자 + 장식 도형 문자를 공백으로 (char-by-char)
     let cleaned = "";
