@@ -1,9 +1,9 @@
 import Link from "next/link";
-import Image from "next/image";
 import prisma from "@/lib/db";
 import { calcPagination, formatDate } from "@/lib/utils";
 import Pagination from "@/components/board/Pagination";
 import BoardGuideBox from "@/components/board/BoardGuideBox";
+import GalleryCard from "@/components/board/GalleryCard";
 
 // ============================================================
 // 갤러리 모드 (제로보드 daerew_BASICgallery 스킨 대체)
@@ -32,11 +32,14 @@ export default async function GalleryPage({ params, searchParams }: PageProps) {
   const page = Math.max(1, parseInt(query.page || "1", 10) || 1);
   const perPage = 12; // 갤러리는 12개씩 (4x3 grid)
 
+  // 첨부 이미지 OR 본문에 <img> 가 있는 글
   const where = {
     boardId: board.id,
     isNotice: false,
-    // 이미지 첨부 한 개라도 있는 글만
-    attachments: { some: {} },
+    OR: [
+      { attachments: { some: {} } },
+      { content: { contains: "<img" } },
+    ],
   };
 
   const totalPosts = await prisma.post.count({ where });
@@ -56,9 +59,34 @@ export default async function GalleryPage({ params, searchParams }: PageProps) {
     return /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(name);
   }
 
+  // 본문 HTML 의 첫 <img src="..."> 추출
+  function getContentImageSrc(html: string): string | null {
+    const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+    return m ? m[1] : null;
+  }
+
+  // HTML 제거 + 공백 정리 + 길이 컷 — 호버 툴팁용
+  function getContentSnippet(html: string, max = 200): string {
+    const text = html
+      .replace(/<br\s*\/?>/gi, " ")
+      .replace(/<\/?(p|div|h[1-6])[^>]*>/gi, " ")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!text) return "";
+    return text.length > max ? text.slice(0, max) + "…" : text;
+  }
+
   function getThumbnailSrc(post: typeof posts[0]): string | null {
+    // 1) 첨부에서 이미지 우선
     const img = post.attachments.find((a) => isImage(a.fileName));
-    return img ? `/api/image?attachmentId=${img.id}` : null;
+    if (img) return `/api/image?attachmentId=${img.id}`;
+    // 2) 본문 첫 이미지 fallback
+    return getContentImageSrc(post.content);
   }
 
   return (
@@ -90,57 +118,20 @@ export default async function GalleryPage({ params, searchParams }: PageProps) {
       {/* 갤러리 그리드 */}
       {posts.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {posts.map((post) => {
-            const thumbSrc = getThumbnailSrc(post);
-            return (
-              <Link
-                key={post.id}
-                href={`/board/${boardId}/${post.id}`}
-                className="group bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md hover:border-blue-300 transition-all skin-gallery-card"
-              >
-                {/* 썸네일 영역 */}
-                <div className="aspect-square bg-gray-100 relative overflow-hidden">
-                  {thumbSrc ? (
-                    <Image
-                      src={thumbSrc}
-                      alt={post.subject}
-                      fill
-                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                      className="object-cover group-hover:scale-105 transition-transform duration-300"
-                      unoptimized
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-300">
-                      <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
-                      </svg>
-                    </div>
-                  )}
-                  {/* 댓글 수 뱃지 */}
-                  {post.totalComment > 0 && (
-                    <span className="absolute top-2 right-2 px-1.5 py-0.5 text-xs font-bold bg-orange-500 text-white rounded">
-                      {post.totalComment}
-                    </span>
-                  )}
-                </div>
-
-                {/* 정보 */}
-                <div className="p-3">
-                  <h3 className="text-sm font-medium text-gray-800 truncate group-hover:text-blue-700">
-                    {post.subject}
-                  </h3>
-                  <div className="flex items-center justify-between mt-1.5 text-xs text-gray-500">
-                    <span>{post.authorName}</span>
-                    <span>{formatDate(post.createdAt)}</span>
-                  </div>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                    <span>조회 {post.hit}</span>
-                    {post.vote > 0 && <span>추천 {post.vote}</span>}
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
+          {posts.map((post) => (
+            <GalleryCard
+              key={post.id}
+              href={`/board/${boardId}/${post.id}`}
+              thumbSrc={getThumbnailSrc(post)}
+              subject={post.subject}
+              authorName={post.authorName}
+              createdAtLabel={formatDate(post.createdAt)}
+              hit={post.hit}
+              vote={post.vote}
+              totalComment={post.totalComment}
+              contentSnippet={getContentSnippet(post.content)}
+            />
+          ))}
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-sm border p-16 text-center text-gray-400">
