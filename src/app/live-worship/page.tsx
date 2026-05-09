@@ -1,5 +1,6 @@
 import prisma from "@/lib/db";
 import Link from "next/link";
+import LiveServiceTracker from "@/components/LiveServiceTracker";
 
 const DEFAULT_URL = "https://www.youtube.com/watch?v=7KxscHRMaBE";
 
@@ -40,6 +41,7 @@ export default async function LiveWorshipPage() {
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6 space-y-4">
+      <LiveServiceTracker />
       <div className="flex items-center gap-3">
         <span className="inline-block w-1 h-6 bg-red-600 rounded-full" />
         <h1 className="text-xl font-bold text-gray-800">내계집회</h1>

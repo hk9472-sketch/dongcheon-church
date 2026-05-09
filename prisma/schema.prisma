@@ -497,6 +497,29 @@ model SiteSetting {
 }
 
 // ============================================================
+// 실시간 예배 방문 기록 — /live, /live-worship 진입 시 서비스 분류 후 저장.
+// 서비스 윈도우(예: 새벽기도 03:00~05:00) 안에서만 분류되며, 그 외 시간 진입은 'other'.
+// 일자별/서비스별 통계 + 기간 로그 조회용.
+// ============================================================
+model LiveServiceVisit {
+  id           Int      @id @default(autoincrement())
+  ip           String   @db.VarChar(45)
+  userAgent    String?  @db.VarChar(500)
+  userId       Int?
+  path         String   @db.VarChar(50)   // /live, /live-worship
+  serviceCode  String   @db.VarChar(20)   // dawn, eve, sun_child_am, sun_adult_am, sun_adult_pm, sun_child_pm, other
+  serviceLabel String   @db.VarChar(50)   // 한글 라벨
+  serviceDate  DateTime @db.Date           // KST 기준 서비스 일자 (other 도 포함)
+  createdAt    DateTime @default(now())
+
+  @@index([serviceCode, serviceDate])
+  @@index([serviceDate])
+  @@index([ip, serviceDate, serviceCode])
+  @@index([createdAt])
+  @@map("live_service_visits")
+}
+
+// ============================================================
 // HWP PUA 매핑 — 한컴 글꼴 종속 PUA 코드포인트(F081 등) 를 표준 unicode 로.
 // 작성자가 인라인 모달로 직접 등록 (first-write-wins, 관리자만 수정 가능).
 // ============================================================

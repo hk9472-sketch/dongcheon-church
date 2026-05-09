@@ -2,6 +2,7 @@ import Link from "next/link";
 import LiveAttendanceForm from "./LiveAttendanceForm";
 import LiveViewerCount from "./LiveViewerCount";
 import LiveAttendanceList from "./LiveAttendanceList";
+import LiveServiceTracker from "@/components/LiveServiceTracker";
 
 /**
  * 다양한 YouTube URL 형식을 embed URL 로 변환한다.
@@ -88,6 +89,7 @@ export default function LivePage() {
 
   return (
     <div className="max-w-4xl mx-auto py-4 space-y-4">
+      <LiveServiceTracker />
       {/* 헤더 */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="w-1 h-8 bg-gradient-to-b from-red-500 to-red-700 rounded-full" />
