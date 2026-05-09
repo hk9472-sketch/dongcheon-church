@@ -55,7 +55,13 @@ export default function LiveStatsPage() {
   const [recent, setRecent] = useState<RecentDay[]>([]);
   const [today, setToday] = useState<RecentDay | null>(null);
   const [current, setCurrent] = useState<{ label: string; inProgress: boolean; currentCount: number } | null>(null);
-  const [days, setDays] = useState(14);
+  // 기간 — 기본은 최근 14일
+  const todayStr = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const fourteenAgoStr = new Date(Date.now() + 9 * 3600 * 1000 - 13 * 24 * 3600 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const [statFrom, setStatFrom] = useState(fourteenAgoStr);
+  const [statTo, setStatTo] = useState(todayStr);
 
   // 로그 조회 상태
   const [from, setFrom] = useState("");
@@ -170,14 +176,17 @@ export default function LiveStatsPage() {
   }
 
   const loadStats = useCallback(() => {
-    fetch(`/api/live/stats?days=${days}`)
+    const params = new URLSearchParams();
+    params.set("from", statFrom);
+    params.set("to", statTo);
+    fetch(`/api/live/stats?${params}`)
       .then((r) => r.json())
       .then((d) => {
         setRecent(d.recent || []);
         setToday(d.today);
         setCurrent(d.currentService);
       });
-  }, [days]);
+  }, [statFrom, statTo]);
 
   useEffect(() => {
     loadStats();
@@ -234,14 +243,35 @@ export default function LiveStatsPage() {
 
       {/* 일자×서비스 매트릭스 */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-gray-700">최근 일자별 통계</h2>
-          <select value={days} onChange={(e) => setDays(parseInt(e.target.value, 10))} className="text-xs border border-gray-300 rounded px-2 py-1">
-            <option value={7}>최근 7일</option>
-            <option value={14}>최근 14일</option>
-            <option value={30}>최근 30일</option>
-            <option value={60}>최근 60일</option>
-          </select>
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
+          <h2 className="text-sm font-bold text-gray-700">일자별 통계</h2>
+          <div className="flex items-center gap-2 text-xs">
+            <input
+              type="date"
+              value={statFrom}
+              onChange={(e) => setStatFrom(e.target.value)}
+              className="border border-gray-300 rounded px-2 py-1"
+            />
+            <span className="text-gray-400">~</span>
+            <input
+              type="date"
+              value={statTo}
+              onChange={(e) => setStatTo(e.target.value)}
+              className="border border-gray-300 rounded px-2 py-1"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const t = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+                const f = new Date(Date.now() + 9 * 3600 * 1000 - 13 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+                setStatFrom(f);
+                setStatTo(t);
+              }}
+              className="px-2 py-1 border border-gray-300 rounded text-gray-600 hover:bg-gray-50"
+            >
+              최근 14일
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">

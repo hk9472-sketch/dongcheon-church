@@ -16,7 +16,10 @@ import { pollYoutubeViewers } from "@/lib/youtubeViewers";
  * }
  */
 export async function GET(req: NextRequest) {
-  const days = Math.max(1, Math.min(60, parseInt(req.nextUrl.searchParams.get("days") || "14", 10)));
+  const sp = req.nextUrl.searchParams;
+  const days = Math.max(1, Math.min(365, parseInt(sp.get("days") || "14", 10)));
+  const fromStr = sp.get("from"); // YYYY-MM-DD (KST)
+  const toStr = sp.get("to");
 
   const now = new Date();
   const windows = await loadWindows();
@@ -35,25 +38,36 @@ export async function GET(req: NextRequest) {
     `;
     currentCount = r[0] ? Number(r[0].cnt) : 0;
   } else {
-    // 진행 중이 아니면 최근 5분 내 unique IP (단순 viewer 표시용)
-    const fiveMinAgo = new Date(now.getTime() - 5 * 60 * 1000);
+    // 진행 중이 아니면 최근 30초 내 unique IP — heartbeat 30s 간격이라 활성 시청자만 잡힘
+    const cutoff = new Date(now.getTime() - 30 * 1000);
     const r = await prisma.$queryRaw<{ cnt: bigint }[]>`
       SELECT COUNT(DISTINCT ip) AS cnt
       FROM live_service_visits
-      WHERE createdAt >= ${fiveMinAgo}
+      WHERE createdAt >= ${cutoff}
     `;
     currentCount = r[0] ? Number(r[0].cnt) : 0;
   }
 
-  // 2) 최근 N일 — 일자×서비스 unique IP 카운트
-  const sinceDate = new Date(now.getTime() - (days - 1) * 24 * 3600 * 1000);
-  const sinceDay = new Date(sinceDate.toISOString().slice(0, 10) + "T00:00:00+09:00");
+  // 2) 일자×서비스 unique IP 카운트 — from/to 우선, 없으면 최근 N일
+  const todayKstYmd = new Date(now.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  let sinceDayStr: string;
+  let untilDayStr: string;
+  if (fromStr || toStr) {
+    sinceDayStr = fromStr || "2009-01-01";
+    untilDayStr = toStr || todayKstYmd;
+  } else {
+    const sinceDate = new Date(now.getTime() - (days - 1) * 24 * 3600 * 1000);
+    sinceDayStr = new Date(sinceDate.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+    untilDayStr = todayKstYmd;
+  }
+  const sinceDay = new Date(sinceDayStr + "T00:00:00+09:00");
+  const untilDay = new Date(untilDayStr + "T23:59:59+09:00");
   const rows = await prisma.$queryRaw<
     { d: Date; serviceCode: string; cnt: bigint }[]
   >`
     SELECT serviceDate AS d, serviceCode, COUNT(DISTINCT ip) AS cnt
     FROM live_service_visits
-    WHERE serviceDate >= ${sinceDay}
+    WHERE serviceDate >= ${sinceDay} AND serviceDate <= ${untilDay}
     GROUP BY serviceDate, serviceCode
     ORDER BY serviceDate DESC, serviceCode ASC
   `;
@@ -66,16 +80,19 @@ export async function GET(req: NextRequest) {
     byDay.get(ymd)![r.serviceCode] = Number(r.cnt);
   }
 
-  // 4) 응답 정형화 — 오늘 분리 + recent 배열
-  const todayYmd = new Date(now.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  // 4) 응답 정형화 — 오늘 분리 + recent 배열 (sinceDayStr ~ untilDayStr 범위)
+  const todayYmd = todayKstYmd;
   const todayPerService = byDay.get(todayYmd) ?? {};
 
+  // sinceDay → untilDay 일자 시퀀스 생성 (DESC)
   const recentDates: string[] = [];
-  for (let i = 0; i < days; i++) {
-    const d = new Date(now.getTime() + 9 * 3600 * 1000 - i * 24 * 3600 * 1000)
-      .toISOString()
-      .slice(0, 10);
-    recentDates.push(d);
+  const startDate = new Date(sinceDayStr + "T00:00:00+09:00");
+  const endDate = new Date(untilDayStr + "T00:00:00+09:00");
+  const cursor = new Date(endDate);
+  while (cursor.getTime() >= startDate.getTime()) {
+    recentDates.push(new Date(cursor.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+    if (recentDates.length > 366) break;
   }
 
   const recent = recentDates.map((d) => {

@@ -36,18 +36,39 @@ export async function POST(req: NextRequest) {
   const me = await getCurrentUser().catch(() => null);
   const windows = await loadWindows();
   const svc = classifyService(new Date(), windows);
+  const serviceDate = new Date(svc.serviceDate + "T00:00:00+09:00");
+  const ipSafe = ip || "unknown";
 
-  await prisma.liveServiceVisit.create({
-    data: {
-      ip: ip || "unknown",
-      userAgent: userAgent.slice(0, 500) || null,
-      userId: me?.id ?? null,
-      path,
+  // 같은 (ip, serviceCode, serviceDate) 의 최근 5분 내 행이 있으면 timestamp 만 갱신.
+  // (heartbeat 30s 간격 → 행 폭증 방지. cumulative DISTINCT ip 카운트 동일 유지.)
+  const recent = await prisma.liveServiceVisit.findFirst({
+    where: {
+      ip: ipSafe,
       serviceCode: svc.code,
-      serviceLabel: svc.label,
-      serviceDate: new Date(svc.serviceDate + "T00:00:00+09:00"),
+      serviceDate,
+      createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) },
     },
+    select: { id: true },
   });
+
+  if (recent) {
+    await prisma.liveServiceVisit.update({
+      where: { id: recent.id },
+      data: { createdAt: new Date() },
+    });
+  } else {
+    await prisma.liveServiceVisit.create({
+      data: {
+        ip: ipSafe,
+        userAgent: userAgent.slice(0, 500) || null,
+        userId: me?.id ?? null,
+        path,
+        serviceCode: svc.code,
+        serviceLabel: svc.label,
+        serviceDate,
+      },
+    });
+  }
 
   return NextResponse.json({
     ok: true,
