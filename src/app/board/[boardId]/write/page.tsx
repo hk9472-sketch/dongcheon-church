@@ -30,6 +30,7 @@ function WriteForm({ boardId }: { boardId: string }) {
 
   const mode = searchParams.get("mode") || "write";
   const parentNo = searchParams.get("no");
+  const initialPw = searchParams.get("pw") || ""; // 사전 검증된 비번 prefill
 
   const [boardTitle, setBoardTitle] = useState("");
   const [guideText, setGuideText] = useState("");
@@ -38,7 +39,7 @@ function WriteForm({ boardId }: { boardId: string }) {
 
   // 폼 상태
   const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
+  const [password, setPassword] = useState(initialPw);
   const [email, setEmail] = useState("");
   const [homepage, setHomepage] = useState("");
   const [subject, setSubject] = useState("");

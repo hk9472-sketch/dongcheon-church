@@ -9,13 +9,26 @@ interface PostActionsProps {
   currentVote: number;
   canEdit?: boolean;
   canDelete?: boolean;
-  isGuestPost?: boolean;  // authorId=null인 비회원(ZeroBoard 이관) 글
+  isGuestPost?: boolean;     // authorId=null 인 글 (구 비회원/이관)
+  hasPassword?: boolean;     // 글에 비밀번호가 설정돼 있어 비번 알면 수정/삭제 가능
 }
 
-export default function PostActions({ boardSlug, postId, currentVote, canEdit = false, canDelete = false, isGuestPost = false }: PostActionsProps) {
+export default function PostActions({
+  boardSlug,
+  postId,
+  currentVote,
+  canEdit = false,
+  canDelete = false,
+  isGuestPost = false,
+  hasPassword = false,
+}: PostActionsProps) {
   const router = useRouter();
   const [vote, setVote] = useState(currentVote);
   const [voting, setVoting] = useState(false);
+
+  // 비번으로 수정/삭제 가능한 케이스 — 권한 없는데 비번이 설정돼 있을 때
+  const canPasswordEdit = !canEdit && (isGuestPost || hasPassword);
+  const canPasswordDelete = !canDelete && (isGuestPost || hasPassword);
 
   async function handleVote() {
     if (voting) return;
@@ -41,17 +54,46 @@ export default function PostActions({ boardSlug, postId, currentVote, canEdit = 
     }
   }
 
+  function handleEdit() {
+    if (canEdit) {
+      router.push(`/board/${boardSlug}/write?mode=modify&no=${postId}`);
+      return;
+    }
+    if (canPasswordEdit) {
+      // 비밀번호 검증 → 통과 시 수정 모드로
+      const pw = prompt("작성 시 입력한 비밀번호를 입력하세요:");
+      if (!pw) return;
+      // 미리 한 번 검증해서 잘못된 경우 즉시 안내
+      fetch("/api/board/verify-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId, password: pw }),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d?.ok) {
+            // 비번을 query param 으로 넘겨 write 페이지가 읽어 prefill / 검증
+            router.push(
+              `/board/${boardSlug}/write?mode=modify&no=${postId}&pw=${encodeURIComponent(pw)}`,
+            );
+          } else {
+            alert(d?.message || "비밀번호가 일치하지 않습니다.");
+          }
+        })
+        .catch(() => alert("검증에 실패했습니다."));
+    }
+  }
+
   async function handleDelete() {
     let password = "";
     if (canDelete) {
       if (!confirm("이 게시글을 삭제하시겠습니까?")) return;
-    } else if (isGuestPost) {
-      // 비회원 글: 비밀번호 확인
+    } else if (canPasswordDelete) {
       const input = prompt("비밀번호를 입력하세요:");
       if (!input) return;
       password = input;
     } else {
-      return; // 권한 없음 (버튼이 표시되지 않아야 하지만 방어 처리)
+      return;
     }
 
     try {
@@ -72,6 +114,9 @@ export default function PostActions({ boardSlug, postId, currentVote, canEdit = 
     }
   }
 
+  const showEdit = canEdit || canPasswordEdit;
+  const showDelete = canDelete || canPasswordDelete;
+
   return (
     <div className="flex items-center justify-between px-6 py-3 bg-gray-50 border-t border-gray-100">
       <button
@@ -85,20 +130,24 @@ export default function PostActions({ boardSlug, postId, currentVote, canEdit = 
       </button>
 
       <div className="flex items-center gap-2">
-        {(canEdit || isGuestPost) && (
+        {showEdit && (
           <button
-            onClick={() => router.push(`/board/${boardSlug}/write?mode=modify&no=${postId}`)}
+            onClick={handleEdit}
             className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded hover:bg-white transition-colors"
+            title={canPasswordEdit && !canEdit ? "비밀번호 입력 후 수정" : "수정"}
           >
             수정
+            {canPasswordEdit && !canEdit && <span className="ml-1 text-[10px] text-amber-600">🔑</span>}
           </button>
         )}
-        {(canDelete || isGuestPost) && (
+        {showDelete && (
           <button
             onClick={handleDelete}
             className="px-3 py-1.5 text-sm text-red-600 border border-gray-300 rounded hover:bg-white transition-colors"
+            title={canPasswordDelete && !canDelete ? "비밀번호 입력 후 삭제" : "삭제"}
           >
             삭제
+            {canPasswordDelete && !canDelete && <span className="ml-1 text-[10px] text-amber-600">🔑</span>}
           </button>
         )}
       </div>

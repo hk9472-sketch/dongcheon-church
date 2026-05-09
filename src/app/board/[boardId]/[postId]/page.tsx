@@ -83,8 +83,10 @@ export default async function PostDetailPage({ params }: PageProps) {
   // Route Handler 는 쿠키 쓰기가 항상 허용되므로 24시간 중복 방지가 확실히 걸린다.
 
   // 수정/삭제 권한 확인
-  // isGuestPost: authorId=null인 비회원(ZeroBoard 이관) 글 → 비밀번호로 처리
+  // isGuestPost: authorId=null 인 글 (구 비회원/이관)
+  // hasPassword: 글에 비밀번호가 설정돼 있어 알면 누구나 수정/삭제 시도 가능
   const isGuestPost = post.authorId === null;
+  const hasPassword = !!post.password;
   let canEdit = false;
   let canDelete = false;
   if (currentUser) {
@@ -397,7 +399,7 @@ export default async function PostDetailPage({ params }: PageProps) {
         </div>
 
         {/* 추천/액션 버튼 */}
-        <PostActions boardSlug={boardId} postId={post.id} currentVote={post.vote} canEdit={canEdit} canDelete={canDelete} isGuestPost={isGuestPost} />
+        <PostActions boardSlug={boardId} postId={post.id} currentVote={post.vote} canEdit={canEdit} canDelete={canDelete} isGuestPost={isGuestPost} hasPassword={hasPassword} />
       </article>
 
       {/* 하단 버튼 — 게시글과 관련답글/댓글 사이 */}

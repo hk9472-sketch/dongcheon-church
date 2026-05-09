@@ -37,10 +37,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 권한 없으면: 비회원 글(authorId=null)은 비밀번호 확인, 회원 글/로그인 사용자는 거부
+    // 권한 없으면: 글에 비밀번호가 설정돼 있으면 비번 확인 (authorId 무관)
     if (!hasDeletePermission) {
-      if (post.authorId === null && post.password) {
-        // 비회원(ZeroBoard 이관) 글: 비밀번호로 확인
+      if (post.password) {
+        if (!password) {
+          return NextResponse.json({ message: "비밀번호가 필요합니다." }, { status: 403 });
+        }
         const valid = await verifyPassword(password, post.password);
         if (!valid) {
           return NextResponse.json({ message: "비밀번호가 일치하지 않습니다." }, { status: 403 });
