@@ -913,7 +913,7 @@ export default function AdminSettingsPage() {
           <div className="pt-2">
             <div className="flex items-center gap-2 mb-2">
               <span className="inline-block w-1 h-5 bg-red-600 rounded-full" />
-              <h2 className="text-sm font-bold text-red-700">내계집회중계</h2>
+              <h2 className="text-sm font-bold text-red-700">실시간 예배</h2>
               <span className="text-xs text-gray-400">— 헤더 [내계집회] 버튼 / 실시간 예배 송출 URL</span>
             </div>
             <LiveWorshipSetting />
