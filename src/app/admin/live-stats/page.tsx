@@ -55,6 +55,7 @@ export default function LiveStatsPage() {
   const [recent, setRecent] = useState<RecentDay[]>([]);
   const [today, setToday] = useState<RecentDay | null>(null);
   const [current, setCurrent] = useState<{ label: string; inProgress: boolean; currentCount: number } | null>(null);
+  const [youtube, setYoutube] = useState<{ enabled: boolean; concurrent: number; cumulative: number }>({ enabled: false, concurrent: 0, cumulative: 0 });
   // 탭 — windows / stats / log
   const [tab, setTab] = useState<"windows" | "stats" | "log">("windows");
   // 기간 — 기본은 최근 14일
@@ -187,6 +188,7 @@ export default function LiveStatsPage() {
         setRecent(d.recent || []);
         setToday(d.today);
         setCurrent(d.currentService);
+        if (d.youtube) setYoutube(d.youtube);
       });
   }, [statFrom, statTo]);
 
@@ -237,7 +239,12 @@ export default function LiveStatsPage() {
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-500">{current.inProgress ? "현재까지 누적" : "최근 30초 접속"}</p>
-              <p className="text-3xl font-bold text-emerald-700">{current.currentCount}</p>
+              <p className="text-3xl font-bold text-emerald-700 leading-none">{current.currentCount}<span className="text-base ml-1">명</span></p>
+              {youtube.enabled && (
+                <p className="text-sm font-semibold text-red-600 mt-1">
+                  유튜브: <span className="font-mono">{youtube.concurrent}</span>
+                </p>
+              )}
             </div>
           </div>
         </div>

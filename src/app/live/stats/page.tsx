@@ -120,22 +120,26 @@ export default function PublicLiveStatsPage() {
             )}
           </div>
           <div className="text-right">
-            <div className="flex items-end gap-3">
+            <div className="flex items-end gap-4">
               <div>
                 <p className="text-xs text-gray-500">현재</p>
-                <p className="text-4xl font-bold text-emerald-700 font-mono">{data.combined?.currentNow ?? currentService.currentCount}</p>
+                <p className="text-4xl font-bold text-emerald-700 font-mono leading-none">{currentService.currentCount}<span className="text-base ml-1">명</span></p>
+                {data.youtube?.enabled && (
+                  <p className="text-sm font-semibold text-red-600 mt-1">
+                    유튜브: <span className="font-mono">{data.youtube.concurrent}</span>
+                  </p>
+                )}
               </div>
               <div>
                 <p className="text-xs text-gray-500">총시청</p>
-                <p className="text-3xl font-bold text-blue-700 font-mono">{data.combined?.cumulativeToday ?? 0}</p>
+                <p className="text-3xl font-bold text-blue-700 font-mono leading-none">{data.combined?.cumulativeToday ?? 0}</p>
+                {data.youtube?.enabled && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    YT 누적 {data.youtube.cumulative}
+                  </p>
+                )}
               </div>
             </div>
-            <p className="text-xs text-gray-500 mt-1">
-              웹 {currentService.currentCount}
-              {data.youtube?.enabled && (
-                <> + 유튜브 {data.youtube.concurrent} <span className="text-gray-400">(누적 {data.youtube.cumulative})</span></>
-              )}
-            </p>
           </div>
         </div>
       </div>
