@@ -68,18 +68,65 @@ export default async function GalleryPage({ params, searchParams }: PageProps) {
     return out;
   }
 
-  // HTML 제거 + 공백 정리 + 길이 컷 — 호버 툴팁용
+  // 장식용 글머리/박스/도형 문자 — 본문 의미 손실 거의 없으므로 제거
+  const DECORATIVE_CHARS = new Set([
+    "■", "□", "▣", "▤", "▥", "▦", "▧", "▨", "▩",
+    "◆", "◇", "◈", "★", "☆", "※",
+    "▶", "▷", "▸", "◀", "◁",
+    "●", "○", "◎",
+  ]);
+
+  function isInvisibleOrControl(c: number): boolean {
+    if (c < 0x20 || c === 0x7f) return true; // C0 / DEL
+    if (c === 0x00a0) return true; // NBSP
+    if (c === 0xfeff) return true; // BOM
+    if (c >= 0x200b && c <= 0x200f) return true; // zero-width / RTL marks
+    if (c >= 0x202a && c <= 0x202e) return true; // bidi embeddings
+    if (c >= 0x2060 && c <= 0x206f) return true; // word joiner / invisible separators
+    return false;
+  }
+
+  // HTML 제거 + 엔티티 디코드 + 공백/특수문자 정리 + 길이 컷 — 호버 툴팁용
   function getContentSnippet(html: string, max = 200): string {
-    const text = html
+    // 1) 줄바꿈 의미 태그를 공백으로 → 모든 태그 제거
+    let text = html
       .replace(/<br\s*\/?>/gi, " ")
-      .replace(/<\/?(p|div|h[1-6])[^>]*>/gi, " ")
-      .replace(/<[^>]*>/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/\s+/g, " ")
-      .trim();
+      .replace(/<\/?(p|div|h[1-6]|li|tr|td)[^>]*>/gi, " ")
+      .replace(/<[^>]*>/g, " ");
+
+    // 2) 엔티티 디코드 — 더블 인코딩(&amp;nbsp; 같은 케이스) 고려해 안정화될 때까지 반복
+    for (let i = 0; i < 4; i++) {
+      const before = text;
+      text = text
+        .replace(/&nbsp;/gi, " ")
+        .replace(/&lt;/gi, "<")
+        .replace(/&gt;/gi, ">")
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'")
+        .replace(/&apos;/gi, "'")
+        .replace(/&#(\d+);/g, (_, n) =>
+          String.fromCodePoint(Math.max(0, Math.min(0x10ffff, parseInt(n, 10) || 0))),
+        )
+        .replace(/&amp;/gi, "&");
+      if (text === before) break;
+    }
+
+    // 3) 남은 알 수 없는 엔티티 제거
+    text = text.replace(/&[a-z#0-9]+;/gi, " ");
+
+    // 4) 제어/invisible 문자 + 장식 도형 문자를 공백으로 (char-by-char)
+    let cleaned = "";
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      const ch = text[i];
+      if (isInvisibleOrControl(c) || DECORATIVE_CHARS.has(ch)) {
+        cleaned += " ";
+      } else {
+        cleaned += ch;
+      }
+    }
+
+    text = cleaned.replace(/\s+/g, " ").trim();
     if (!text) return "";
     return text.length > max ? text.slice(0, max) + "…" : text;
   }
