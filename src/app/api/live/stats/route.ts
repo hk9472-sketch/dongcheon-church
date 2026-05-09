@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { classifyService, nextServiceStart, SERVICE_CODES, type ServiceCode } from "@/lib/liveService";
+import { classifyService, nextServiceStart, SERVICE_CODES, loadWindows, type ServiceCode } from "@/lib/liveService";
 
 /**
  * GET /api/live/stats
@@ -18,8 +18,9 @@ export async function GET(req: NextRequest) {
   const days = Math.max(1, Math.min(60, parseInt(req.nextUrl.searchParams.get("days") || "14", 10)));
 
   const now = new Date();
-  const svc = classifyService(now);
-  const next = nextServiceStart(now);
+  const windows = await loadWindows();
+  const svc = classifyService(now, windows);
+  const next = nextServiceStart(now, windows);
 
   // 1) 현재 서비스가 진행 중이면, 이 서비스 윈도우 안에서 unique IP 카운트
   let currentCount = 0;

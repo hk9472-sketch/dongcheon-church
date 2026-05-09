@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { classifyService } from "@/lib/liveService";
+import { classifyService, loadWindows } from "@/lib/liveService";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 
 const BOT_PATTERNS =
@@ -34,7 +34,8 @@ export async function POST(req: NextRequest) {
   }
 
   const me = await getCurrentUser().catch(() => null);
-  const svc = classifyService(new Date());
+  const windows = await loadWindows();
+  const svc = classifyService(new Date(), windows);
 
   await prisma.liveServiceVisit.create({
     data: {
