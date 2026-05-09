@@ -170,11 +170,13 @@ export async function POST(request: NextRequest) {
     // 비밀번호 해시:
     // - 비회원: 작성/수정/삭제·unlock 비번 (필수)
     // - 회원 + 비밀글: 공유 unlock 비번 (필수, 위에서 검증)
-    // - 회원 + 일반글: 비번 저장 안 함
+    // - 회원 + 일반글: 비번 입력했으면 저장 (다른 디바이스/비로그인에서도 비번 알면 수정 가능)
     let hashedPassword: string | null;
     if (!isSessionValid) {
       hashedPassword = await hashPassword(passwordRaw);
     } else if (isSecret) {
+      hashedPassword = await hashPassword(passwordRaw);
+    } else if (passwordRaw && passwordRaw.trim().length > 0) {
       hashedPassword = await hashPassword(passwordRaw);
     } else {
       hashedPassword = null;
