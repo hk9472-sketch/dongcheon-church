@@ -42,13 +42,20 @@ export default async function LiveWorshipPage() {
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6 space-y-4">
       <LiveServiceTracker />
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <span className="inline-block w-1 h-6 bg-red-600 rounded-full" />
         <h1 className="text-xl font-bold text-gray-800">내계집회</h1>
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-bold text-white bg-red-600 rounded-full">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
           LIVE
         </span>
+        <Link
+          href="/live/stats"
+          className="ml-auto inline-flex items-center gap-1 px-3 py-1 text-xs bg-emerald-50 border border-emerald-200 rounded-full hover:bg-emerald-100 transition-colors text-emerald-700 font-bold"
+          title="실시간 예배 참석 통계"
+        >
+          📊 참석 통계
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-5">
