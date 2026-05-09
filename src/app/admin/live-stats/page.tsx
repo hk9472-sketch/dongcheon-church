@@ -12,7 +12,7 @@ const SERVICE_LABELS: Record<string, string> = {
   other: "기타",
 };
 
-const DAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+const DAY_LABELS = ["주일", "월", "화", "수", "목", "금", "토"];
 
 interface ServiceWindow {
   code: string;
@@ -325,7 +325,7 @@ export default function LiveStatsPage() {
                             key={d}
                             type="button"
                             onClick={() => toggleDay(idx, d)}
-                            className={`w-7 h-7 text-xs rounded border ${
+                            className={`px-2 h-7 text-xs rounded border ${
                               on
                                 ? d === 0
                                   ? "bg-red-500 text-white border-red-500"

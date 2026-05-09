@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { classifyService, nextServiceStart, SERVICE_CODES, loadWindows, type ServiceCode } from "@/lib/liveService";
+import { pollYoutubeViewers } from "@/lib/youtubeViewers";
 
 /**
  * GET /api/live/stats
@@ -83,6 +84,12 @@ export async function GET(req: NextRequest) {
     return { date: d, perService: per, total };
   });
 
+  // YouTube 시청자 (옵션 — API 키 미설정 시 0)
+  const yt = await pollYoutubeViewers().catch(() => null);
+
+  // 자체 사이트의 오늘 누적 (모든 서비스 포함)
+  const webTotalToday = Object.values(todayPerService).reduce((s, n) => s + (n as number), 0);
+
   return NextResponse.json({
     currentService: {
       code: svc.code,
@@ -98,10 +105,24 @@ export async function GET(req: NextRequest) {
     today: {
       date: todayYmd,
       perService: todayPerService,
-      total: Object.values(todayPerService).reduce((s, n) => s + (n as number), 0),
+      total: webTotalToday,
     },
     recent,
     serviceCodes: SERVICE_CODES,
+    youtube: yt
+      ? {
+          enabled: yt.hasApiKey && yt.videoId !== null,
+          concurrent: yt.concurrent,
+          cumulative: yt.cumulative,
+          polledAt: yt.polledAt,
+        }
+      : { enabled: false, concurrent: 0, cumulative: 0, polledAt: 0 },
+    combined: {
+      // 현재 시청 중 — 웹 활성 + 유튜브 동시
+      currentNow: currentCount + (yt?.concurrent ?? 0),
+      // 총 시청 — 웹 오늘 누적 + 유튜브 오늘 누적
+      cumulativeToday: webTotalToday + (yt?.cumulative ?? 0),
+    },
   });
 }
 

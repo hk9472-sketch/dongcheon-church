@@ -190,4 +190,4 @@ export function hhmmToMin(s: string): number | null {
   return h * 60 + mm;
 }
 
-export const DAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+export const DAY_LABELS = ["주일", "월", "화", "수", "목", "금", "토"];

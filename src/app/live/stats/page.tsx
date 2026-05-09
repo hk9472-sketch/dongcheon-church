@@ -34,6 +34,8 @@ interface StatsData {
   nextService: { code: string; label: string; start: string } | null;
   today: RecentDay;
   recent: RecentDay[];
+  youtube?: { enabled: boolean; concurrent: number; cumulative: number };
+  combined?: { currentNow: number; cumulativeToday: number };
 }
 
 export default function PublicLiveStatsPage() {
@@ -88,7 +90,7 @@ export default function PublicLiveStatsPage() {
         </Link>
       </div>
 
-      {/* 현재 진행 카드 */}
+      {/* 현재 진행 카드 — 웹 + YouTube 합산 */}
       <div
         className={`rounded-lg p-5 border-2 ${
           currentService.inProgress
@@ -112,9 +114,22 @@ export default function PublicLiveStatsPage() {
             )}
           </div>
           <div className="text-right">
-            <p className="text-xs text-gray-500">{currentService.inProgress ? "현재까지 누적" : "최근 5분"}</p>
-            <p className="text-4xl font-bold text-emerald-700 font-mono">{currentService.currentCount}</p>
-            <p className="text-xs text-gray-500">접속자</p>
+            <div className="flex items-end gap-3">
+              <div>
+                <p className="text-xs text-gray-500">현재</p>
+                <p className="text-4xl font-bold text-emerald-700 font-mono">{data.combined?.currentNow ?? currentService.currentCount}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">총시청</p>
+                <p className="text-3xl font-bold text-blue-700 font-mono">{data.combined?.cumulativeToday ?? 0}</p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              웹 {currentService.currentCount}
+              {data.youtube?.enabled && (
+                <> + 유튜브 {data.youtube.concurrent} <span className="text-gray-400">(누적 {data.youtube.cumulative})</span></>
+              )}
+            </p>
           </div>
         </div>
       </div>
