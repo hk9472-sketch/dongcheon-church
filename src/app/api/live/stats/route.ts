@@ -81,6 +81,25 @@ export async function GET(req: NextRequest) {
     byDay.get(ymd)![r.serviceCode] = Number(r.cnt);
   }
 
+  // 3.4) 시간대별 (KST hour) unique IP — 03~21시
+  const hourly = await prisma.$queryRaw<
+    { d: Date; h: number; cnt: bigint }[]
+  >`
+    SELECT
+      DATE(CONVERT_TZ(createdAt, '+00:00', '+09:00')) AS d,
+      HOUR(CONVERT_TZ(createdAt, '+00:00', '+09:00')) AS h,
+      COUNT(DISTINCT ip) AS cnt
+    FROM live_service_visits
+    WHERE serviceDate >= ${sinceDay} AND serviceDate <= ${untilDay}
+    GROUP BY d, h
+  `;
+  const hourlyByDay = new Map<string, Record<number, number>>();
+  for (const r of hourly) {
+    const ymd = new Date(r.d).toISOString().slice(0, 10);
+    if (!hourlyByDay.has(ymd)) hourlyByDay.set(ymd, {});
+    hourlyByDay.get(ymd)![Number(r.h)] = Number(r.cnt);
+  }
+
   // 3.5) YouTube 서비스별 일자별 — 누적 (cumulativeEnd - cumulativeStart) = 그 서비스 동안 시청한 사람
   const ytStats = await prisma.liveYoutubeServiceStat.findMany({
     where: { serviceDate: { gte: sinceDay, lte: untilDay } },
@@ -121,7 +140,15 @@ export async function GET(req: NextRequest) {
     const total = Object.values(per).reduce((s, n) => s + n, 0);
     const yt = ytByDay.get(d) ?? {};
     const ytTotal = Object.values(yt).reduce((s, n) => s + n, 0);
-    return { date: d, perService: per, total, youtubePerService: yt, youtubeTotal: ytTotal };
+    const hourly = hourlyByDay.get(d) ?? {};
+    return {
+      date: d,
+      perService: per,
+      total,
+      youtubePerService: yt,
+      youtubeTotal: ytTotal,
+      hourly,
+    };
   });
 
   // YouTube 시청자 (옵션 — API 키 미설정 시 0)

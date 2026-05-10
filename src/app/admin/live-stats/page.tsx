@@ -49,7 +49,10 @@ interface RecentDay {
   total: number;
   youtubePerService?: Record<string, number>;
   youtubeTotal?: number;
+  hourly?: Record<number, number>;
 }
+
+const HOURS = Array.from({ length: 19 }, (_, i) => i + 3); // 3, 4, ..., 21
 
 interface LogRow {
   id: number;
@@ -331,26 +334,27 @@ export default function LiveStatsPage() {
           <table className="w-full text-xs">
             <thead className="bg-gray-50 border-b border-gray-200 text-gray-600">
               <tr>
-                <th className="px-3 py-2 text-left font-medium">일자</th>
+                <th className="px-3 py-2 text-left font-medium sticky left-0 bg-gray-50 z-10">일자</th>
                 {SERVICE_BASE_CODES.map((k) => (
-                  <th key={k} className="px-3 py-2 text-right font-medium">{SERVICE_LABELS[k]}</th>
+                  <th key={k} className="px-2 py-2 text-right font-medium">{SERVICE_LABELS[k]}</th>
                 ))}
-                {SERVICE_GAP_CODES.map((k) => (
-                  <th key={k} className="px-2 py-2 text-right font-medium text-amber-700 text-[11px]" title={`다음 예배 직전 (${SERVICE_LABELS[k]})`}>{SERVICE_LABELS[k]}</th>
+                <th className="px-2 py-2 text-right font-bold text-blue-700">합계</th>
+                {HOURS.map((h) => (
+                  <th key={h} className="px-1.5 py-2 text-right font-medium text-[10px] text-gray-500" title={`${h}시 ~ ${h + 1}시`}>
+                    {String(h).padStart(2, "0")}
+                  </th>
                 ))}
-                <th className="px-3 py-2 text-right font-medium">기타</th>
-                <th className="px-3 py-2 text-right font-bold text-blue-700">합계</th>
               </tr>
             </thead>
             <tbody>
               {recent.map((d) => (
                 <tr key={d.date} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-3 py-1.5 font-mono text-gray-700">{d.date}</td>
+                  <td className="px-3 py-1.5 font-mono text-gray-700 sticky left-0 bg-white z-10">{d.date}</td>
                   {SERVICE_BASE_CODES.map((k) => {
                     const web = d.perService[k] || 0;
                     const yt = d.youtubePerService?.[k] || 0;
                     return (
-                      <td key={k} className="px-3 py-1.5 text-right text-gray-600 font-mono">
+                      <td key={k} className="px-2 py-1.5 text-right text-gray-600 font-mono">
                         {web || yt ? (
                           <>
                             {web || ""}
@@ -360,13 +364,12 @@ export default function LiveStatsPage() {
                       </td>
                     );
                   })}
-                  {SERVICE_GAP_CODES.map((k) => (
-                    <td key={k} className="px-2 py-1.5 text-right text-amber-700 font-mono text-[11px]">
-                      {d.perService[k] || ""}
+                  <td className="px-2 py-1.5 text-right font-bold text-blue-700 font-mono">{d.total || ""}</td>
+                  {HOURS.map((h) => (
+                    <td key={h} className="px-1.5 py-1.5 text-right text-gray-500 font-mono text-[11px]">
+                      {d.hourly?.[h] || ""}
                     </td>
                   ))}
-                  <td className="px-3 py-1.5 text-right text-gray-400 font-mono">{d.perService.other || ""}</td>
-                  <td className="px-3 py-1.5 text-right font-bold text-blue-700 font-mono">{d.total || ""}</td>
                 </tr>
               ))}
               {recent.length === 0 && (

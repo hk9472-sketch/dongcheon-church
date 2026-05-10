@@ -43,7 +43,10 @@ interface RecentDay {
   total: number;
   youtubePerService?: Record<string, number>;
   youtubeTotal?: number;
+  hourly?: Record<number, number>;
 }
+
+const HOURS = Array.from({ length: 19 }, (_, i) => i + 3);
 
 interface StatsData {
   currentService: { code: string; label: string; inProgress: boolean; currentCount: number };
@@ -257,22 +260,27 @@ export default function PublicLiveStatsPage() {
           <table className="w-full text-xs">
             <thead className="bg-gray-50 border-b border-gray-200 text-gray-600">
               <tr>
-                <th className="px-3 py-2 text-left font-medium">일자</th>
+                <th className="px-3 py-2 text-left font-medium sticky left-0 bg-gray-50 z-10">일자</th>
                 {orderedCodes.map((k) => (
-                  <th key={k} className="px-3 py-2 text-right font-medium">{SERVICE_LABELS[k]}</th>
+                  <th key={k} className="px-2 py-2 text-right font-medium">{SERVICE_LABELS[k]}</th>
                 ))}
-                <th className="px-3 py-2 text-right font-bold text-emerald-700">합계</th>
+                <th className="px-2 py-2 text-right font-bold text-emerald-700">합계</th>
+                {HOURS.map((h) => (
+                  <th key={h} className="px-1.5 py-2 text-right font-medium text-[10px] text-gray-500" title={`${h}시 ~ ${h + 1}시`}>
+                    {String(h).padStart(2, "0")}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {recent.map((d) => (
                 <tr key={d.date} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-3 py-1.5 font-mono text-gray-700">{d.date}</td>
+                  <td className="px-3 py-1.5 font-mono text-gray-700 sticky left-0 bg-white z-10">{d.date}</td>
                   {orderedCodes.map((k) => {
                     const web = d.perService[k] || 0;
                     const yt = d.youtubePerService?.[k] || 0;
                     return (
-                      <td key={k} className="px-3 py-1.5 text-right text-gray-600 font-mono">
+                      <td key={k} className="px-2 py-1.5 text-right text-gray-600 font-mono">
                         {web || yt ? (
                           <>
                             {web || ""}
@@ -282,10 +290,14 @@ export default function PublicLiveStatsPage() {
                       </td>
                     );
                   })}
-                  <td className="px-3 py-1.5 text-right font-bold text-emerald-700 font-mono">
+                  <td className="px-2 py-1.5 text-right font-bold text-emerald-700 font-mono">
                     {d.total || ""}
-                    {(d.youtubeTotal ?? 0) > 0 && <span className="text-red-500 font-normal ml-1">({d.youtubeTotal})</span>}
                   </td>
+                  {HOURS.map((h) => (
+                    <td key={h} className="px-1.5 py-1.5 text-right text-gray-500 font-mono text-[11px]">
+                      {d.hourly?.[h] || ""}
+                    </td>
+                  ))}
                 </tr>
               ))}
               {recent.length === 0 && (
