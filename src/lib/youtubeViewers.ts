@@ -220,7 +220,28 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
     };
   }
 
-  // video ID 추출 — 직접 추출 → 채널 URL 자동 해결
+  const today = todayKstYmd();
+  const prev = await loadState();
+  const now = Date.now();
+
+  // 서비스 윈도우 검사 — 윈도우 밖이면 외부 API 호출 0건 (quota 절약)
+  const windows = await loadWindows();
+  const svc = classifyService(new Date(now), windows);
+  const inServiceWindow = svc.inProgress;
+
+  if (!force && !inServiceWindow) {
+    // 채널/영상 해결도 스킵 — cached state 그대로
+    return {
+      ok: true, hasApiKey: true, hasUrl: true,
+      videoId: prev?.videoId ?? null,
+      concurrent: prev?.date === today ? prev.concurrent : 0,
+      cumulative: prev?.date === today ? prev.cumulative : 0,
+      polledAt: prev?.polledAt ?? 0, cached: true,
+      reason: "outside-window",
+    };
+  }
+
+  // (서비스 윈도우 안) video ID 추출 — 직접 추출 → 채널 URL 자동 해결
   let videoId = extractVideoId(url);
   if (!videoId) {
     const channelRef = extractChannelRef(url);
@@ -232,7 +253,7 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
       };
     }
 
-    // 캐시 확인 — 10분 안이면 그대로 사용 (quota 절약)
+    // 캐시 확인 — 10분 안이면 그대로 사용 (search.list 100 units 절약)
     const cache = await loadChannelCache();
     const channelIdResolved =
       cache && cache.channelId.startsWith("UC") &&
@@ -263,38 +284,11 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
     if (!videoId) {
       return {
         ok: true, hasApiKey: true, hasUrl: true, videoId: null,
-        concurrent: 0, cumulative: 0, polledAt: 0, cached: false,
-        error: "현재 라이브 중 영상 없음",
-        reason: "no-live",
+        concurrent: 0, cumulative: prev?.date === today ? prev.cumulative : 0,
+        polledAt: 0, cached: false,
+        error: "현재 라이브 중 영상 없음", reason: "no-live",
       };
     }
-  }
-
-  const today = todayKstYmd();
-  const prev = await loadState();
-  const now = Date.now();
-
-  // 서비스 윈도우 검사
-  const windows = await loadWindows();
-  const svc = classifyService(new Date(now), windows);
-  const inServiceWindow = svc.inProgress;
-
-  if (!force && !inServiceWindow) {
-    if (prev && prev.videoId === videoId && prev.date === today) {
-      return {
-        ok: true, hasApiKey: true, hasUrl: true, videoId,
-        concurrent: prev.concurrent, cumulative: prev.cumulative,
-        polledAt: prev.polledAt, cached: true,
-        reason: "outside-window",
-      };
-    }
-    return {
-      ok: true, hasApiKey: true, hasUrl: true, videoId,
-      concurrent: 0,
-      cumulative: prev?.date === today ? prev.cumulative : 0,
-      polledAt: prev?.polledAt ?? 0, cached: true,
-      reason: "outside-window",
-    };
   }
 
   // 5s 캐시
