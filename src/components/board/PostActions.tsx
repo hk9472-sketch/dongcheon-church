@@ -137,7 +137,6 @@ export default function PostActions({
             title={canPasswordEdit && !canEdit ? "비밀번호 입력 후 수정" : "수정"}
           >
             수정
-            {canPasswordEdit && !canEdit && <span className="ml-1 text-[10px] text-amber-600">🔑</span>}
           </button>
         )}
         {showDelete && (
@@ -147,7 +146,6 @@ export default function PostActions({
             title={canPasswordDelete && !canDelete ? "비밀번호 입력 후 삭제" : "삭제"}
           >
             삭제
-            {canPasswordDelete && !canDelete && <span className="ml-1 text-[10px] text-amber-600">🔑</span>}
           </button>
         )}
       </div>

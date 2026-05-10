@@ -225,6 +225,15 @@ export default function LiveStatsPage() {
       <div>
         <h1 className="text-xl font-bold text-gray-800">실시간 예배 통계</h1>
         <p className="text-sm text-gray-500 mt-1">/live, /live-worship 페이지 자동 방문 카운트 — 서비스 시간별 분류.</p>
+        <details className="mt-2 text-xs">
+          <summary className="cursor-pointer text-blue-700 hover:underline">집계 방식 / 기타 / 유튜브 폴링 안내</summary>
+          <ul className="mt-2 list-disc list-inside space-y-0.5 text-gray-600 leading-relaxed">
+            <li><strong>기타</strong> = 예배 시간(서비스 윈도우) 외에 페이지에 접속한 트래픽. 정상 운영 분이지만 어느 서비스에도 속하지 않음.</li>
+            <li><strong>유튜브</strong> = YouTube Data API 의 동시 시청자. <strong className="text-amber-700">서비스 윈도우 안에서만 5초 폴링</strong>, 그 외엔 0 또는 캐시. <em className="text-red-600">표시 안 되면 사이트 설정 → "실시간 예배" 에서 API 키 등록 필요.</em></li>
+            <li><strong>현재</strong> 30초 = 페이지에 활성 (heartbeat 30s) 인 IP. <strong>총시청</strong> = 웹 unique IP/일 + YouTube 누적. KST 자정 리셋.</li>
+            <li>일자는 <strong>KST 기준</strong> 으로 분류. 이전 버전에서 UTC 로 잘못 분류된 데이터가 있을 수 있음 (수정 후엔 정상).</li>
+          </ul>
+        </details>
       </div>
 
       {/* 현재 진행 (모든 탭 공통) */}

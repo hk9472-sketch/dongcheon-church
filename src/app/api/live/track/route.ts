@@ -36,7 +36,8 @@ export async function POST(req: NextRequest) {
   const me = await getCurrentUser().catch(() => null);
   const windows = await loadWindows();
   const svc = classifyService(new Date(), windows);
-  const serviceDate = new Date(svc.serviceDate + "T00:00:00+09:00");
+  // KST YMD 문자열 → UTC 자정으로 저장 (DATE 컬럼이라 시각 무의미, KST 일자가 그대로 보존됨)
+  const serviceDate = new Date(svc.serviceDate + "T00:00:00.000Z");
   const ipSafe = ip || "unknown";
 
   // 같은 (ip, serviceCode, serviceDate) 의 최근 5분 내 행이 있으면 timestamp 만 갱신.

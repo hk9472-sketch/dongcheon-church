@@ -60,8 +60,9 @@ export async function GET(req: NextRequest) {
     sinceDayStr = new Date(sinceDate.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
     untilDayStr = todayKstYmd;
   }
-  const sinceDay = new Date(sinceDayStr + "T00:00:00+09:00");
-  const untilDay = new Date(untilDayStr + "T23:59:59+09:00");
+  // DATE 컬럼 비교용 — UTC 자정 기준으로 통일 (저장 시점과 일치)
+  const sinceDay = new Date(sinceDayStr + "T00:00:00.000Z");
+  const untilDay = new Date(untilDayStr + "T23:59:59.999Z");
   const rows = await prisma.$queryRaw<
     { d: Date; serviceCode: string; cnt: bigint }[]
   >`
@@ -84,13 +85,13 @@ export async function GET(req: NextRequest) {
   const todayYmd = todayKstYmd;
   const todayPerService = byDay.get(todayYmd) ?? {};
 
-  // sinceDay → untilDay 일자 시퀀스 생성 (DESC)
+  // sinceDay → untilDay 일자 시퀀스 생성 (DESC). UTC 정오 기준으로 timezone 안전.
   const recentDates: string[] = [];
-  const startDate = new Date(sinceDayStr + "T00:00:00+09:00");
-  const endDate = new Date(untilDayStr + "T00:00:00+09:00");
+  const startDate = new Date(sinceDayStr + "T12:00:00.000Z");
+  const endDate = new Date(untilDayStr + "T12:00:00.000Z");
   const cursor = new Date(endDate);
   while (cursor.getTime() >= startDate.getTime()) {
-    recentDates.push(new Date(cursor.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10));
+    recentDates.push(cursor.toISOString().slice(0, 10));
     cursor.setUTCDate(cursor.getUTCDate() - 1);
     if (recentDates.length > 366) break;
   }

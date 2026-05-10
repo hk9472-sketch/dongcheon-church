@@ -124,15 +124,17 @@ export default function PublicLiveStatsPage() {
               <div>
                 <p className="text-xs text-gray-500">현재</p>
                 <p className="text-4xl font-bold text-emerald-700 font-mono leading-none">{currentService.currentCount}<span className="text-base ml-1">명</span></p>
-                {data.youtube?.enabled && (
+                {data.youtube?.enabled ? (
                   <p className="text-sm font-semibold text-red-600 mt-1">
                     유튜브: <span className="font-mono">{data.youtube.concurrent}</span>
                   </p>
+                ) : (
+                  <p className="text-[11px] text-gray-400 mt-1">유튜브: 미설정</p>
                 )}
               </div>
               <div>
                 <p className="text-xs text-gray-500">총시청</p>
-                <p className="text-3xl font-bold text-blue-700 font-mono leading-none">{data.combined?.cumulativeToday ?? 0}</p>
+                <p className="text-4xl font-bold text-blue-700 font-mono leading-none">{data.combined?.cumulativeToday ?? 0}</p>
                 {data.youtube?.enabled && (
                   <p className="text-[11px] text-gray-400 mt-1">
                     YT 누적 {data.youtube.cumulative}
@@ -247,10 +249,20 @@ export default function PublicLiveStatsPage() {
         </div>
       </div>
 
-      <p className="text-xs text-gray-400 text-center leading-relaxed">
-        ※ 카운트는 페이지에 3초 이상 머문 IP 기준 (서비스 시간 동안 동일 IP 1회). <br />
-        실시간 예배 페이지를 시청한 모든 분이 자동으로 집계됩니다.
-      </p>
+      <div className="text-xs text-gray-500 leading-relaxed bg-gray-50 border border-gray-200 rounded-md p-3">
+        <p className="font-semibold text-gray-700 mb-1">집계 안내</p>
+        <ul className="list-disc list-inside space-y-0.5 text-gray-500">
+          <li><strong>현재(웹)</strong>: 사이트의 /live, /live-worship 페이지를 3초 이상 머물고 30초마다 heartbeat 보내는 활성 시청자 (IP 기준).</li>
+          <li><strong>유튜브</strong>: YouTube Data API v3 의 동시 시청자 수 (concurrentViewers).
+            <strong className="text-amber-700">예배 시간(서비스 윈도우) 안에서만 5초 간격으로 폴링</strong>되며,
+            그 외 시간엔 마지막 캐시값 또는 0 표시. 빠져나간 사람은 차감되지만 누적엔 영향 X.
+            <em className="text-red-600"> ⚠ 표시 안 되면 관리자 설정 → "실시간 예배" 에서 YouTube API 키 등록 필요.</em>
+          </li>
+          <li><strong>총시청</strong>: 웹 unique IP/일 + YouTube 누적(증가분 단조 누적). KST 자정에 자동 리셋.</li>
+          <li><strong>기타</strong>: 예배 시간(서비스 윈도우) 외에 페이지에 들어온 접속 — 분류 안 되는 트래픽.</li>
+          <li>카운트는 페이지에 3초 이상 머문 IP 기준 (서비스 시간 동안 동일 IP 1회).</li>
+        </ul>
+      </div>
     </div>
   );
 }

@@ -32,8 +32,8 @@ export async function GET(req: NextRequest) {
   const where: Prisma.LiveServiceVisitWhereInput = {};
   if (from || to) {
     where.serviceDate = {};
-    if (from) where.serviceDate.gte = new Date(from + "T00:00:00+09:00");
-    if (to) where.serviceDate.lte = new Date(to + "T23:59:59+09:00");
+    if (from) where.serviceDate.gte = new Date(from + "T00:00:00.000Z");
+    if (to) where.serviceDate.lte = new Date(to + "T23:59:59.999Z");
   }
   if (service) where.serviceCode = service;
 
@@ -48,8 +48,8 @@ export async function GET(req: NextRequest) {
   ]);
 
   // 일자×서비스 unique IP 요약 (Prisma groupBy 로 고유 ip 카운트는 직접 안 됨 → raw query)
-  const fromDate = from ? new Date(from + "T00:00:00+09:00") : new Date("2000-01-01");
-  const toDate = to ? new Date(to + "T23:59:59+09:00") : new Date("2099-12-31");
+  const fromDate = from ? new Date(from + "T00:00:00.000Z") : new Date("2000-01-01T00:00:00.000Z");
+  const toDate = to ? new Date(to + "T23:59:59.999Z") : new Date("2099-12-31T23:59:59.999Z");
   const summaryRows = service
     ? await prisma.$queryRaw<{ d: Date; serviceCode: string; cnt: bigint }[]>`
         SELECT serviceDate AS d, serviceCode, COUNT(DISTINCT ip) AS cnt
