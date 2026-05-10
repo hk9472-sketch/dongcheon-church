@@ -146,16 +146,41 @@ export default function PublicLiveStatsPage() {
               <div>
                 <p className="text-xs text-gray-500">현재</p>
                 <p className="text-4xl font-bold text-emerald-700 font-mono leading-none">{currentService.currentCount}<span className="text-base ml-1">명</span></p>
-                {data.youtube?.enabled ? (
-                  <p className="text-sm font-semibold text-red-600 mt-1">
-                    유튜브: <span className="font-mono">{data.youtube.concurrent}</span>
-                    {data.youtube.reason === "outside-window" && <span className="text-[10px] text-gray-400 ml-1">(예배 시간 외)</span>}
-                  </p>
-                ) : (
-                  <p className="text-[11px] text-amber-600 mt-1" title={`reason: ${data.youtube?.reason || "?"}`}>
-                    유튜브: {ytReasonLabel(data.youtube?.reason, data.youtube?.hasApiKey, data.youtube?.hasUrl)}
-                  </p>
-                )}
+                {(() => {
+                  const yt = data.youtube;
+                  if (!yt || !yt.enabled) {
+                    return (
+                      <p className="text-[11px] text-amber-600 mt-1" title={`reason: ${yt?.reason || "?"}`}>
+                        유튜브: {ytReasonLabel(yt?.reason, yt?.hasApiKey, yt?.hasUrl)}
+                      </p>
+                    );
+                  }
+                  // enabled — 구성은 됐음. reason 별로 메시지 분기.
+                  if (yt.reason === "outside-window") {
+                    return (
+                      <p className="text-sm font-semibold text-gray-600 mt-1">
+                        유튜브: <span className="font-mono">{yt.concurrent}</span>
+                        <span className="text-[10px] text-gray-400 ml-1">(예배 시간 외)</span>
+                      </p>
+                    );
+                  }
+                  if (yt.reason === "no-live") {
+                    return <p className="text-[11px] text-amber-600 mt-1">유튜브: 현재 라이브 없음</p>;
+                  }
+                  if (yt.reason === "channel-resolve-fail" || yt.reason === "bad-url" || yt.reason === "api-error") {
+                    return (
+                      <p className="text-[11px] text-amber-600 mt-1" title={`reason: ${yt.reason}`}>
+                        유튜브: {ytReasonLabel(yt.reason, yt.hasApiKey, yt.hasUrl)}
+                      </p>
+                    );
+                  }
+                  // ok
+                  return (
+                    <p className="text-sm font-semibold text-red-600 mt-1">
+                      유튜브: <span className="font-mono">{yt.concurrent}</span>
+                    </p>
+                  );
+                })()}
               </div>
               <div>
                 <p className="text-xs text-gray-500">총시청</p>

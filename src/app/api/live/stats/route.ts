@@ -129,7 +129,7 @@ export async function GET(req: NextRequest) {
     serviceCodes: SERVICE_CODES,
     youtube: yt
       ? {
-          enabled: yt.hasApiKey && yt.videoId !== null,
+          enabled: yt.hasApiKey && yt.hasUrl,
           concurrent: yt.concurrent,
           cumulative: yt.cumulative,
           polledAt: yt.polledAt,
