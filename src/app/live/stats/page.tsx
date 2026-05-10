@@ -13,6 +13,18 @@ const SERVICE_LABELS: Record<string, string> = {
   other: "기타",
 };
 
+function ytReasonLabel(
+  reason?: string,
+  hasApiKey?: boolean,
+  hasUrl?: boolean,
+): string {
+  if (reason === "no-key" || hasApiKey === false) return "API 키 미등록";
+  if (reason === "no-url" || hasUrl === false) return "URL 미설정";
+  if (reason === "bad-url") return "URL 형식 오류 (video ID 추출 실패)";
+  if (reason === "api-error") return "API 호출 실패 (키 만료/quota?)";
+  return "미설정";
+}
+
 const SERVICE_TIMES: Record<string, string> = {
   dawn: "월~토 03:00~05:00",
   eve: "수,금 18:00~20:20",
@@ -34,7 +46,15 @@ interface StatsData {
   nextService: { code: string; label: string; start: string } | null;
   today: RecentDay;
   recent: RecentDay[];
-  youtube?: { enabled: boolean; concurrent: number; cumulative: number };
+  youtube?: {
+    enabled: boolean;
+    concurrent: number;
+    cumulative: number;
+    reason?: string;
+    hasApiKey?: boolean;
+    hasUrl?: boolean;
+    videoId?: string | null;
+  };
   combined?: { currentNow: number; cumulativeToday: number };
 }
 
@@ -127,9 +147,12 @@ export default function PublicLiveStatsPage() {
                 {data.youtube?.enabled ? (
                   <p className="text-sm font-semibold text-red-600 mt-1">
                     유튜브: <span className="font-mono">{data.youtube.concurrent}</span>
+                    {data.youtube.reason === "outside-window" && <span className="text-[10px] text-gray-400 ml-1">(예배 시간 외)</span>}
                   </p>
                 ) : (
-                  <p className="text-[11px] text-gray-400 mt-1">유튜브: 미설정</p>
+                  <p className="text-[11px] text-amber-600 mt-1" title={`reason: ${data.youtube?.reason || "?"}`}>
+                    유튜브: {ytReasonLabel(data.youtube?.reason, data.youtube?.hasApiKey, data.youtube?.hasUrl)}
+                  </p>
                 )}
               </div>
               <div>

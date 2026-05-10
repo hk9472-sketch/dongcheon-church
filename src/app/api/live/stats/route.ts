@@ -133,8 +133,12 @@ export async function GET(req: NextRequest) {
           concurrent: yt.concurrent,
           cumulative: yt.cumulative,
           polledAt: yt.polledAt,
+          reason: yt.reason,
+          hasApiKey: yt.hasApiKey,
+          hasUrl: yt.hasUrl,
+          videoId: yt.videoId,
         }
-      : { enabled: false, concurrent: 0, cumulative: 0, polledAt: 0 },
+      : { enabled: false, concurrent: 0, cumulative: 0, polledAt: 0, reason: "error", hasApiKey: false, hasUrl: false, videoId: null },
     combined: {
       // 현재 시청 중 — 웹 활성 + 유튜브 동시
       currentNow: currentCount + (yt?.concurrent ?? 0),

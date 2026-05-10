@@ -79,12 +79,15 @@ async function saveState(s: YoutubeState): Promise<void> {
 interface PollResult {
   ok: boolean;
   hasApiKey: boolean;
+  hasUrl: boolean;
   videoId: string | null;
   concurrent: number;
   cumulative: number;
   polledAt: number; // ms
   cached: boolean;
   error?: string;
+  /** 'no-key' | 'no-url' | 'bad-url' | 'api-error' | 'outside-window' | 'ok' */
+  reason: string;
 }
 
 /**
@@ -105,12 +108,28 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
     return {
       ok: false,
       hasApiKey: false,
+      hasUrl: !!url,
       videoId: null,
       concurrent: 0,
       cumulative: 0,
       polledAt: 0,
       cached: false,
       error: "API key not set",
+      reason: "no-key",
+    };
+  }
+  if (!url) {
+    return {
+      ok: false,
+      hasApiKey: true,
+      hasUrl: false,
+      videoId: null,
+      concurrent: 0,
+      cumulative: 0,
+      polledAt: 0,
+      cached: false,
+      error: "live_worship_url not set",
+      reason: "no-url",
     };
   }
   const videoId = extractVideoId(url);
@@ -118,12 +137,14 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
     return {
       ok: false,
       hasApiKey: true,
+      hasUrl: true,
       videoId: null,
       concurrent: 0,
       cumulative: 0,
       polledAt: 0,
       cached: false,
-      error: "video id not found",
+      error: "video id not extractable from URL",
+      reason: "bad-url",
     };
   }
 
@@ -142,21 +163,25 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
       return {
         ok: true,
         hasApiKey: true,
+        hasUrl: true,
         videoId,
         concurrent: prev.concurrent,
         cumulative: prev.cumulative,
         polledAt: prev.polledAt,
         cached: true,
+        reason: "outside-window",
       };
     }
     return {
       ok: true,
       hasApiKey: true,
+      hasUrl: true,
       videoId,
       concurrent: 0,
       cumulative: prev?.date === today ? prev.cumulative : 0,
       polledAt: prev?.polledAt ?? 0,
       cached: true,
+      reason: "outside-window",
     };
   }
 
@@ -171,11 +196,13 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
     return {
       ok: true,
       hasApiKey: true,
+      hasUrl: true,
       videoId,
       concurrent: prev.concurrent,
       cumulative: prev.cumulative,
       polledAt: prev.polledAt,
       cached: true,
+      reason: !inServiceWindow ? "outside-window" : "ok",
     };
   }
 
@@ -188,12 +215,14 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
       return {
         ok: false,
         hasApiKey: true,
+        hasUrl: true,
         videoId,
         concurrent: prev?.concurrent ?? 0,
         cumulative: prev?.cumulative ?? 0,
         polledAt: prev?.polledAt ?? 0,
         cached: false,
         error: `youtube api ${r.status}`,
+        reason: "api-error",
       };
     }
     const data = await r.json();
@@ -204,12 +233,14 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
     return {
       ok: false,
       hasApiKey: true,
+      hasUrl: true,
       videoId,
       concurrent: prev?.concurrent ?? 0,
       cumulative: prev?.cumulative ?? 0,
       polledAt: prev?.polledAt ?? 0,
       cached: false,
       error: e instanceof Error ? e.message : "fetch error",
+      reason: "api-error",
     };
   }
 
@@ -235,10 +266,12 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
   return {
     ok: true,
     hasApiKey: true,
+    hasUrl: true,
     videoId,
     concurrent,
     cumulative,
     polledAt: now,
     cached: false,
+    reason: "ok",
   };
 }
