@@ -37,17 +37,24 @@ const SERVICE_TIMES: Record<string, string> = {
   other: "기타 시간",
 };
 
+interface YtCell { peak: number; delta: number }
 interface RecentDay {
   date: string;
   perService: Record<string, number>;
   total: number;
-  youtubePerService?: Record<string, number>;
-  youtubeTotal?: number;
+  youtubePerService?: Record<string, YtCell>;
+  youtubeTotalPeak?: number;
+  youtubeTotalDelta?: number;
   hourly?: Record<number, number>;
-  youtubeHourly?: Record<number, number>;
+  youtubeHourly?: Record<number, YtCell>;
 }
 
 const HOURS = Array.from({ length: 19 }, (_, i) => i + 3);
+
+function fmtYt(c?: YtCell): string {
+  if (!c || (c.peak === 0 && c.delta === 0)) return "";
+  return `${c.peak}/${c.delta}`;
+}
 
 interface StatsData {
   currentService: { code: string; label: string; inProgress: boolean; currentCount: number };
@@ -294,16 +301,16 @@ export default function PublicLiveStatsPage() {
                 </tr>,
                 <tr key={`${d.date}-yt`} className="border-b border-gray-200 hover:bg-red-50/30">
                   {orderedCodes.map((k) => (
-                    <td key={k} className="px-2 py-1 text-right text-red-600 font-mono text-[11px]">
-                      {d.youtubePerService?.[k] || ""}
+                    <td key={k} className="px-2 py-1 text-right text-red-600 font-mono text-[11px]" title="동시최대 / 누적합류">
+                      {fmtYt(d.youtubePerService?.[k])}
                     </td>
                   ))}
-                  <td className="px-2 py-1 text-right font-semibold text-red-600 font-mono text-[11px]">
-                    {d.youtubeTotal || ""}
+                  <td className="px-2 py-1 text-right font-semibold text-red-600 font-mono text-[11px]" title="일 동시최대 / 누적합류">
+                    {(d.youtubeTotalPeak || d.youtubeTotalDelta) ? `${d.youtubeTotalPeak || 0}/${d.youtubeTotalDelta || 0}` : ""}
                   </td>
                   {HOURS.map((h) => (
-                    <td key={h} className="px-1.5 py-1 text-right text-red-500 font-mono text-[10px]">
-                      {d.youtubeHourly?.[h] || ""}
+                    <td key={h} className="px-1.5 py-1 text-right text-red-500 font-mono text-[10px]" title="동시최대 / 누적합류">
+                      {fmtYt(d.youtubeHourly?.[h])}
                     </td>
                   ))}
                 </tr>,
@@ -332,7 +339,13 @@ export default function PublicLiveStatsPage() {
       </div>
 
       <div className="text-xs text-gray-500 leading-relaxed bg-gray-50 border border-gray-200 rounded-md p-3">
-        <p className="font-semibold text-gray-700 mb-1">집계 안내</p>
+        <p className="font-semibold text-gray-700 mb-1">집계 안내 — 매트릭스 표기법</p>
+        <p className="text-red-600 mb-1">유튜브 행: <code className="bg-white px-1 rounded">peak / delta</code> 형식</p>
+        <ul className="list-disc list-inside space-y-0.5 text-gray-600 mb-2">
+          <li><strong>peak</strong> = 그 구간 동시 시청자 최대값 (지금 N명 보고 있다)</li>
+          <li><strong>delta</strong> = 그 구간 누적 새 합류자 (들어왔다 나간 사람 포함)</li>
+          <li>예: <code className="bg-white px-1 rounded">7 / 14</code> = 동시 최대 7명, 누적 14명 거쳐감</li>
+        </ul>
         <ul className="list-disc list-inside space-y-0.5 text-gray-500">
           <li><strong>현재(웹)</strong>: 사이트의 /live, /live-worship 페이지를 3초 이상 머물고 30초마다 heartbeat 보내는 활성 시청자 (IP 기준).</li>
           <li><strong>유튜브</strong>: YouTube Data API v3 의 동시 시청자 수 (concurrentViewers).

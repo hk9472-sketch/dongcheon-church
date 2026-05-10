@@ -43,14 +43,21 @@ function hhmmToMin(s: string): number | null {
   return h * 60 + mm;
 }
 
+interface YtCell { peak: number; delta: number }
 interface RecentDay {
   date: string;
   perService: Record<string, number>;
   total: number;
-  youtubePerService?: Record<string, number>;
-  youtubeTotal?: number;
+  youtubePerService?: Record<string, YtCell>;
+  youtubeTotalPeak?: number;
+  youtubeTotalDelta?: number;
   hourly?: Record<number, number>;
-  youtubeHourly?: Record<number, number>;
+  youtubeHourly?: Record<number, YtCell>;
+}
+
+function fmtYt(c?: YtCell): string {
+  if (!c || (c.peak === 0 && c.delta === 0)) return "";
+  return `${c.peak}/${c.delta}`;
 }
 
 const HOURS = Array.from({ length: 19 }, (_, i) => i + 3); // 3, 4, ..., 21
@@ -370,16 +377,16 @@ export default function LiveStatsPage() {
                 // 2행: 유튜브
                 <tr key={`${d.date}-yt`} className="border-b border-gray-200 hover:bg-red-50/30">
                   {SERVICE_BASE_CODES.map((k) => (
-                    <td key={k} className="px-2 py-1 text-right text-red-600 font-mono text-[11px]">
-                      {d.youtubePerService?.[k] || ""}
+                    <td key={k} className="px-2 py-1 text-right text-red-600 font-mono text-[11px]" title="동시최대 / 누적합류">
+                      {fmtYt(d.youtubePerService?.[k])}
                     </td>
                   ))}
-                  <td className="px-2 py-1 text-right font-semibold text-red-600 font-mono text-[11px]">
-                    {d.youtubeTotal || ""}
+                  <td className="px-2 py-1 text-right font-semibold text-red-600 font-mono text-[11px]" title="일 동시최대 / 누적합류">
+                    {(d.youtubeTotalPeak || d.youtubeTotalDelta) ? `${d.youtubeTotalPeak || 0}/${d.youtubeTotalDelta || 0}` : ""}
                   </td>
                   {HOURS.map((h) => (
-                    <td key={h} className="px-1.5 py-1 text-right text-red-500 font-mono text-[10px]">
-                      {d.youtubeHourly?.[h] || ""}
+                    <td key={h} className="px-1.5 py-1 text-right text-red-500 font-mono text-[10px]" title="동시최대 / 누적합류">
+                      {fmtYt(d.youtubeHourly?.[h])}
                     </td>
                   ))}
                 </tr>,

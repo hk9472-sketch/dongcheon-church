@@ -111,12 +111,14 @@ export async function GET(req: NextRequest) {
       cumulativeEnd: true,
     },
   });
-  const ytByDay = new Map<string, Record<string, number>>();
+  const ytByDay = new Map<string, Record<string, { peak: number; delta: number }>>();
   for (const s of ytStats) {
     const ymd = new Date(s.serviceDate).toISOString().slice(0, 10);
     if (!ytByDay.has(ymd)) ytByDay.set(ymd, {});
-    const total = Math.max(s.cumulativeEnd - s.cumulativeStart, s.peakConcurrent);
-    ytByDay.get(ymd)![s.serviceCode] = total;
+    ytByDay.get(ymd)![s.serviceCode] = {
+      peak: s.peakConcurrent,
+      delta: Math.max(0, s.cumulativeEnd - s.cumulativeStart),
+    };
   }
 
   // 3.6) YouTube 시간대별 일자별
@@ -124,12 +126,14 @@ export async function GET(req: NextRequest) {
     where: { serviceDate: { gte: sinceDay, lte: untilDay } },
     select: { serviceDate: true, hourKst: true, peakConcurrent: true, cumulativeStart: true, cumulativeEnd: true },
   });
-  const ytHourlyByDay = new Map<string, Record<number, number>>();
+  const ytHourlyByDay = new Map<string, Record<number, { peak: number; delta: number }>>();
   for (const s of ytHourStats) {
     const ymd = new Date(s.serviceDate).toISOString().slice(0, 10);
     if (!ytHourlyByDay.has(ymd)) ytHourlyByDay.set(ymd, {});
-    const total = Math.max(s.cumulativeEnd - s.cumulativeStart, s.peakConcurrent);
-    ytHourlyByDay.get(ymd)![s.hourKst] = total;
+    ytHourlyByDay.get(ymd)![s.hourKst] = {
+      peak: s.peakConcurrent,
+      delta: Math.max(0, s.cumulativeEnd - s.cumulativeStart),
+    };
   }
 
   // 4) 응답 정형화 — 오늘 분리 + recent 배열 (sinceDayStr ~ untilDayStr 범위)
@@ -151,7 +155,8 @@ export async function GET(req: NextRequest) {
     const per = byDay.get(d) ?? {};
     const total = Object.values(per).reduce((s, n) => s + n, 0);
     const yt = ytByDay.get(d) ?? {};
-    const ytTotal = Object.values(yt).reduce((s, n) => s + n, 0);
+    const ytTotalPeak = Object.values(yt).reduce((s, v) => Math.max(s, v.peak), 0);
+    const ytTotalDelta = Object.values(yt).reduce((s, v) => s + v.delta, 0);
     const hourly = hourlyByDay.get(d) ?? {};
     const ytHourly = ytHourlyByDay.get(d) ?? {};
     return {
@@ -159,7 +164,8 @@ export async function GET(req: NextRequest) {
       perService: per,
       total,
       youtubePerService: yt,
-      youtubeTotal: ytTotal,
+      youtubeTotalPeak: ytTotalPeak,
+      youtubeTotalDelta: ytTotalDelta,
       hourly,
       youtubeHourly: ytHourly,
     };
