@@ -497,6 +497,23 @@ model SiteSetting {
 }
 
 // ============================================================
+// 유튜브 시청자 — 시간대(KST hour) 단위 일자별 통계 (시간대별 매트릭스용).
+// ============================================================
+model LiveYoutubeHourStat {
+  serviceDate     DateTime @db.Date
+  hourKst         Int
+  peakConcurrent  Int      @default(0)
+  cumulativeStart Int      @default(0)
+  cumulativeEnd   Int      @default(0)
+  videoId         String?  @db.VarChar(20)
+  updatedAt       DateTime @updatedAt
+
+  @@id([serviceDate, hourKst])
+  @@index([serviceDate])
+  @@map("live_youtube_hour_stats")
+}
+
+// ============================================================
 // 유튜브 시청자 — 서비스 단위 일자별 통계.
 // pollYoutubeViewers 가 서비스 윈도우 안에서 폴링할 때마다 upsert.
 // 한 (serviceCode, serviceDate) 당 1행: 윈도우 동안의 peak concurrent + cumulative 시작/끝.

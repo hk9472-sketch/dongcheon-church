@@ -50,6 +50,7 @@ interface RecentDay {
   youtubePerService?: Record<string, number>;
   youtubeTotal?: number;
   hourly?: Record<number, number>;
+  youtubeHourly?: Record<number, number>;
 }
 
 const HOURS = Array.from({ length: 19 }, (_, i) => i + 3); // 3, 4, ..., 21
@@ -347,31 +348,42 @@ export default function LiveStatsPage() {
               </tr>
             </thead>
             <tbody>
-              {recent.map((d) => (
-                <tr key={d.date} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-3 py-1.5 font-mono text-gray-700 sticky left-0 bg-white z-10">{d.date}</td>
-                  {SERVICE_BASE_CODES.map((k) => {
-                    const web = d.perService[k] || 0;
-                    const yt = d.youtubePerService?.[k] || 0;
-                    return (
-                      <td key={k} className="px-2 py-1.5 text-right text-gray-600 font-mono">
-                        {web || yt ? (
-                          <>
-                            {web || ""}
-                            {yt > 0 && <span className="text-red-500 ml-1">({yt})</span>}
-                          </>
-                        ) : ""}
-                      </td>
-                    );
-                  })}
+              {recent.flatMap((d) => [
+                // 1행: 자체 사이트 (웹) — 일자 셀 rowSpan 2
+                <tr key={`${d.date}-web`} className="hover:bg-gray-50">
+                  <td rowSpan={2} className="px-3 py-1.5 font-mono text-gray-700 sticky left-0 bg-white z-10 border-b border-gray-200">
+                    {d.date}
+                    <div className="text-[9px] text-gray-400 font-normal mt-0.5">웹 / 유튜브</div>
+                  </td>
+                  {SERVICE_BASE_CODES.map((k) => (
+                    <td key={k} className="px-2 py-1.5 text-right text-gray-700 font-mono">
+                      {d.perService[k] || ""}
+                    </td>
+                  ))}
                   <td className="px-2 py-1.5 text-right font-bold text-blue-700 font-mono">{d.total || ""}</td>
                   {HOURS.map((h) => (
-                    <td key={h} className="px-1.5 py-1.5 text-right text-gray-500 font-mono text-[11px]">
+                    <td key={h} className="px-1.5 py-1.5 text-right text-gray-600 font-mono text-[11px]">
                       {d.hourly?.[h] || ""}
                     </td>
                   ))}
-                </tr>
-              ))}
+                </tr>,
+                // 2행: 유튜브
+                <tr key={`${d.date}-yt`} className="border-b border-gray-200 hover:bg-red-50/30">
+                  {SERVICE_BASE_CODES.map((k) => (
+                    <td key={k} className="px-2 py-1 text-right text-red-600 font-mono text-[11px]">
+                      {d.youtubePerService?.[k] || ""}
+                    </td>
+                  ))}
+                  <td className="px-2 py-1 text-right font-semibold text-red-600 font-mono text-[11px]">
+                    {d.youtubeTotal || ""}
+                  </td>
+                  {HOURS.map((h) => (
+                    <td key={h} className="px-1.5 py-1 text-right text-red-500 font-mono text-[10px]">
+                      {d.youtubeHourly?.[h] || ""}
+                    </td>
+                  ))}
+                </tr>,
+              ])}
               {recent.length === 0 && (
                 <tr><td colSpan={9} className="py-12 text-center text-gray-400">데이터 없음</td></tr>
               )}

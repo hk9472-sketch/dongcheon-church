@@ -115,9 +115,21 @@ export async function GET(req: NextRequest) {
   for (const s of ytStats) {
     const ymd = new Date(s.serviceDate).toISOString().slice(0, 10);
     if (!ytByDay.has(ymd)) ytByDay.set(ymd, {});
-    // 서비스 누적 시청 = end - start. 일이 막 시작했을 때(첫 폴링) end == start 면 peak 만큼 노출.
     const total = Math.max(s.cumulativeEnd - s.cumulativeStart, s.peakConcurrent);
     ytByDay.get(ymd)![s.serviceCode] = total;
+  }
+
+  // 3.6) YouTube 시간대별 일자별
+  const ytHourStats = await prisma.liveYoutubeHourStat.findMany({
+    where: { serviceDate: { gte: sinceDay, lte: untilDay } },
+    select: { serviceDate: true, hourKst: true, peakConcurrent: true, cumulativeStart: true, cumulativeEnd: true },
+  });
+  const ytHourlyByDay = new Map<string, Record<number, number>>();
+  for (const s of ytHourStats) {
+    const ymd = new Date(s.serviceDate).toISOString().slice(0, 10);
+    if (!ytHourlyByDay.has(ymd)) ytHourlyByDay.set(ymd, {});
+    const total = Math.max(s.cumulativeEnd - s.cumulativeStart, s.peakConcurrent);
+    ytHourlyByDay.get(ymd)![s.hourKst] = total;
   }
 
   // 4) 응답 정형화 — 오늘 분리 + recent 배열 (sinceDayStr ~ untilDayStr 범위)
@@ -141,6 +153,7 @@ export async function GET(req: NextRequest) {
     const yt = ytByDay.get(d) ?? {};
     const ytTotal = Object.values(yt).reduce((s, n) => s + n, 0);
     const hourly = hourlyByDay.get(d) ?? {};
+    const ytHourly = ytHourlyByDay.get(d) ?? {};
     return {
       date: d,
       perService: per,
@@ -148,6 +161,7 @@ export async function GET(req: NextRequest) {
       youtubePerService: yt,
       youtubeTotal: ytTotal,
       hourly,
+      youtubeHourly: ytHourly,
     };
   });
 

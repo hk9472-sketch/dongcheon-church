@@ -328,7 +328,11 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
     };
   }
 
-  // 누적 갱신
+  // 누적 갱신 — cumulative 는 daily monotonic counter
+  // cumulativeStart 는 이 서비스의 '첫 폴링 직전' 값 = 다른 서비스로부터 carry over 된 daily cum
+  const cumulativeBeforeThisPoll =
+    prev && prev.date === today && prev.videoId === videoId ? prev.cumulative : 0;
+
   let cumulative: number;
   if (!prev || prev.videoId !== videoId || prev.date !== today) {
     cumulative = concurrent;
@@ -337,7 +341,11 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
   }
   await saveState({ date: today, concurrent, cumulative, polledAt: now, videoId });
 
-  // 서비스별 일자별 통계 — upsert (peakConcurrent 갱신, cumulative 시작/끝 추적)
+  // 서비스별 일자별 통계
+  // - cumulativeStart: 서비스 첫 폴링 직전 daily cum (이미 다른 서비스에서 누적된 값)
+  // - cumulativeEnd: 매 폴링마다 갱신 (= 현재 daily cum)
+  // - 서비스 누적 시청 = cumulativeEnd - cumulativeStart (해당 서비스 동안 새로 들어온 사람 + 첫 폴링 시점 신규)
+  // - peakConcurrent: 서비스 동안 동시 시청자 최대
   try {
     const serviceDateForStat = new Date(today + "T00:00:00.000Z");
     await prisma.liveYoutubeServiceStat.upsert({
@@ -351,21 +359,40 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
         serviceCode: svc.code,
         serviceDate: serviceDateForStat,
         peakConcurrent: concurrent,
-        cumulativeStart: cumulative,
+        cumulativeStart: cumulativeBeforeThisPoll,
         cumulativeEnd: cumulative,
         videoId,
       },
       update: {
-        peakConcurrent: { increment: 0 }, // 아래 raw 로 MAX 처리
         cumulativeEnd: cumulative,
         videoId,
       },
     });
-    // peak 는 MAX 처리 — Prisma 가 inline MAX 를 지원하지 않아 raw
+    // peak 는 MAX 처리 — Prisma inline MAX 미지원 → raw
     await prisma.$executeRaw`
       UPDATE live_youtube_service_stats
       SET peakConcurrent = GREATEST(peakConcurrent, ${concurrent})
       WHERE serviceCode = ${svc.code} AND serviceDate = ${serviceDateForStat}
+    `;
+
+    // 시간대(KST hour)별 upsert — 매트릭스 시간대 컬럼용
+    const kstHour = new Date(now + 9 * 3600 * 1000).getUTCHours();
+    await prisma.liveYoutubeHourStat.upsert({
+      where: { serviceDate_hourKst: { serviceDate: serviceDateForStat, hourKst: kstHour } },
+      create: {
+        serviceDate: serviceDateForStat,
+        hourKst: kstHour,
+        peakConcurrent: concurrent,
+        cumulativeStart: cumulativeBeforeThisPoll,
+        cumulativeEnd: cumulative,
+        videoId,
+      },
+      update: { cumulativeEnd: cumulative, videoId },
+    });
+    await prisma.$executeRaw`
+      UPDATE live_youtube_hour_stats
+      SET peakConcurrent = GREATEST(peakConcurrent, ${concurrent})
+      WHERE serviceDate = ${serviceDateForStat} AND hourKst = ${kstHour}
     `;
   } catch {
     // 통계 저장 실패는 메인 폴링 결과에 영향 X
