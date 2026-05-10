@@ -37,6 +37,8 @@ interface RecentDay {
   date: string;
   perService: Record<string, number>;
   total: number;
+  youtubePerService?: Record<string, number>;
+  youtubeTotal?: number;
 }
 
 interface LogRow {
@@ -331,13 +333,25 @@ export default function LiveStatsPage() {
               {recent.map((d) => (
                 <tr key={d.date} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="px-3 py-1.5 font-mono text-gray-700">{d.date}</td>
-                  {Object.keys(SERVICE_LABELS).filter((k) => k !== "other").map((k) => (
-                    <td key={k} className="px-3 py-1.5 text-right text-gray-600 font-mono">
-                      {d.perService[k] || ""}
-                    </td>
-                  ))}
+                  {Object.keys(SERVICE_LABELS).filter((k) => k !== "other").map((k) => {
+                    const web = d.perService[k] || 0;
+                    const yt = d.youtubePerService?.[k] || 0;
+                    return (
+                      <td key={k} className="px-3 py-1.5 text-right text-gray-600 font-mono">
+                        {web || yt ? (
+                          <>
+                            {web || ""}
+                            {yt > 0 && <span className="text-red-500 ml-1">({yt})</span>}
+                          </>
+                        ) : ""}
+                      </td>
+                    );
+                  })}
                   <td className="px-3 py-1.5 text-right text-gray-400 font-mono">{d.perService.other || ""}</td>
-                  <td className="px-3 py-1.5 text-right font-bold text-blue-700 font-mono">{d.total || ""}</td>
+                  <td className="px-3 py-1.5 text-right font-bold text-blue-700 font-mono">
+                    {d.total || ""}
+                    {(d.youtubeTotal ?? 0) > 0 && <span className="text-red-500 font-normal ml-1">({d.youtubeTotal})</span>}
+                  </td>
                 </tr>
               ))}
               {recent.length === 0 && (
@@ -502,7 +516,9 @@ export default function LiveStatsPage() {
               {!loading && logRows.length === 0 && <tr><td colSpan={5} className="py-12 text-center text-gray-400">데이터 없음</td></tr>}
               {logRows.map((r) => (
                 <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-3 py-1.5 font-mono text-gray-700">{r.createdAt.replace("T", " ").slice(0, 19)}</td>
+                  <td className="px-3 py-1.5 font-mono text-gray-700">
+                    {new Date(r.createdAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false })}
+                  </td>
                   <td className="px-3 py-1.5 text-gray-700">{r.serviceLabel}</td>
                   <td className="px-3 py-1.5 font-mono text-gray-600">{r.ip}</td>
                   <td className="px-3 py-1.5 text-gray-500">{r.path}</td>

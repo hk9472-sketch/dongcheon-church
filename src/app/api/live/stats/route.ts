@@ -81,6 +81,24 @@ export async function GET(req: NextRequest) {
     byDay.get(ymd)![r.serviceCode] = Number(r.cnt);
   }
 
+  // 3.5) YouTube 서비스별 일자별 peak 가져오기
+  const ytStats = await prisma.liveYoutubeServiceStat.findMany({
+    where: {
+      serviceDate: { gte: sinceDay, lte: untilDay },
+    },
+    select: {
+      serviceCode: true,
+      serviceDate: true,
+      peakConcurrent: true,
+    },
+  });
+  const ytByDay = new Map<string, Record<string, number>>();
+  for (const s of ytStats) {
+    const ymd = new Date(s.serviceDate).toISOString().slice(0, 10);
+    if (!ytByDay.has(ymd)) ytByDay.set(ymd, {});
+    ytByDay.get(ymd)![s.serviceCode] = s.peakConcurrent;
+  }
+
   // 4) 응답 정형화 — 오늘 분리 + recent 배열 (sinceDayStr ~ untilDayStr 범위)
   const todayYmd = todayKstYmd;
   const todayPerService = byDay.get(todayYmd) ?? {};
@@ -99,7 +117,9 @@ export async function GET(req: NextRequest) {
   const recent = recentDates.map((d) => {
     const per = byDay.get(d) ?? {};
     const total = Object.values(per).reduce((s, n) => s + n, 0);
-    return { date: d, perService: per, total };
+    const yt = ytByDay.get(d) ?? {};
+    const ytTotal = Object.values(yt).reduce((s, n) => s + n, 0);
+    return { date: d, perService: per, total, youtubePerService: yt, youtubeTotal: ytTotal };
   });
 
   // YouTube 시청자 (옵션 — API 키 미설정 시 0)

@@ -497,6 +497,25 @@ model SiteSetting {
 }
 
 // ============================================================
+// 유튜브 시청자 — 서비스 단위 일자별 통계.
+// pollYoutubeViewers 가 서비스 윈도우 안에서 폴링할 때마다 upsert.
+// 한 (serviceCode, serviceDate) 당 1행: 윈도우 동안의 peak concurrent + cumulative 시작/끝.
+// ============================================================
+model LiveYoutubeServiceStat {
+  serviceCode    String   @db.VarChar(20)
+  serviceDate    DateTime @db.Date
+  peakConcurrent Int      @default(0)
+  cumulativeStart Int     @default(0)
+  cumulativeEnd  Int      @default(0)
+  videoId        String?  @db.VarChar(20)
+  updatedAt      DateTime @updatedAt
+
+  @@id([serviceCode, serviceDate])
+  @@index([serviceDate])
+  @@map("live_youtube_service_stats")
+}
+
+// ============================================================
 // 실시간 예배 방문 기록 — /live, /live-worship 진입 시 서비스 분류 후 저장.
 // 서비스 윈도우(예: 새벽기도 03:00~05:00) 안에서만 분류되며, 그 외 시간 진입은 'other'.
 // 일자별/서비스별 통계 + 기간 로그 조회용.

@@ -41,6 +41,8 @@ interface RecentDay {
   date: string;
   perService: Record<string, number>;
   total: number;
+  youtubePerService?: Record<string, number>;
+  youtubeTotal?: number;
 }
 
 interface StatsData {
@@ -266,13 +268,23 @@ export default function PublicLiveStatsPage() {
               {recent.map((d) => (
                 <tr key={d.date} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="px-3 py-1.5 font-mono text-gray-700">{d.date}</td>
-                  {orderedCodes.map((k) => (
-                    <td key={k} className="px-3 py-1.5 text-right text-gray-600 font-mono">
-                      {d.perService[k] || ""}
-                    </td>
-                  ))}
+                  {orderedCodes.map((k) => {
+                    const web = d.perService[k] || 0;
+                    const yt = d.youtubePerService?.[k] || 0;
+                    return (
+                      <td key={k} className="px-3 py-1.5 text-right text-gray-600 font-mono">
+                        {web || yt ? (
+                          <>
+                            {web || ""}
+                            {yt > 0 && <span className="text-red-500 ml-1">({yt})</span>}
+                          </>
+                        ) : ""}
+                      </td>
+                    );
+                  })}
                   <td className="px-3 py-1.5 text-right font-bold text-emerald-700 font-mono">
                     {d.total || ""}
+                    {(d.youtubeTotal ?? 0) > 0 && <span className="text-red-500 font-normal ml-1">({d.youtubeTotal})</span>}
                   </td>
                 </tr>
               ))}

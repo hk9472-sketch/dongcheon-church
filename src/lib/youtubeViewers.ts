@@ -337,6 +337,40 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
   }
   await saveState({ date: today, concurrent, cumulative, polledAt: now, videoId });
 
+  // 서비스별 일자별 통계 — upsert (peakConcurrent 갱신, cumulative 시작/끝 추적)
+  try {
+    const serviceDateForStat = new Date(today + "T00:00:00.000Z");
+    await prisma.liveYoutubeServiceStat.upsert({
+      where: {
+        serviceCode_serviceDate: {
+          serviceCode: svc.code,
+          serviceDate: serviceDateForStat,
+        },
+      },
+      create: {
+        serviceCode: svc.code,
+        serviceDate: serviceDateForStat,
+        peakConcurrent: concurrent,
+        cumulativeStart: cumulative,
+        cumulativeEnd: cumulative,
+        videoId,
+      },
+      update: {
+        peakConcurrent: { increment: 0 }, // 아래 raw 로 MAX 처리
+        cumulativeEnd: cumulative,
+        videoId,
+      },
+    });
+    // peak 는 MAX 처리 — Prisma 가 inline MAX 를 지원하지 않아 raw
+    await prisma.$executeRaw`
+      UPDATE live_youtube_service_stats
+      SET peakConcurrent = GREATEST(peakConcurrent, ${concurrent})
+      WHERE serviceCode = ${svc.code} AND serviceDate = ${serviceDateForStat}
+    `;
+  } catch {
+    // 통계 저장 실패는 메인 폴링 결과에 영향 X
+  }
+
   return {
     ok: true, hasApiKey: true, hasUrl: true, videoId,
     concurrent, cumulative, polledAt: now, cached: false, reason: "ok",
