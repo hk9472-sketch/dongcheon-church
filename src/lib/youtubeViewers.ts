@@ -4,34 +4,47 @@ import { classifyService, loadWindows } from "@/lib/liveService";
 // ============================================================
 // YouTube 동시 시청자 폴링 + 누적 추적
 //
-// - YouTube Data API v3: videos.list?id=VIDEO_ID&part=liveStreamingDetails&key=API_KEY
-// - 5초 캐시 — 단, 서비스 윈도우(예배 시간) 안에서만 외부 호출
-// - 서비스 시간 외엔 cached state 그대로 반환 (quota 절약)
-// - state 는 site_settings.live_youtube_state 에 JSON 저장
-//   { date, concurrent, cumulative, polledAt, videoId }
-// - concurrent 가 직전 샘플보다 늘어나면 그 차이만큼 cumulative 증가
-// - concurrent 가 줄어도 cumulative 는 monotonic (총 시청)
-// - KST 자정에 자동 리셋
+// URL 우선순위:
+//   1) NEXT_PUBLIC_YOUTUBE_LIVE_URL (.env) — 정규 실시간 예배 채널
+//   2) site_settings.live_worship_url — 내계집회 전용 (fallback)
+//
+// URL 형식 지원:
+//   - watch?v=ID, youtu.be/ID, embed/ID, live/ID, shorts/ID → video ID 직접 추출
+//   - youtube.com/channel/UC... → search.list 로 라이브 영상 ID 자동 조회
+//   - youtube.com/@handle → channels.list?forHandle 로 채널 ID 조회 → search.list
+//   - youtube.com/c/name, /user/name → channels.list?forUsername (legacy)
+//
+// 폴링: 서비스 윈도우 안에서만 5s 간격
+// 채널 URL → 라이브 영상 매핑은 10분 캐시 (search.list 100 units 비싸므로)
 // ============================================================
 
 interface YoutubeState {
-  date: string; // KST YYYY-MM-DD
+  date: string;
   concurrent: number;
   cumulative: number;
-  polledAt: number; // ms epoch
+  polledAt: number;
   videoId: string;
 }
 
+interface ChannelLiveCache {
+  channelId: string;
+  videoId: string | null;
+  resolvedAt: number; // ms
+}
+
 const STATE_KEY = "live_youtube_state";
-const URL_KEY = "live_worship_url";
-const API_KEY = "youtube_api_key";
+const CHANNEL_CACHE_KEY = "live_youtube_channel_cache";
+const SETTING_URL_KEY = "live_worship_url";
+const API_KEY_SETTING = "youtube_api_key";
 
 const POLL_INTERVAL_MS = 5 * 1000;
+const CHANNEL_RESOLVE_CACHE_MS = 10 * 60 * 1000; // 10분
 
 function todayKstYmd(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
+/** URL → video ID 직접 추출 (watch/youtu.be/embed/live/shorts) */
 export function extractVideoId(url: string): string | null {
   if (!url) return null;
   const patterns = [
@@ -44,6 +57,36 @@ export function extractVideoId(url: string): string | null {
   for (const p of patterns) {
     const m = url.match(p);
     if (m) return m[1];
+  }
+  return null;
+}
+
+/** URL → 채널 식별자 추출.
+ *  type: 'id' (UC...), 'handle' (@xxx), 'username' (c/, user/) */
+export function extractChannelRef(
+  url: string,
+): { type: "id" | "handle" | "username"; value: string } | null {
+  if (!url) return null;
+  // /channel/UC... (24 chars including UC)
+  let m = url.match(/youtube\.com\/channel\/(UC[a-zA-Z0-9_-]{22})/);
+  if (m) return { type: "id", value: m[1] };
+  // /@handle (URL 인코딩 가능)
+  m = url.match(/youtube\.com\/@([^/?#&]+)/);
+  if (m) {
+    try {
+      return { type: "handle", value: decodeURIComponent(m[1]) };
+    } catch {
+      return { type: "handle", value: m[1] };
+    }
+  }
+  // /c/customname or /user/legacyname
+  m = url.match(/youtube\.com\/(?:c|user)\/([^/?#&]+)/);
+  if (m) {
+    try {
+      return { type: "username", value: decodeURIComponent(m[1]) };
+    } catch {
+      return { type: "username", value: m[1] };
+    }
   }
   return null;
 }
@@ -76,6 +119,67 @@ async function saveState(s: YoutubeState): Promise<void> {
   });
 }
 
+async function loadChannelCache(): Promise<ChannelLiveCache | null> {
+  const row = await prisma.siteSetting.findUnique({ where: { key: CHANNEL_CACHE_KEY } });
+  if (!row?.value) return null;
+  try {
+    const obj = JSON.parse(row.value);
+    if (
+      typeof obj?.channelId === "string" &&
+      typeof obj?.resolvedAt === "number" &&
+      (obj?.videoId === null || typeof obj?.videoId === "string")
+    ) {
+      return obj as ChannelLiveCache;
+    }
+  } catch {}
+  return null;
+}
+
+async function saveChannelCache(c: ChannelLiveCache): Promise<void> {
+  await prisma.siteSetting.upsert({
+    where: { key: CHANNEL_CACHE_KEY },
+    create: { key: CHANNEL_CACHE_KEY, value: JSON.stringify(c) },
+    update: { value: JSON.stringify(c) },
+  });
+}
+
+/** 채널 식별자 → 채널 ID (UC...). handle/username 은 channels.list 로 1회 조회 */
+async function resolveChannelId(
+  ref: { type: "id" | "handle" | "username"; value: string },
+  apiKey: string,
+): Promise<string | null> {
+  if (ref.type === "id") return ref.value;
+  const param =
+    ref.type === "handle" ? `forHandle=@${encodeURIComponent(ref.value)}` : `forUsername=${encodeURIComponent(ref.value)}`;
+  const url = `https://www.googleapis.com/youtube/v3/channels?${param}&part=id&key=${apiKey}`;
+  try {
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const id = data?.items?.[0]?.id;
+    return typeof id === "string" ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 채널 ID → 현재 라이브 영상 ID (search.list, 100 units). 없으면 null */
+async function findLiveVideoOnChannel(
+  channelId: string,
+  apiKey: string,
+): Promise<string | null> {
+  const url = `https://www.googleapis.com/youtube/v3/search?part=id&channelId=${channelId}&eventType=live&type=video&maxResults=1&key=${apiKey}`;
+  try {
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const id = data?.items?.[0]?.id?.videoId;
+    return typeof id === "string" ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 interface PollResult {
   ok: boolean;
   hasApiKey: boolean;
@@ -83,126 +187,123 @@ interface PollResult {
   videoId: string | null;
   concurrent: number;
   cumulative: number;
-  polledAt: number; // ms
+  polledAt: number;
   cached: boolean;
   error?: string;
-  /** 'no-key' | 'no-url' | 'bad-url' | 'api-error' | 'outside-window' | 'ok' */
   reason: string;
 }
 
-/**
- * YouTube 시청자 수 조회 (30s 캐시).
- * - 캐시 만료된 경우 fresh fetch + 누적 업데이트.
- * - 키/URL 누락 시 0 반환 (에러 X — UI 가 깔끔하게 처리하도록).
- */
+/** 메인 폴링 함수. URL 은 env 우선, 없으면 DB live_worship_url. */
 export async function pollYoutubeViewers(force = false): Promise<PollResult> {
   // 키 + URL 로드
-  const rows = await prisma.siteSetting.findMany({
-    where: { key: { in: [URL_KEY, API_KEY] } },
+  const settingRows = await prisma.siteSetting.findMany({
+    where: { key: { in: [SETTING_URL_KEY, API_KEY_SETTING] } },
   });
-  const map = new Map(rows.map((r) => [r.key, r.value]));
-  const apiKey = (map.get(API_KEY) || "").trim();
-  const url = (map.get(URL_KEY) || "").trim();
+  const settingMap = new Map(settingRows.map((r) => [r.key, r.value]));
+  const apiKey = (settingMap.get(API_KEY_SETTING) || "").trim();
+  const envUrl = (process.env.NEXT_PUBLIC_YOUTUBE_LIVE_URL || "").trim();
+  const dbUrl = (settingMap.get(SETTING_URL_KEY) || "").trim();
+  const url = envUrl || dbUrl;
 
   if (!apiKey) {
     return {
-      ok: false,
-      hasApiKey: false,
-      hasUrl: !!url,
-      videoId: null,
-      concurrent: 0,
-      cumulative: 0,
-      polledAt: 0,
-      cached: false,
-      error: "API key not set",
-      reason: "no-key",
+      ok: false, hasApiKey: false, hasUrl: !!url, videoId: null,
+      concurrent: 0, cumulative: 0, polledAt: 0, cached: false,
+      error: "API key not set", reason: "no-key",
     };
   }
   if (!url) {
     return {
-      ok: false,
-      hasApiKey: true,
-      hasUrl: false,
-      videoId: null,
-      concurrent: 0,
-      cumulative: 0,
-      polledAt: 0,
-      cached: false,
-      error: "live_worship_url not set",
-      reason: "no-url",
+      ok: false, hasApiKey: true, hasUrl: false, videoId: null,
+      concurrent: 0, cumulative: 0, polledAt: 0, cached: false,
+      error: "URL not set", reason: "no-url",
     };
   }
-  const videoId = extractVideoId(url);
+
+  // video ID 추출 — 직접 추출 → 채널 URL 자동 해결
+  let videoId = extractVideoId(url);
   if (!videoId) {
-    return {
-      ok: false,
-      hasApiKey: true,
-      hasUrl: true,
-      videoId: null,
-      concurrent: 0,
-      cumulative: 0,
-      polledAt: 0,
-      cached: false,
-      error: "video id not extractable from URL",
-      reason: "bad-url",
-    };
+    const channelRef = extractChannelRef(url);
+    if (!channelRef) {
+      return {
+        ok: false, hasApiKey: true, hasUrl: true, videoId: null,
+        concurrent: 0, cumulative: 0, polledAt: 0, cached: false,
+        error: "URL 형식 인식 실패", reason: "bad-url",
+      };
+    }
+
+    // 캐시 확인 — 10분 안이면 그대로 사용 (quota 절약)
+    const cache = await loadChannelCache();
+    const channelIdResolved =
+      cache && cache.channelId.startsWith("UC") &&
+      Date.now() - cache.resolvedAt < CHANNEL_RESOLVE_CACHE_MS
+        ? cache.channelId
+        : await resolveChannelId(channelRef, apiKey);
+
+    if (!channelIdResolved) {
+      return {
+        ok: false, hasApiKey: true, hasUrl: true, videoId: null,
+        concurrent: 0, cumulative: 0, polledAt: 0, cached: false,
+        error: "채널 ID 조회 실패", reason: "channel-resolve-fail",
+      };
+    }
+
+    if (cache && cache.videoId && cache.channelId === channelIdResolved &&
+        Date.now() - cache.resolvedAt < CHANNEL_RESOLVE_CACHE_MS) {
+      videoId = cache.videoId;
+    } else {
+      videoId = await findLiveVideoOnChannel(channelIdResolved, apiKey);
+      await saveChannelCache({
+        channelId: channelIdResolved,
+        videoId,
+        resolvedAt: Date.now(),
+      });
+    }
+
+    if (!videoId) {
+      return {
+        ok: true, hasApiKey: true, hasUrl: true, videoId: null,
+        concurrent: 0, cumulative: 0, polledAt: 0, cached: false,
+        error: "현재 라이브 중 영상 없음",
+        reason: "no-live",
+      };
+    }
   }
 
   const today = todayKstYmd();
   const prev = await loadState();
   const now = Date.now();
 
-  // 서비스 윈도우(예배 시간) 안인지 판정 — force 가 아니면 윈도우 밖에선 외부 호출 X
+  // 서비스 윈도우 검사
   const windows = await loadWindows();
   const svc = classifyService(new Date(now), windows);
   const inServiceWindow = svc.inProgress;
 
   if (!force && !inServiceWindow) {
-    // 서비스 시간 외 — cached state 반환 (quota 절약). 누적은 그대로 유지.
     if (prev && prev.videoId === videoId && prev.date === today) {
       return {
-        ok: true,
-        hasApiKey: true,
-        hasUrl: true,
-        videoId,
-        concurrent: prev.concurrent,
-        cumulative: prev.cumulative,
-        polledAt: prev.polledAt,
-        cached: true,
+        ok: true, hasApiKey: true, hasUrl: true, videoId,
+        concurrent: prev.concurrent, cumulative: prev.cumulative,
+        polledAt: prev.polledAt, cached: true,
         reason: "outside-window",
       };
     }
     return {
-      ok: true,
-      hasApiKey: true,
-      hasUrl: true,
-      videoId,
+      ok: true, hasApiKey: true, hasUrl: true, videoId,
       concurrent: 0,
       cumulative: prev?.date === today ? prev.cumulative : 0,
-      polledAt: prev?.polledAt ?? 0,
-      cached: true,
+      polledAt: prev?.polledAt ?? 0, cached: true,
       reason: "outside-window",
     };
   }
 
-  // 서비스 윈도우 안 — 5s 캐시 적용
-  if (
-    !force &&
-    prev &&
-    prev.videoId === videoId &&
-    prev.date === today &&
-    now - prev.polledAt < POLL_INTERVAL_MS
-  ) {
+  // 5s 캐시
+  if (!force && prev && prev.videoId === videoId && prev.date === today &&
+      now - prev.polledAt < POLL_INTERVAL_MS) {
     return {
-      ok: true,
-      hasApiKey: true,
-      hasUrl: true,
-      videoId,
-      concurrent: prev.concurrent,
-      cumulative: prev.cumulative,
-      polledAt: prev.polledAt,
-      cached: true,
-      reason: !inServiceWindow ? "outside-window" : "ok",
+      ok: true, hasApiKey: true, hasUrl: true, videoId,
+      concurrent: prev.concurrent, cumulative: prev.cumulative,
+      polledAt: prev.polledAt, cached: true, reason: "ok",
     };
   }
 
@@ -213,16 +314,10 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
     const r = await fetch(apiUrl, { cache: "no-store" });
     if (!r.ok) {
       return {
-        ok: false,
-        hasApiKey: true,
-        hasUrl: true,
-        videoId,
-        concurrent: prev?.concurrent ?? 0,
-        cumulative: prev?.cumulative ?? 0,
-        polledAt: prev?.polledAt ?? 0,
-        cached: false,
-        error: `youtube api ${r.status}`,
-        reason: "api-error",
+        ok: false, hasApiKey: true, hasUrl: true, videoId,
+        concurrent: prev?.concurrent ?? 0, cumulative: prev?.cumulative ?? 0,
+        polledAt: prev?.polledAt ?? 0, cached: false,
+        error: `youtube api ${r.status}`, reason: "api-error",
       };
     }
     const data = await r.json();
@@ -231,47 +326,25 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
     concurrent = cv ? parseInt(String(cv), 10) || 0 : 0;
   } catch (e) {
     return {
-      ok: false,
-      hasApiKey: true,
-      hasUrl: true,
-      videoId,
-      concurrent: prev?.concurrent ?? 0,
-      cumulative: prev?.cumulative ?? 0,
-      polledAt: prev?.polledAt ?? 0,
-      cached: false,
+      ok: false, hasApiKey: true, hasUrl: true, videoId,
+      concurrent: prev?.concurrent ?? 0, cumulative: prev?.cumulative ?? 0,
+      polledAt: prev?.polledAt ?? 0, cached: false,
       error: e instanceof Error ? e.message : "fetch error",
       reason: "api-error",
     };
   }
 
-  // 상태 업데이트
+  // 누적 갱신
   let cumulative: number;
   if (!prev || prev.videoId !== videoId || prev.date !== today) {
-    // 새 영상/새 날짜 → 누적 리셋. 시작 시점의 concurrent 가 곧 시작 누적
     cumulative = concurrent;
   } else {
-    // 같은 영상/같은 날 — concurrent 증가분만큼 누적 +
     cumulative = prev.cumulative + Math.max(0, concurrent - prev.concurrent);
   }
-
-  const next: YoutubeState = {
-    date: today,
-    concurrent,
-    cumulative,
-    polledAt: now,
-    videoId,
-  };
-  await saveState(next);
+  await saveState({ date: today, concurrent, cumulative, polledAt: now, videoId });
 
   return {
-    ok: true,
-    hasApiKey: true,
-    hasUrl: true,
-    videoId,
-    concurrent,
-    cumulative,
-    polledAt: now,
-    cached: false,
-    reason: "ok",
+    ok: true, hasApiKey: true, hasUrl: true, videoId,
+    concurrent, cumulative, polledAt: now, cached: false, reason: "ok",
   };
 }

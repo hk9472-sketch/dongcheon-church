@@ -20,8 +20,10 @@ function ytReasonLabel(
 ): string {
   if (reason === "no-key" || hasApiKey === false) return "API 키 미등록";
   if (reason === "no-url" || hasUrl === false) return "URL 미설정";
-  if (reason === "bad-url") return "URL 형식 오류 (video ID 추출 실패)";
-  if (reason === "api-error") return "API 호출 실패 (키 만료/quota?)";
+  if (reason === "bad-url") return "URL 형식 인식 실패";
+  if (reason === "channel-resolve-fail") return "채널 ID 조회 실패";
+  if (reason === "no-live") return "현재 라이브 없음";
+  if (reason === "api-error") return "API 호출 실패 (키/quota?)";
   return "미설정";
 }
 
