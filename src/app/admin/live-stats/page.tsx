@@ -9,8 +9,18 @@ const SERVICE_LABELS: Record<string, string> = {
   sun_adult_am: "장년반 오전",
   sun_adult_pm: "장년반 오후",
   sun_child_pm: "주교오후",
+  gap_to_dawn: "→새벽",
+  gap_to_eve: "→밤",
+  gap_to_sun_child_am: "→주교오전",
+  gap_to_sun_adult_am: "→장년오전",
+  gap_to_sun_adult_pm: "→장년오후",
+  gap_to_sun_child_pm: "→주교오후",
+  gap_between: "예배 사이",
   other: "기타",
 };
+
+const SERVICE_BASE_CODES = ["dawn", "eve", "sun_child_am", "sun_adult_am", "sun_adult_pm", "sun_child_pm"];
+const SERVICE_GAP_CODES = ["gap_to_dawn", "gap_to_eve", "gap_to_sun_child_am", "gap_to_sun_adult_am", "gap_to_sun_adult_pm", "gap_to_sun_child_pm", "gap_between"];
 
 const DAY_LABELS = ["주일", "월", "화", "수", "목", "금", "토"];
 
@@ -322,8 +332,11 @@ export default function LiveStatsPage() {
             <thead className="bg-gray-50 border-b border-gray-200 text-gray-600">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">일자</th>
-                {Object.keys(SERVICE_LABELS).filter((k) => k !== "other").map((k) => (
+                {SERVICE_BASE_CODES.map((k) => (
                   <th key={k} className="px-3 py-2 text-right font-medium">{SERVICE_LABELS[k]}</th>
+                ))}
+                {SERVICE_GAP_CODES.map((k) => (
+                  <th key={k} className="px-2 py-2 text-right font-medium text-amber-700 text-[11px]" title={`다음 예배 직전 (${SERVICE_LABELS[k]})`}>{SERVICE_LABELS[k]}</th>
                 ))}
                 <th className="px-3 py-2 text-right font-medium">기타</th>
                 <th className="px-3 py-2 text-right font-bold text-blue-700">합계</th>
@@ -333,7 +346,7 @@ export default function LiveStatsPage() {
               {recent.map((d) => (
                 <tr key={d.date} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="px-3 py-1.5 font-mono text-gray-700">{d.date}</td>
-                  {Object.keys(SERVICE_LABELS).filter((k) => k !== "other").map((k) => {
+                  {SERVICE_BASE_CODES.map((k) => {
                     const web = d.perService[k] || 0;
                     const yt = d.youtubePerService?.[k] || 0;
                     return (
@@ -347,11 +360,13 @@ export default function LiveStatsPage() {
                       </td>
                     );
                   })}
+                  {SERVICE_GAP_CODES.map((k) => (
+                    <td key={k} className="px-2 py-1.5 text-right text-amber-700 font-mono text-[11px]">
+                      {d.perService[k] || ""}
+                    </td>
+                  ))}
                   <td className="px-3 py-1.5 text-right text-gray-400 font-mono">{d.perService.other || ""}</td>
-                  <td className="px-3 py-1.5 text-right font-bold text-blue-700 font-mono">
-                    {d.total || ""}
-                    {(d.youtubeTotal ?? 0) > 0 && <span className="text-red-500 font-normal ml-1">({d.youtubeTotal})</span>}
-                  </td>
+                  <td className="px-3 py-1.5 text-right font-bold text-blue-700 font-mono">{d.total || ""}</td>
                 </tr>
               ))}
               {recent.length === 0 && (

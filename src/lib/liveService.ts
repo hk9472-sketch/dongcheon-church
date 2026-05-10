@@ -6,13 +6,18 @@ import prisma from "@/lib/db";
 // site_settings.live_service_windows (JSON) 에 저장되고, 그 값이 우선 적용됨.
 // ============================================================
 
-export type ServiceCode =
+type BaseServiceCode =
   | "dawn"
   | "eve"
   | "sun_child_am"
   | "sun_adult_am"
   | "sun_adult_pm"
-  | "sun_child_pm"
+  | "sun_child_pm";
+
+export type ServiceCode =
+  | BaseServiceCode
+  | `gap_to_${BaseServiceCode}` // 같은 날 다음 예배 직전 gap
+  | "gap_between" // (legacy) 일반 예배 사이
   | "other";
 
 export interface ServiceWindow {
@@ -116,6 +121,32 @@ export function classifyService(now: Date, windows: ServiceWindow[] = DEFAULT_WI
       end,
     };
   }
+
+  // 활성 윈도우 없음 — 같은 날 이전 서비스 + 다음 서비스 가 있으면 gap_to_<next>
+  let hasPrevToday = false;
+  let nextW: ServiceWindow | null = null;
+  let minNextDelta = Infinity;
+  for (const w of windows) {
+    if (!w.days.includes(k.day)) continue;
+    if (w.endMin <= k.timeMin) {
+      hasPrevToday = true;
+    } else if (w.startMin > k.timeMin) {
+      const delta = w.startMin - k.timeMin;
+      if (delta < minNextDelta) {
+        minNextDelta = delta;
+        nextW = w;
+      }
+    }
+  }
+  if (hasPrevToday && nextW) {
+    return {
+      code: `gap_to_${nextW.code}` as ServiceCode,
+      label: `→ ${nextW.label}`,
+      serviceDate: k.ymd,
+      inProgress: false,
+    };
+  }
+
   return {
     code: "other",
     label: "기타",
@@ -153,13 +184,20 @@ export function nextServiceStart(
   return best;
 }
 
-export const SERVICE_LABELS: Record<ServiceCode, string> = {
+export const SERVICE_LABELS: Record<string, string> = {
   dawn: "새벽기도",
   eve: "밤예배",
   sun_child_am: "주교오전",
   sun_adult_am: "장년반 오전",
   sun_adult_pm: "장년반 오후",
   sun_child_pm: "주교오후",
+  gap_to_dawn: "→ 새벽기도",
+  gap_to_eve: "→ 밤예배",
+  gap_to_sun_child_am: "→ 주교오전",
+  gap_to_sun_adult_am: "→ 장년반 오전",
+  gap_to_sun_adult_pm: "→ 장년반 오후",
+  gap_to_sun_child_pm: "→ 주교오후",
+  gap_between: "예배 사이",
   other: "기타",
 };
 
@@ -170,6 +208,13 @@ export const SERVICE_CODES: { code: ServiceCode; label: string }[] = [
   { code: "sun_adult_am", label: "장년반 오전" },
   { code: "sun_adult_pm", label: "장년반 오후" },
   { code: "sun_child_pm", label: "주교오후" },
+  { code: "gap_to_dawn", label: "→ 새벽기도" },
+  { code: "gap_to_eve", label: "→ 밤예배" },
+  { code: "gap_to_sun_child_am", label: "→ 주교오전" },
+  { code: "gap_to_sun_adult_am", label: "→ 장년반 오전" },
+  { code: "gap_to_sun_adult_pm", label: "→ 장년반 오후" },
+  { code: "gap_to_sun_child_pm", label: "→ 주교오후" },
+  { code: "gap_between", label: "예배 사이" },
   { code: "other", label: "기타" },
 ];
 

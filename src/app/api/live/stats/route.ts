@@ -81,22 +81,24 @@ export async function GET(req: NextRequest) {
     byDay.get(ymd)![r.serviceCode] = Number(r.cnt);
   }
 
-  // 3.5) YouTube 서비스별 일자별 peak 가져오기
+  // 3.5) YouTube 서비스별 일자별 — 누적 (cumulativeEnd - cumulativeStart) = 그 서비스 동안 시청한 사람
   const ytStats = await prisma.liveYoutubeServiceStat.findMany({
-    where: {
-      serviceDate: { gte: sinceDay, lte: untilDay },
-    },
+    where: { serviceDate: { gte: sinceDay, lte: untilDay } },
     select: {
       serviceCode: true,
       serviceDate: true,
       peakConcurrent: true,
+      cumulativeStart: true,
+      cumulativeEnd: true,
     },
   });
   const ytByDay = new Map<string, Record<string, number>>();
   for (const s of ytStats) {
     const ymd = new Date(s.serviceDate).toISOString().slice(0, 10);
     if (!ytByDay.has(ymd)) ytByDay.set(ymd, {});
-    ytByDay.get(ymd)![s.serviceCode] = s.peakConcurrent;
+    // 서비스 누적 시청 = end - start. 일이 막 시작했을 때(첫 폴링) end == start 면 peak 만큼 노출.
+    const total = Math.max(s.cumulativeEnd - s.cumulativeStart, s.peakConcurrent);
+    ytByDay.get(ymd)![s.serviceCode] = total;
   }
 
   // 4) 응답 정형화 — 오늘 분리 + recent 배열 (sinceDayStr ~ untilDayStr 범위)
