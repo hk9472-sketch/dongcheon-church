@@ -126,6 +126,11 @@ export default async function PostDetailPage({ params }: PageProps) {
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
               <span><strong className="text-gray-700">{post.authorName}</strong></span>
               <span>{formatDate(post.createdAt)}</span>
+              {post.lastEditedAt && (
+                <span className="text-orange-600 text-xs">
+                  수정: {formatDate(post.lastEditedAt)}
+                </span>
+              )}
             </div>
           </div>
           <div className="px-6 py-12 text-center text-gray-500">
@@ -294,9 +299,12 @@ export default async function PostDetailPage({ params }: PageProps) {
               <strong className="text-gray-700">{post.authorName}</strong>
             </span>
             <span>{formatDate(post.createdAt)}</span>
-            {post.lastEditedAt && post.lastEditorUserId && (
+            {post.lastEditedAt && (
               <span className="text-orange-600 text-xs">
-                수정: {formatDate(post.lastEditedAt)} ({post.lastEditorName || post.lastEditorUserId})
+                수정: {formatDate(post.lastEditedAt)}
+                {(post.lastEditorName || post.lastEditorUserId) && (
+                  <> ({post.lastEditorName || post.lastEditorUserId})</>
+                )}
               </span>
             )}
             <span>조회 {post.hit}</span>
