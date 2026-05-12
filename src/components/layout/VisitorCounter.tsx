@@ -13,12 +13,30 @@ export default function VisitorCounter() {
   const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
-    fetch("/api/visitor")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d && typeof d.total === "number") setStats(d);
-      })
-      .catch(() => {});
+    // 진입 즉시 본인 카운트 등록 + 그 응답으로 stats 표시 (본인 포함).
+    // POST 응답에 stats 가 같이 포함돼 있어 한 번에 처리됨.
+    // VisitorTracker 의 3초 dwell 봇 필터와는 별개로, 봇 UA 는 서버에서 거름.
+    const update = (init?: RequestInit) =>
+      fetch("/api/visitor", init)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d && typeof d.total === "number") setStats(d);
+        })
+        .catch(() => {});
+
+    update({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: window.location.pathname,
+        referer: document.referrer || null,
+        userAgent: navigator.userAgent,
+      }),
+    });
+
+    // 30초마다 stats 갱신 (다른 방문자 변화 반영)
+    const t = setInterval(() => update(), 30_000);
+    return () => clearInterval(t);
   }, []);
 
   if (!stats) return null;
