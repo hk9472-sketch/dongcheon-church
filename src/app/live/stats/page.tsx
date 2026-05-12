@@ -92,8 +92,23 @@ export default function PublicLiveStatsPage() {
   }, [statFrom, statTo]);
 
   useEffect(() => {
-    load();
-    const t = setInterval(load, 30_000);
+    // 진입 즉시 본인 카운트 등록 → 응답 후 첫 stats fetch (본인이 0이 아닌 1로 보이도록)
+    let first = true;
+    const tick = async () => {
+      if (first) {
+        first = false;
+        try {
+          await fetch("/api/live/track", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: "/live/stats" }),
+          });
+        } catch {}
+      }
+      load();
+    };
+    tick();
+    const t = setInterval(tick, 30_000);
     return () => clearInterval(t);
   }, [load]);
 
