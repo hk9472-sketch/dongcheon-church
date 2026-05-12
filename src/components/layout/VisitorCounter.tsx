@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 
 interface Stats {
   online: number;
@@ -11,31 +12,49 @@ interface Stats {
 
 export default function VisitorCounter() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const pathname = usePathname();
+  const firstRef = useRef(true);
 
+  // 페이지 이동마다 stats 재조회 — 서버에 5초 in-memory cache 가 있어
+  // 동일 TTL 내 여러 페이지 이동이 와도 실제 DB 쿼리는 최대 1회.
+  // 첫 mount 때만 POST 로 본인 카운트 등록 + 응답으로 본인 포함된 stats 수신.
   useEffect(() => {
-    // 진입 즉시 본인 카운트 등록 + 그 응답으로 stats 표시 (본인 포함).
-    // POST 응답에 stats 가 같이 포함돼 있어 한 번에 처리됨.
-    // VisitorTracker 의 3초 dwell 봇 필터와는 별개로, 봇 UA 는 서버에서 거름.
-    const update = (init?: RequestInit) =>
-      fetch("/api/visitor", init)
+    const apply = (d: unknown) => {
+      if (d && typeof (d as Stats).total === "number") setStats(d as Stats);
+    };
+
+    if (firstRef.current) {
+      firstRef.current = false;
+      fetch("/api/visitor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: pathname,
+          referer: document.referrer || null,
+          userAgent: navigator.userAgent,
+        }),
+      })
+        .then((r) => r.json())
+        .then(apply)
+        .catch(() => {});
+    } else {
+      fetch("/api/visitor")
+        .then((r) => r.json())
+        .then(apply)
+        .catch(() => {});
+    }
+  }, [pathname]);
+
+  // 한 페이지에 오래 머무는 사용자도 30초마다 갱신.
+  useEffect(() => {
+    const t = setInterval(() => {
+      fetch("/api/visitor")
         .then((r) => r.json())
         .then((d) => {
           if (d && typeof d.total === "number") setStats(d);
         })
         .catch(() => {});
-
-    update({
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        path: window.location.pathname,
-        referer: document.referrer || null,
-        userAgent: navigator.userAgent,
-      }),
-    });
-
-    // 30초마다 stats 갱신 (다른 방문자 변화 반영)
-    const t = setInterval(() => update(), 30_000);
+    }, 30_000);
     return () => clearInterval(t);
   }, []);
 

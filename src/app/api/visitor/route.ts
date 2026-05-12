@@ -46,9 +46,37 @@ function getKoreanDates() {
 }
 
 // ============================================================
+// in-memory cache — GET 응답을 짧은 TTL 동안 캐시.
+// 페이지 이동마다 푸터 카운터가 GET 하므로 트래픽 급증 시에도
+// 실제 DB groupBy 는 TTL 당 최대 1회. POST(새 visit) 가 들어오면 무효화.
+// ============================================================
+const CACHE_TTL_MS = 5_000;
+let statsCache: { data: VisitorStats; expiresAt: number } | null = null;
+
+interface VisitorStats {
+  online: number;
+  total: number;
+  today: number;
+  yesterday: number;
+}
+
+function invalidateStatsCache() {
+  statsCache = null;
+}
+
+async function getVisitorStatsCached(): Promise<VisitorStats> {
+  if (statsCache && statsCache.expiresAt > Date.now()) {
+    return statsCache.data;
+  }
+  const data = await getVisitorStats();
+  statsCache = { data, expiresAt: Date.now() + CACHE_TTL_MS };
+  return data;
+}
+
+// ============================================================
 // 방문자 통계 조회 헬퍼
 // ============================================================
-async function getVisitorStats() {
+async function getVisitorStats(): Promise<VisitorStats> {
   const { today, todayStart, yesterday } = getKoreanDates();
 
   // KST 기준 시간 범위
@@ -109,7 +137,7 @@ async function getVisitorStats() {
 // ============================================================
 export async function GET() {
   try {
-    const stats = await getVisitorStats();
+    const stats = await getVisitorStatsCached();
     return NextResponse.json(stats);
   } catch (error) {
     console.error("[Visitor GET] Error:", error);
@@ -206,8 +234,10 @@ export async function POST(request: NextRequest) {
       ]);
     }
 
-    // 업데이트된 통계 반환
-    const stats = await getVisitorStats();
+    // 새 visit 으로 stats 가 변했으므로 캐시 무효화 + fresh 계산.
+    // 다음 GET 들이 이 fresh 결과를 캐시에 채워 쓰게 됨.
+    invalidateStatsCache();
+    const stats = await getVisitorStatsCached();
     return NextResponse.json(stats);
   } catch (error) {
     console.error("[Visitor POST] Error:", error);
