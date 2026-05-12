@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import LiveServiceTracker from "@/components/LiveServiceTracker";
 
 const SERVICE_LABELS: Record<string, string> = {
   dawn: "새벽기도",
@@ -117,6 +118,7 @@ export default function PublicLiveStatsPage() {
 
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 space-y-5">
+      <LiveServiceTracker />
       {/* 헤더 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
