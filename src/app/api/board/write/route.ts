@@ -155,8 +155,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 작성자 이름 강제: 로그인 사용자는 세션 이름으로 덮어씌움 (사칭 방지)
-    const effectiveName = isSessionValid && sessionUserName ? sessionUserName : name;
+    // 작성자 이름:
+    // - 비로그인: 입력 이름 사용
+    // - 로그인: 입력 이름이 있으면 그것을, 비어 있으면 세션 이름. authorId 는 항상 sessionUserId 로
+    //   저장되므로 도용 추적 가능 (예: "주교" 같은 단체/역할명으로 등록 허용).
+    const effectiveName = isSessionValid
+      ? (name?.trim() || sessionUserName || "")
+      : name;
 
     // 회원이 비밀글 작성 시 공유 비번 필수 (개인용 비밀글 배제 정책).
     // 클라이언트에서 차단하지만 서버 측 안전망으로 한 번 더 검증.

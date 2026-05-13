@@ -63,9 +63,11 @@ export async function POST(request: NextRequest) {
     let hashedPw: string | null = null;
 
     if (sessionUser) {
-      // 로그인 사용자: authorId 저장, 이름은 회원명으로 강제 (사칭 방지)
+      // 로그인 사용자: authorId 는 세션 회원 id 로 저장.
+      // 이름은 입력값 있으면 그것 우선, 비어 있으면 회원명 (예: "주교" 같은 단체/역할명 허용).
+      // authorId 가 저장돼 있어 도용 시 추적 가능.
       authorId = sessionUser.id;
-      authorName = sessionUser.name;
+      authorName = name?.trim() || sessionUser.name;
     } else {
       // 비로그인: 이름·비밀번호 + CAPTCHA 필수
       if (!name?.trim() || !password) {

@@ -330,9 +330,21 @@ function WriteForm({ boardId }: { boardId: string }) {
           </div>
           <div className="p-5">
             {isLoggedIn === true ? (
-              <div className="text-sm text-gray-700">
-                작성자: <strong className="text-gray-900">{loggedInName}</strong>
-                <span className="ml-2 text-xs text-gray-400">(로그인 계정으로 등록됩니다)</span>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                  작성자 이름
+                  <span className="ml-2 text-[11px] font-normal text-gray-400">
+                    기본은 회원 이름. 필요 시 다른 이름으로 등록 가능 (예: 주교) — 내부엔 회원 정보가 함께 저장됩니다
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  placeholder={loggedInName}
+                  className="w-full sm:w-72 px-3.5 py-2.5 text-sm border border-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                />
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
