@@ -1,24 +1,9 @@
 import prisma from "@/lib/db";
 import Link from "next/link";
 import LiveServiceTracker from "@/components/LiveServiceTracker";
+import { parseYouTubeLiveUrl } from "@/lib/youtubeEmbed";
 
 const DEFAULT_URL = "https://www.youtube.com/watch?v=7KxscHRMaBE";
-
-function extractYouTubeId(url: string): string | null {
-  if (!url) return null;
-  const patterns = [
-    /[?&]v=([a-zA-Z0-9_-]{11})/,
-    /youtu\.be\/([a-zA-Z0-9_-]{11})/,
-    /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
-    /youtube\.com\/live\/([a-zA-Z0-9_-]{11})/,
-    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
-  ];
-  for (const p of patterns) {
-    const m = url.match(p);
-    if (m) return m[1];
-  }
-  return null;
-}
 
 const SCHEDULE = [
   { label: "새벽", time: "4:10", color: "from-indigo-500 to-blue-600" },
@@ -34,10 +19,7 @@ export default async function LiveWorshipPage() {
     where: { key: "live_worship_url" },
   });
   const url = (row?.value || DEFAULT_URL).trim();
-  const videoId = extractYouTubeId(url);
-  const embedSrc = videoId
-    ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`
-    : null;
+  const { embed: embedSrc, hint: parseHint } = parseYouTubeLiveUrl(url);
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6 space-y-4">
@@ -75,7 +57,7 @@ export default async function LiveWorshipPage() {
             </div>
           ) : (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-800">
-              현재 송출 중인 영상이 없습니다.
+              {parseHint || "현재 송출 중인 영상이 없습니다."}
               <div className="mt-3">
                 <Link href="/" className="text-sm text-blue-700 underline">
                   메인으로 돌아가기
