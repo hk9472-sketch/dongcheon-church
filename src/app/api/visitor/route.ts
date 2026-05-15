@@ -191,6 +191,23 @@ export async function POST(request: NextRequest) {
     const { today, todayStart } = getKoreanDates();
     const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
 
+    // 중복 POST 거름 — 같은 (ip, path) 가 최근 10초 안에 들어온 적 있으면 skip.
+    // VisitorTracker (3초 dwell POST) + VisitorCounter (즉시 mount POST) 가 한 페이지
+    // 진입에 둘 다 fire 해 visit_logs row 가 2배로 쌓이는 문제 차단. 진짜 사용자가
+    // 10초 안에 같은 페이지를 새로 본 거라면 행동상 1회로 봐도 무방.
+    const dupCutoff = new Date(Date.now() - 10_000);
+    const recentDup = await prisma.visitLog.findFirst({
+      where: {
+        ip,
+        path: path || "/",
+        createdAt: { gte: dupCutoff },
+      },
+      select: { id: true },
+    });
+    if (recentDup) {
+      return NextResponse.json({ skipped: true, reason: "duplicate" });
+    }
+
     // 오늘 이 IP로 이미 방문 기록이 있는지 확인 (KST 자정 기준)
     const existingVisit = await prisma.visitLog.findFirst({
       where: {
