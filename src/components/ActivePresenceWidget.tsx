@@ -7,8 +7,6 @@ interface ActiveItem {
   sessionId: string;
   userId: number | null;
   userName: string | null;
-  ip: string | null;
-  path: string | null;
   lastPingAt: number;
 }
 
@@ -219,16 +217,11 @@ export default function ActivePresenceWidget() {
         {members.length > 0 && (
           <ul className="divide-y divide-gray-100">
             {members.map((r) => (
-              <li key={r.sessionId} className="px-3 py-1.5 hover:bg-gray-50">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                  <strong className="text-gray-800 truncate" title={r.userName || ""}>
-                    {r.userName || `회원#${r.userId}`}
-                  </strong>
-                </div>
-                <div className="text-[10px] text-gray-500 ml-3 truncate" title={r.path || ""}>
-                  {r.path || "—"}
-                </div>
+              <li key={r.sessionId} className="px-3 py-1.5 hover:bg-gray-50 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                <strong className="text-gray-800 truncate" title={r.userName || ""}>
+                  {r.userName || `회원#${r.userId}`}
+                </strong>
               </li>
             ))}
           </ul>

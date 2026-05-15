@@ -27,12 +27,11 @@ export async function GET() {
   const counts = countActive();
   return NextResponse.json({
     counts,
+    // path · ip 는 사생활 보호로 응답에서 제외. 누가 어느 게시판/글 보는지 노출 X.
     list: list.map((r) => ({
-      sessionId: r.sessionId.slice(0, 8), // ID 일부만 노출
+      sessionId: r.sessionId.slice(0, 8),
       userId: r.userId,
       userName: r.userName,
-      ip: r.ip,
-      path: r.path,
       lastPingAt: r.lastPingAt,
     })),
   });
