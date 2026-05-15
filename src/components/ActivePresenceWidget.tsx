@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 interface ActiveItem {
   sessionId: string;
@@ -54,6 +55,18 @@ export default function ActivePresenceWidget() {
     const t = setInterval(load, POLL_MS);
     return () => clearInterval(t);
   }, [isSuperAdmin]);
+
+  // 외부(푸터의 "현재" 클릭 등) 에서 위젯을 펼치도록 요청 — custom event listen.
+  useEffect(() => {
+    const onOpen = () => {
+      setCollapsed(false);
+      try {
+        localStorage.setItem(COLLAPSE_KEY, "0");
+      } catch {}
+    };
+    window.addEventListener("dc:open-active-widget", onOpen);
+    return () => window.removeEventListener("dc:open-active-widget", onOpen);
+  }, []);
 
   if (isSuperAdmin !== true) return null;
 
@@ -129,8 +142,14 @@ export default function ActivePresenceWidget() {
           </div>
         )}
       </div>
-      <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200 text-[10px] text-gray-400 rounded-b-lg">
-        5초마다 갱신 · 60초 무응답 시 제외
+      <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200 text-[10px] text-gray-400 rounded-b-lg flex items-center justify-between">
+        <span>5초마다 갱신 · 60초 무응답 시 제외</span>
+        <Link
+          href="/admin/visit-logs?recent=15"
+          className="text-indigo-600 hover:text-indigo-800 hover:underline"
+        >
+          전체보기 →
+        </Link>
       </div>
     </div>
   );

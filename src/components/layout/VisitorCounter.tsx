@@ -114,17 +114,34 @@ export default function VisitorCounter() {
     return <span>{inner}</span>;
   };
 
+  // "현재" 클릭 — 페이지 이동 대신 우측 ActivePresenceWidget 펼침.
+  // 위젯에서 더 즉시적이고 풍부한 정보를 보여주므로, 페이지 이동보다 자연스러움.
+  const onCurrentClick = () => {
+    try {
+      localStorage.setItem("dc_active_widget_collapsed", "0");
+    } catch {}
+    window.dispatchEvent(new CustomEvent("dc:open-active-widget"));
+  };
+
   return (
     <div className="flex items-center gap-3 text-xs text-blue-200/80">
       <span>
         총계:<strong className="text-white ml-0.5">{(stats.total ?? 0).toLocaleString()}</strong>
       </span>
-      <Num
-        label="현재"
-        value={stats.online}
-        href="/admin/visit-logs?recent=15"
-        color="text-green-300"
-      />
+      {isSuperAdmin ? (
+        <button
+          type="button"
+          onClick={onCurrentClick}
+          className="hover:text-white transition-colors hover:underline"
+          title="현재 접속자 위젯 열기"
+        >
+          현재:<strong className="text-green-300 ml-0.5">{(stats.online ?? 0).toLocaleString()}</strong>
+        </button>
+      ) : (
+        <span>
+          현재:<strong className="text-green-300 ml-0.5">{(stats.online ?? 0).toLocaleString()}</strong>
+        </span>
+      )}
       <Num
         label="오늘"
         value={stats.today}
