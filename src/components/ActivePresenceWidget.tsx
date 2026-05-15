@@ -140,14 +140,13 @@ export default function ActivePresenceWidget() {
 
   if (isSuperAdmin !== true) return null;
 
-  const toggle = () => {
-    setCollapsed((p) => {
-      const next = !p;
-      try {
-        localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
-      } catch {}
-      return next;
-    });
+  // ✕ 클릭 = 완전 종료 (collapsed=true → return null).
+  // 다시 활성화는 푸터 "현재" 클릭 (dc:open-active-widget 이벤트) 만.
+  const closeWidget = () => {
+    setCollapsed(true);
+    try {
+      localStorage.setItem(COLLAPSE_KEY, "1");
+    } catch {}
   };
 
   const onDragStart = (e: React.MouseEvent<HTMLElement>) => {
@@ -164,25 +163,8 @@ export default function ActivePresenceWidget() {
 
   const baseStyle = { left: position.left, top: position.top };
 
-  // 접힘 — 작은 동그라미 (드래그 가능)
-  if (collapsed) {
-    return (
-      <div
-        className="fixed z-40 select-none"
-        style={baseStyle}
-      >
-        <button
-          type="button"
-          onMouseDown={onDragStart}
-          onClick={toggle}
-          className="w-10 h-10 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 flex items-center justify-center text-xs font-bold cursor-move"
-          title="현재 접속자 보기 — 드래그로 이동"
-        >
-          {counts.total}
-        </button>
-      </div>
-    );
-  }
+  // 완전 종료 상태 — 위젯 렌더링 자체 안 함. 푸터 "현재" 클릭으로만 재활성.
+  if (collapsed) return null;
 
   return (
     <div
@@ -201,10 +183,10 @@ export default function ActivePresenceWidget() {
         </div>
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); toggle(); }}
+          onClick={(e) => { e.stopPropagation(); closeWidget(); }}
           onMouseDown={(e) => e.stopPropagation()}
           className="w-5 h-5 flex items-center justify-center rounded hover:bg-indigo-700 text-xs cursor-pointer"
-          title="접기"
+          title="닫기 — 푸터 '현재' 클릭으로 다시 열기"
         >
           ✕
         </button>
