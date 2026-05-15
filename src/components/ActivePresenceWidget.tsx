@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 interface ActiveItem {
@@ -17,8 +17,37 @@ interface ActiveData {
   list: ActiveItem[];
 }
 
+interface Position { left: number; top: number; }
+
 const POLL_MS = 5000;
 const COLLAPSE_KEY = "dc_active_widget_collapsed";
+const POSITION_KEY = "dc_active_widget_pos";
+const WIDGET_WIDTH = 240;
+
+function clampPosition(p: Position): Position {
+  if (typeof window === "undefined") return p;
+  const maxLeft = Math.max(0, window.innerWidth - WIDGET_WIDTH);
+  const maxTop = Math.max(0, window.innerHeight - 100);
+  return {
+    left: Math.min(Math.max(0, p.left), maxLeft),
+    top: Math.min(Math.max(0, p.top), maxTop),
+  };
+}
+
+function getInitialPosition(): Position {
+  if (typeof window === "undefined") return { left: 0, top: 120 };
+  try {
+    const saved = localStorage.getItem(POSITION_KEY);
+    if (saved) {
+      const p = JSON.parse(saved);
+      if (typeof p?.left === "number" && typeof p?.top === "number") {
+        return clampPosition(p);
+      }
+    }
+  } catch {}
+  // 기본 = 우상단
+  return clampPosition({ left: window.innerWidth - WIDGET_WIDTH - 12, top: 120 });
+}
 
 export default function ActivePresenceWidget() {
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean | null>(null);
@@ -31,6 +60,15 @@ export default function ActivePresenceWidget() {
       return false;
     }
   });
+  const [position, setPosition] = useState<Position>({ left: 0, top: 120 });
+  const positionRef = useRef(position);
+  positionRef.current = position;
+  const dragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
+
+  // 첫 mount 시 viewport 기준 초기 위치 + 권한 확인
+  useEffect(() => {
+    setPosition(getInitialPosition());
+  }, []);
 
   // 권한 확인 — isAdmin === 1 인 경우만 위젯 표시
   useEffect(() => {
@@ -40,7 +78,7 @@ export default function ActivePresenceWidget() {
       .catch(() => setIsSuperAdmin(false));
   }, []);
 
-  // 5초 폴링 — 권한 없으면 호출 안 함
+  // 5초 폴링
   useEffect(() => {
     if (!isSuperAdmin) return;
     const load = () => {
@@ -56,7 +94,7 @@ export default function ActivePresenceWidget() {
     return () => clearInterval(t);
   }, [isSuperAdmin]);
 
-  // 외부(푸터의 "현재" 클릭 등) 에서 위젯을 펼치도록 요청 — custom event listen.
+  // 외부(푸터 "현재" 클릭) 에서 펼치도록 요청
   useEffect(() => {
     const onOpen = () => {
       setCollapsed(false);
@@ -66,6 +104,40 @@ export default function ActivePresenceWidget() {
     };
     window.addEventListener("dc:open-active-widget", onOpen);
     return () => window.removeEventListener("dc:open-active-widget", onOpen);
+  }, []);
+
+  // 드래그 — mousemove / mouseup 전역 listen. 한 번만 register.
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragRef.current) return;
+      setPosition(
+        clampPosition({
+          left: e.clientX - dragRef.current.offsetX,
+          top: e.clientY - dragRef.current.offsetY,
+        }),
+      );
+    };
+    const onUp = () => {
+      if (dragRef.current) {
+        dragRef.current = null;
+        try {
+          localStorage.setItem(POSITION_KEY, JSON.stringify(positionRef.current));
+        } catch {}
+      }
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
+
+  // viewport 리사이즈 시 위치 재 clamp
+  useEffect(() => {
+    const onResize = () => setPosition((p) => clampPosition(p));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   if (isSuperAdmin !== true) return null;
@@ -80,40 +152,66 @@ export default function ActivePresenceWidget() {
     });
   };
 
+  const onDragStart = (e: React.MouseEvent<HTMLElement>) => {
+    dragRef.current = {
+      offsetX: e.clientX - positionRef.current.left,
+      offsetY: e.clientY - positionRef.current.top,
+    };
+    e.preventDefault();
+  };
+
   const counts = data?.counts ?? { total: 0, member: 0, guest: 0 };
   const list = data?.list ?? [];
   const members = list.filter((r) => r.userId);
 
-  // 접힘 상태 — 작은 아이콘만
+  const baseStyle = { left: position.left, top: position.top };
+
+  // 접힘 — 작은 동그라미 (드래그 가능)
   if (collapsed) {
     return (
-      <button
-        type="button"
-        onClick={toggle}
-        className="fixed right-3 top-[120px] z-40 w-10 h-10 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 flex items-center justify-center text-xs font-bold"
-        title="현재 접속자 보기"
+      <div
+        className="fixed z-40 select-none"
+        style={baseStyle}
       >
-        {counts.total}
-      </button>
+        <button
+          type="button"
+          onMouseDown={onDragStart}
+          onClick={toggle}
+          className="w-10 h-10 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 flex items-center justify-center text-xs font-bold cursor-move"
+          title="현재 접속자 보기 — 드래그로 이동"
+        >
+          {counts.total}
+        </button>
+      </div>
     );
   }
 
   return (
-    <div className="fixed right-3 top-[120px] z-40 w-60 max-h-[70vh] flex flex-col bg-white border border-gray-300 rounded-lg shadow-lg">
-      <div className="flex items-center justify-between px-3 py-2 bg-indigo-600 text-white rounded-t-lg">
+    <div
+      className="fixed z-40 w-60 max-h-[70vh] flex flex-col bg-white border border-gray-300 rounded-lg shadow-lg select-none"
+      style={baseStyle}
+    >
+      {/* 헤더 — 드래그 핸들 */}
+      <div
+        onMouseDown={onDragStart}
+        className="flex items-center justify-between px-3 py-2 bg-indigo-600 text-white rounded-t-lg cursor-move"
+        title="드래그로 이동"
+      >
         <div className="text-xs font-bold flex items-center gap-1.5">
           <span>👥</span>
           <span>현재 접속 {counts.total}명</span>
         </div>
         <button
           type="button"
-          onClick={toggle}
-          className="w-5 h-5 flex items-center justify-center rounded hover:bg-indigo-700 text-xs"
+          onClick={(e) => { e.stopPropagation(); toggle(); }}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="w-5 h-5 flex items-center justify-center rounded hover:bg-indigo-700 text-xs cursor-pointer"
           title="접기"
         >
           ✕
         </button>
       </div>
+
       <div className="overflow-y-auto flex-1 text-xs">
         {members.length === 0 && counts.guest === 0 && (
           <div className="px-3 py-6 text-center text-gray-400">접속자 없음</div>
@@ -142,8 +240,9 @@ export default function ActivePresenceWidget() {
           </div>
         )}
       </div>
+
       <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200 text-[10px] text-gray-400 rounded-b-lg flex items-center justify-between">
-        <span>5초마다 갱신 · 60초 무응답 시 제외</span>
+        <span>5초 갱신 · 60초 무응답 제외</span>
         <Link
           href="/admin/visit-logs?recent=15"
           className="text-indigo-600 hover:text-indigo-800 hover:underline"

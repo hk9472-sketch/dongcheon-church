@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
+import { countActive } from "@/lib/activePresence";
 
 // ============================================================
 // 봇/크롤러 User-Agent 필터
@@ -83,9 +84,6 @@ async function getVisitorStats(): Promise<VisitorStats> {
   const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
   const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
 
-  // 현재 접속자: 최근 15분 내 고유 IP 수
-  const fifteenMinAgo = new Date(Date.now() - 15 * 60 * 1000);
-
   // 병렬로 모든 데이터 조회
   const [totalAgg, todayIps, yesterdayIps, baseSetting] =
     await Promise.all([
@@ -109,17 +107,10 @@ async function getVisitorStats(): Promise<VisitorStats> {
       }),
     ]);
 
-  // 현재 접속자 (별도 try-catch — 실패해도 다른 통계는 정상 반환)
-  let online = 0;
-  try {
-    const result = await prisma.visitLog.groupBy({
-      by: ["ip"],
-      where: { createdAt: { gte: fifteenMinAgo } },
-    });
-    online = result.length;
-  } catch {
-    // 쿼리 실패 시 0으로 표시
-  }
+  // 현재 접속자 — heartbeat 기반(60초 윈도우, activePresence Map).
+  // 위젯과 일관된 "지금 화면 보고 있는 사람" 의미.
+  // 이전엔 visit_logs 의 15분 윈도우라 닫고 나간 사람도 포함됐음.
+  const online = countActive().total;
 
   const baseCount = baseSetting ? parseInt(baseSetting.value, 10) || 0 : 0;
   const dailyTotal = totalAgg._sum.count ?? 0;
