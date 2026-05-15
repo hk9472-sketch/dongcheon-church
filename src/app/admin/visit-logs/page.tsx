@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 
 interface VisitLog {
   id: number;
@@ -21,12 +22,19 @@ function daysAgoKstYmd(days: number): string {
     .toISOString().slice(0, 10);
 }
 
-export default function AdminVisitLogsPage() {
+function AdminVisitLogsContent() {
   const today = todayKstYmd();
+  const searchParams = useSearchParams();
+
+  // URL 쿼리 파라미터로 초기값 — 푸터에서 "현재/오늘/어제" 클릭으로 진입 시 사용
+  const initRecent = parseInt(searchParams.get("recent") || "0", 10);
+  const initFrom = searchParams.get("from") || (initRecent > 0 ? "" : daysAgoKstYmd(0));
+  const initTo = searchParams.get("to") || (initRecent > 0 ? "" : today);
 
   // 필터 상태
-  const [from, setFrom] = useState(daysAgoKstYmd(0));
-  const [to, setTo] = useState(today);
+  const [from, setFrom] = useState(initFrom);
+  const [to, setTo] = useState(initTo);
+  const [recent, setRecent] = useState(initRecent); // 분 단위. >0 이면 "최근 N분" 모드
   const [ip, setIp] = useState("");
   const [path, setPath] = useState("");
   const [ua, setUa] = useState("");
@@ -42,8 +50,12 @@ export default function AdminVisitLogsPage() {
 
   const load = useCallback(() => {
     const sp = new URLSearchParams();
-    if (from) sp.set("from", from);
-    if (to) sp.set("to", to);
+    if (recent > 0) {
+      sp.set("recent", String(recent));
+    } else {
+      if (from) sp.set("from", from);
+      if (to) sp.set("to", to);
+    }
     if (ip) sp.set("ip", ip);
     if (path) sp.set("path", path);
     if (ua) sp.set("ua", ua);
@@ -61,7 +73,7 @@ export default function AdminVisitLogsPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [from, to, ip, path, ua, referer, userId, page, perPage]);
+  }, [from, to, recent, ip, path, ua, referer, userId, page, perPage]);
 
   // 첫 마운트 + 페이지 변경 시 자동 로드
   useEffect(() => {
@@ -82,6 +94,7 @@ export default function AdminVisitLogsPage() {
     setUserId("");
     setFrom(daysAgoKstYmd(0));
     setTo(today);
+    setRecent(0);
     setPage(1);
   };
 
@@ -134,6 +147,7 @@ export default function AdminVisitLogsPage() {
                 onClick={() => {
                   setFrom(daysAgoKstYmd(q.days));
                   setTo(today);
+                  setRecent(0);
                   setPage(1);
                 }}
                 className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
@@ -142,6 +156,21 @@ export default function AdminVisitLogsPage() {
               </button>
             ))}
           </div>
+
+          {/* recent 모드 표시 */}
+          {recent > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+              <span>최근 <strong>{recent}분</strong> 모드</span>
+              <button
+                type="button"
+                onClick={() => { setRecent(0); setPage(1); }}
+                className="text-amber-700 hover:underline"
+                title="일자 기간 모드로 전환"
+              >
+                일자 모드로
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -324,5 +353,14 @@ export default function AdminVisitLogsPage() {
         </ul>
       </div>
     </div>
+  );
+}
+
+// Suspense boundary for useSearchParams
+export default function AdminVisitLogsPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-12 text-gray-400">로딩 중...</div>}>
+      <AdminVisitLogsContent />
+    </Suspense>
   );
 }

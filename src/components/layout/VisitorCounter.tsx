@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 interface Stats {
@@ -10,8 +11,16 @@ interface Stats {
   yesterday: number;
 }
 
+function todayKstYmd(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+function yesterdayKstYmd(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000 - 24 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
 export default function VisitorCounter() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const pathname = usePathname();
   const firstRef = useRef(true);
 
@@ -58,14 +67,76 @@ export default function VisitorCounter() {
     return () => clearInterval(t);
   }, []);
 
+  // 최고관리자 여부 — 첫 mount 만 확인.
+  // isAdmin === 1 (최고관리자) 인 경우만 푸터의 현재/오늘/어제를 클릭 가능한 링크로 활성.
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.user?.isAdmin === 1) setIsSuperAdmin(true);
+      })
+      .catch(() => {});
+  }, []);
+
   if (!stats) return null;
+
+  const today = todayKstYmd();
+  const yesterday = yesterdayKstYmd();
+
+  // 일반 사용자용 스팬 / 최고관리자용 링크
+  const Num = ({
+    label,
+    value,
+    href,
+    color,
+  }: {
+    label: string;
+    value: number;
+    href: string;
+    color: string;
+  }) => {
+    const inner = (
+      <>
+        {label}:<strong className={`${color} ml-0.5`}>{(value ?? 0).toLocaleString()}</strong>
+      </>
+    );
+    if (isSuperAdmin) {
+      return (
+        <Link
+          href={href}
+          className="hover:text-white transition-colors hover:underline"
+          title={`${label} 방문 로그 조회`}
+        >
+          {inner}
+        </Link>
+      );
+    }
+    return <span>{inner}</span>;
+  };
 
   return (
     <div className="flex items-center gap-3 text-xs text-blue-200/80">
-      <span>총계:<strong className="text-white ml-0.5">{(stats.total ?? 0).toLocaleString()}</strong></span>
-      <span>현재:<strong className="text-green-300 ml-0.5">{(stats.online ?? 0).toLocaleString()}</strong></span>
-      <span>오늘:<strong className="text-white ml-0.5">{(stats.today ?? 0).toLocaleString()}</strong></span>
-      <span>어제:<strong className="text-white ml-0.5">{(stats.yesterday ?? 0).toLocaleString()}</strong></span>
+      <span>
+        총계:<strong className="text-white ml-0.5">{(stats.total ?? 0).toLocaleString()}</strong>
+      </span>
+      <Num
+        label="현재"
+        value={stats.online}
+        href="/admin/visit-logs?recent=15"
+        color="text-green-300"
+      />
+      <Num
+        label="오늘"
+        value={stats.today}
+        href={`/admin/visit-logs?from=${today}&to=${today}`}
+        color="text-white"
+      />
+      <Num
+        label="어제"
+        value={stats.yesterday}
+        href={`/admin/visit-logs?from=${yesterday}&to=${yesterday}`}
+        color="text-white"
+      />
     </div>
   );
 }

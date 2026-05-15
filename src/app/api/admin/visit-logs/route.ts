@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const from = sp.get("from");
   const to = sp.get("to");
+  const recentMin = parseInt(sp.get("recent") || "0", 10); // 분 단위. >0 이면 from/to 무시하고 최근 N분.
   const ip = (sp.get("ip") || "").trim();
   const path = (sp.get("path") || "").trim();
   const ua = (sp.get("ua") || "").trim();
@@ -44,8 +45,11 @@ export async function GET(req: NextRequest) {
 
   const where: Prisma.VisitLogWhereInput = {};
 
-  // KST 자정 ↔ UTC 변환. to 는 해당 일 끝까지 포함 — to + 1일 00:00 미만.
-  if (from || to) {
+  if (recentMin > 0) {
+    // 최근 N분 — 푸터 "현재" 클릭 시 사용 (15분 활성 IP 와 동일 윈도우)
+    where.createdAt = { gte: new Date(Date.now() - recentMin * 60 * 1000) };
+  } else if (from || to) {
+    // KST 자정 ↔ UTC 변환. to 는 해당 일 끝까지 포함 — to + 1일 00:00 미만.
     const range: Prisma.DateTimeFilter = {};
     if (from) range.gte = new Date(from + "T00:00:00+09:00");
     if (to) {
