@@ -628,6 +628,26 @@ model VisitLog {
 }
 
 // ============================================================
+// 설교재독 — 음성 + 본문 + 문단별 시간 싱크
+// 관리자가 mp3 업로드 + 본문 paste → 자동 균등 분할로 1차 싱크 →
+// 작업자가 각 문단 시작 시점 버튼으로 미세 조정. 사용자 페이지에서
+// 재생 중 현재 문단 하이라이트 + 문단 클릭으로 점프 가능.
+// ============================================================
+model ReadingSession {
+  id         Int      @id @default(autoincrement())
+  title      String   @db.VarChar(200)
+  audioPath  String   @db.VarChar(500)              // 업로드 경로 (uploadRoot 상대)
+  durationMs Int      @default(0)                   // 음성 총 길이
+  paragraphs Json     // [{ text, startMs, endMs }, ...]
+  createdBy  Int?                                    // 회원 id (작성자)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([createdAt])
+  @@map("reading_sessions")
+}
+
+// ============================================================
 // 권찰회 출석부 - 부서 (장년반, 중간반, 유년주교)
 // ============================================================
 model CouncilDept {
