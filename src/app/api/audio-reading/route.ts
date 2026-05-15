@@ -25,16 +25,26 @@ function splitParagraphs(content: string): string[] {
   return parts;
 }
 
-function buildEqualParagraphs(texts: string[], durationMs: number): Paragraph[] {
-  if (texts.length === 0 || durationMs <= 0) {
+/**
+ * 텍스트 길이(글자 수)에 비례해서 시간 할당.
+ * 균등 분할보다 정확 — 긴 문단은 더 오래, 짧은 문단은 더 짧게.
+ * 길이 0 인 빈 텍스트는 비례 분모에서 제외하지만, 최소 1글자로 처리해 0 길이 회피.
+ */
+function buildWeightedParagraphs(texts: string[], durationMs: number): Paragraph[] {
+  if (texts.length === 0) return [];
+  if (durationMs <= 0) {
     return texts.map((t) => ({ text: t, startMs: 0, endMs: 0 }));
   }
-  const slice = Math.floor(durationMs / texts.length);
-  return texts.map((t, i) => ({
-    text: t,
-    startMs: i * slice,
-    endMs: i === texts.length - 1 ? durationMs : (i + 1) * slice,
-  }));
+  const weights = texts.map((t) => Math.max(1, t.trim().length));
+  const total = weights.reduce((s, w) => s + w, 0);
+  let cursor = 0;
+  return texts.map((t, i) => {
+    const dur = Math.floor((durationMs * weights[i]) / total);
+    const startMs = cursor;
+    const endMs = i === texts.length - 1 ? durationMs : cursor + dur;
+    cursor = endMs;
+    return { text: t, startMs, endMs };
+  });
 }
 
 const ALLOWED_AUDIO_EXTENSIONS = new Set([".mp3", ".m4a", ".wav", ".ogg"]);
@@ -104,9 +114,9 @@ export async function POST(req: NextRequest) {
   await writeFile(absFile, buf);
   const audioPath = getRelUploadPath(subPath, stored);
 
-  // 문단 분할 + 균등 시간 부여
+  // 문단 분할 + 텍스트 길이 가중 시간 부여
   const texts = splitParagraphs(content);
-  const paragraphs = buildEqualParagraphs(texts, durationMs);
+  const paragraphs = buildWeightedParagraphs(texts, durationMs);
 
   const session = await prisma.readingSession.create({
     data: {

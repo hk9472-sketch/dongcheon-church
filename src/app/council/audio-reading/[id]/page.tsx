@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, use } from "react";
 import Link from "next/link";
+import WaveSurfer from "wavesurfer.js";
 
 interface Paragraph {
   text: string;
@@ -35,7 +36,10 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
   const [editMode, setEditMode] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [waveReady, setWaveReady] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const waveContainerRef = useRef<HTMLDivElement | null>(null);
+  const waveSurferRef = useRef<WaveSurfer | null>(null);
 
   useEffect(() => {
     fetch(`/api/audio-reading/${id}`)
@@ -57,6 +61,32 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
     return () => a.removeEventListener("timeupdate", onTime);
   }, [data]);
 
+  // wavesurfer — 파형 시각화. 동일 audio element 와 동기화 (media=audioRef.current).
+  useEffect(() => {
+    if (!data || !waveContainerRef.current || !audioRef.current) return;
+    if (waveSurferRef.current) return; // 이미 인스턴스 있음
+
+    const ws = WaveSurfer.create({
+      container: waveContainerRef.current,
+      media: audioRef.current,
+      waveColor: "#cbd5e1",
+      progressColor: "#6366f1",
+      cursorColor: "#4f46e5",
+      cursorWidth: 2,
+      barWidth: 2,
+      barGap: 1,
+      barRadius: 2,
+      height: 80,
+      normalize: true,
+    });
+    waveSurferRef.current = ws;
+    ws.on("ready", () => setWaveReady(true));
+    return () => {
+      ws.destroy();
+      waveSurferRef.current = null;
+    };
+  }, [data]);
+
   if (!data) {
     return <div className="text-center py-12 text-gray-400">불러오는 중...</div>;
   }
@@ -73,20 +103,19 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
     a.play().catch(() => {});
   };
 
-  // === 자동 싱크: 현재 음성 길이 기준으로 균등 재배분 ===
+  // === 자동 싱크: 텍스트 길이 가중 분할 (긴 문단 = 긴 시간) ===
   const autoSync = () => {
     if (!data.durationMs || paragraphs.length === 0) return;
-    if (paragraphs.length === 1) {
-      setParagraphs([{ ...paragraphs[0], startMs: 0, endMs: data.durationMs }]);
-      setDirty(true);
-      return;
-    }
-    const slice = Math.floor(data.durationMs / paragraphs.length);
-    const next = paragraphs.map((p, i) => ({
-      ...p,
-      startMs: i * slice,
-      endMs: i === paragraphs.length - 1 ? data.durationMs : (i + 1) * slice,
-    }));
+    const weights = paragraphs.map((p) => Math.max(1, p.text.trim().length));
+    const total = weights.reduce((s, w) => s + w, 0);
+    let cursor = 0;
+    const next = paragraphs.map((p, i) => {
+      const dur = Math.floor((data.durationMs * weights[i]) / total);
+      const startMs = cursor;
+      const endMs = i === paragraphs.length - 1 ? data.durationMs : cursor + dur;
+      cursor = endMs;
+      return { ...p, startMs, endMs };
+    });
     setParagraphs(next);
     setDirty(true);
   };
@@ -192,22 +221,50 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
         </div>
       </div>
 
-      {/* 음성 플레이어 */}
+      {/* 음성 플레이어 + 파형 */}
       <div className="bg-white rounded-lg border border-gray-200 p-3">
+        {/* 파형 컨테이너 — wavesurfer 가 그림. 문단 시작점은 absolute 마커로 오버레이. */}
+        <div className="relative">
+          <div ref={waveContainerRef} className="w-full" />
+          {!waveReady && (
+            <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-400">
+              파형 분석 중...
+            </div>
+          )}
+          {/* 문단 시작점 마커 — 파형 위에 세로선으로 표시. 클릭하면 점프. */}
+          {waveReady && data.durationMs > 0 && paragraphs.map((p, idx) => {
+            const left = (p.startMs / data.durationMs) * 100;
+            const isActive = idx === activeIdx;
+            return (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => jumpTo(p.startMs)}
+                className="absolute top-0 h-full w-[2px] -translate-x-1/2 hover:w-1 transition-all"
+                style={{
+                  left: `${left}%`,
+                  background: isActive ? "#dc2626" : "rgba(99,102,241,0.4)",
+                }}
+                title={`#${idx + 1} ${fmtTime(p.startMs)} — ${p.text.slice(0, 30)}...`}
+              />
+            );
+          })}
+        </div>
         <audio
           ref={audioRef}
           src={`/${data.audioPath}`}
           controls
           preload="metadata"
-          className="w-full"
+          className="w-full mt-2"
         />
-        <div className="mt-1 text-xs text-gray-500 flex items-center gap-3">
+        <div className="mt-1 text-xs text-gray-500 flex items-center gap-3 flex-wrap">
           <span>현재: <span className="font-mono">{fmtTime(currentMs)}</span></span>
           <span>총: <span className="font-mono">{fmtTime(data.durationMs)}</span></span>
           <span>문단: <span className="font-mono">{paragraphs.length}</span>개</span>
           {activeIdx >= 0 && (
             <span className="text-indigo-700 font-semibold">현재 문단 #{activeIdx + 1}</span>
           )}
+          <span className="ml-auto text-[11px] text-gray-400">파형 마커 클릭으로 해당 문단 점프</span>
         </div>
       </div>
 
