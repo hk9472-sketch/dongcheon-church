@@ -2,6 +2,16 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+
+const TipTapEditor = dynamic(() => import("@/components/board/TipTapEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-400 min-h-[400px]">
+      에디터 로딩 중...
+    </div>
+  ),
+});
 
 interface Version {
   id: number;
@@ -47,6 +57,7 @@ export default function AdminLegalDocPage({ params }: { params: Promise<{ docTyp
   const [changeNote, setChangeNote] = useState("");
   const [effectiveDate, setEffectiveDate] = useState("");
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   // 비교
   const [fromId, setFromId] = useState<number | null>(null);
@@ -107,6 +118,43 @@ export default function AdminLegalDocPage({ params }: { params: Promise<{ docTyp
       alert("등록되었습니다.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  // 기존 정적 페이지에서 본문 가져오기 — DB 비어있을 때 초기 데이터 시드용.
+  // /privacy 또는 /terms 페이지를 SSR 결과로 fetch → article 안 본문 추출.
+  // header(시행일자), footer(인쇄안내), nav(목차) 는 제외.
+  const importFromStatic = async () => {
+    if (content.trim() && !confirm("현재 본문이 덮어쓰여집니다. 진행할까요?")) return;
+    setImporting(true);
+    try {
+      const res = await fetch(`/${docType}`, { cache: "no-store" });
+      const html = await res.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      const article = doc.querySelector("article");
+      if (!article) {
+        alert("기존 페이지에서 article 영역을 찾지 못했습니다.");
+        return;
+      }
+      // header / footer / nav(목차) 제거
+      article.querySelector("header")?.remove();
+      article.querySelector("footer")?.remove();
+      article.querySelectorAll("nav").forEach((n) => n.remove());
+
+      // 안에 남은 section 들을 모아서 HTML 로
+      // unused className/style 일부 정리 (불필요한 노이즈 줄임)
+      article.querySelectorAll("[class]").forEach((el) => el.removeAttribute("class"));
+      article.querySelectorAll("[style]").forEach((el) => el.removeAttribute("style"));
+
+      const cleaned = article.innerHTML.trim();
+      setContent(cleaned);
+      if (!version) setVersion("1.0");
+    } catch (e) {
+      console.error(e);
+      alert("기존 페이지 가져오기 실패");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -222,16 +270,26 @@ export default function AdminLegalDocPage({ params }: { params: Promise<{ docTyp
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">본문 (HTML 또는 일반 텍스트)</label>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={20}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm font-mono leading-relaxed"
-              required
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs text-gray-500">본문</label>
+              <button
+                type="button"
+                onClick={importFromStatic}
+                disabled={importing}
+                className="text-[11px] px-2 py-1 border border-blue-300 bg-blue-50 text-blue-700 rounded hover:bg-blue-100 disabled:opacity-50"
+                title="현재 공개 페이지(/privacy 또는 /terms)의 본문을 가져와 채웁니다"
+              >
+                {importing ? "가져오는 중..." : "📥 기존 페이지에서 가져오기"}
+              </button>
+            </div>
+            <TipTapEditor
+              content={content}
+              onChange={(html) => setContent(html)}
+              placeholder="본문을 입력하세요. 게시글 편집과 동일한 도구를 사용합니다."
+              boardSlug={`legal-${docType}`}
             />
             <p className="text-[11px] text-gray-400 mt-1">
-              HTML 태그 사용 가능 (h2, p, ul, ol, li, strong 등). 미리보기는 공개 페이지에서 확인.
+              게시글과 동일한 리치 텍스트 에디터. 처음 등록 시 위 "📥 기존 페이지에서 가져오기" 로 기존 본문을 시드한 뒤 수정하세요.
             </p>
           </div>
           <div className="flex justify-end">
