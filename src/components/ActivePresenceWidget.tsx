@@ -7,6 +7,8 @@ interface ActiveItem {
   sessionId: string;
   userId: number | null;
   userName: string | null;
+  displayName: string;
+  isGuest: boolean;
   lastPingAt: number;
 }
 
@@ -160,6 +162,15 @@ export default function ActivePresenceWidget() {
   const counts = data?.counts ?? { total: 0, member: 0, guest: 0 };
   const list = data?.list ?? [];
   const members = list.filter((r) => r.userId);
+  const guests = list.filter((r) => r.isGuest);
+
+  // 대화창 열기 — ChatContainer 가 dc:chat-open 이벤트 listen
+  const openChat = (r: ActiveItem) => {
+    const peer = r.userId
+      ? { kind: "user" as const, id: String(r.userId), displayName: r.displayName }
+      : { kind: "guest" as const, id: r.sessionId, displayName: r.displayName };
+    window.dispatchEvent(new CustomEvent("dc:chat-open", { detail: { peer } }));
+  };
 
   const baseStyle = { left: position.left, top: position.top };
 
@@ -193,26 +204,46 @@ export default function ActivePresenceWidget() {
       </div>
 
       <div className="overflow-y-auto flex-1 text-xs">
-        {members.length === 0 && counts.guest === 0 && (
+        {members.length === 0 && guests.length === 0 && (
           <div className="px-3 py-6 text-center text-gray-400">접속자 없음</div>
         )}
         {members.length > 0 && (
           <ul className="divide-y divide-gray-100">
             {members.map((r) => (
-              <li key={r.sessionId} className="px-3 py-1.5 hover:bg-gray-50 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                <strong className="text-gray-800 truncate" title={r.userName || ""}>
-                  {r.userName || `회원#${r.userId}`}
-                </strong>
+              <li key={r.sessionId} className="hover:bg-gray-50">
+                <button
+                  type="button"
+                  onClick={() => openChat(r)}
+                  className="w-full text-left px-3 py-1.5 flex items-center gap-1.5"
+                  title="대화창 열기"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                  <strong className="text-gray-800 truncate flex-1">
+                    {r.displayName}
+                  </strong>
+                  <span className="text-[10px] text-gray-300 group-hover:text-indigo-500">💬</span>
+                </button>
               </li>
             ))}
           </ul>
         )}
-        {counts.guest > 0 && (
-          <div className="px-3 py-2 bg-gray-50 border-t border-gray-200 text-gray-600 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
-            <span>방문자(비회원) <strong>{counts.guest}</strong>명</span>
-          </div>
+        {guests.length > 0 && (
+          <ul className="divide-y divide-gray-100 border-t border-gray-200 bg-gray-50/50">
+            {guests.map((r) => (
+              <li key={r.sessionId} className="hover:bg-gray-100">
+                <button
+                  type="button"
+                  onClick={() => openChat(r)}
+                  className="w-full text-left px-3 py-1.5 flex items-center gap-1.5 text-gray-600"
+                  title="대화창 열기"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                  <span className="truncate flex-1">{r.displayName}</span>
+                  <span className="text-[10px] text-gray-300">💬</span>
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 

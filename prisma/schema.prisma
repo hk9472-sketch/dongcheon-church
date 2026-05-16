@@ -670,6 +670,33 @@ model LegalDocumentVersion {
 }
 
 // ============================================================
+// 실시간 채팅 메시지 (회원 ↔ 회원 / 회원 ↔ 비회원 / 비회원 ↔ 비회원)
+// 기존 Message(회원 간 쪽지, 제로보드 이관) 와 별개.
+// 비회원은 ActiveHeartbeat 의 localStorage sessionId 로 식별. 같은 브라우저면 동일.
+// to{UserId|Guest} 중 하나만 채워짐. broadcast 는 Phase 2.
+// ============================================================
+model ChatMessage {
+  id          Int       @id @default(autoincrement())
+  fromUserId  Int?
+  fromGuest   String?   @db.VarChar(64)                // 비회원 발신 시 sessionId
+  fromName    String    @db.VarChar(50)                // 표시명 (보낸 시점 스냅샷)
+  toUserId    Int?
+  toGuest     String?   @db.VarChar(64)
+  toBroadcast Boolean   @default(false)                // Phase 2 — 전체 발송
+  content     String    @db.Text
+  attachPath  String?   @db.VarChar(500)               // Phase 2 — 첨부 경로
+  attachName  String?   @db.VarChar(255)
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([toUserId, readAt])
+  @@index([toGuest, readAt])
+  @@index([fromUserId, createdAt])
+  @@index([fromGuest, createdAt])
+  @@map("chat_messages")
+}
+
+// ============================================================
 // 권찰회 출석부 - 부서 (장년반, 중간반, 유년주교)
 // ============================================================
 model CouncilDept {

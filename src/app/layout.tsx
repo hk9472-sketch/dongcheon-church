@@ -5,6 +5,7 @@ import Footer from "@/components/layout/Footer";
 import VisitorTracker from "@/components/VisitorTracker";
 import ActiveHeartbeat from "@/components/ActiveHeartbeat";
 import ActivePresenceWidget from "@/components/ActivePresenceWidget";
+import ChatContainer from "@/components/chat/ChatContainer";
 import ScrollRestorer from "@/components/ScrollRestorer";
 import prisma from "@/lib/db";
 import React from "react";
@@ -204,6 +205,7 @@ export default async function RootLayout({
         </main>
         <Footer />
         <ActivePresenceWidget />
+        <ChatContainer />
       </body>
     </html>
   );
