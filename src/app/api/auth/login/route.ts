@@ -9,9 +9,9 @@ import { signLegacyToken } from "@/lib/legacyToken";
 // POST /api/auth/login
 export async function POST(request: NextRequest) {
   try {
-    // Rate limit: IP당 10분에 5회
+    // Rate limit: IP당 30초에 5회 (비번 잊었을 때 재시도 부담 줄임)
     const ip = getClientIp(request);
-    const limit = checkRateLimit(`login:${ip}`, 5, 10 * 60 * 1000);
+    const limit = checkRateLimit(`login:${ip}`, 5, 30 * 1000);
     if (!limit.allowed) {
       return NextResponse.json(
         { message: "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요." },

@@ -140,16 +140,15 @@ export async function POST(req: NextRequest) {
     try {
       const recipient = await prisma.user.findUnique({
         where: { id: toUserId },
-        select: { id: true, name: true, email: true, emailVerified: true },
+        select: { id: true, userId: true, name: true, email: true, emailVerified: true },
       });
       if (recipient?.email && recipient.emailVerified) {
-        // 활성 세션 (heartbeat) 안에 receiver 가 있는지 확인
         const active = listActive().some((r) => r.userId === toUserId);
         if (!active) {
-          // 비동기 발송 — 응답 지연 안 되도록 await 없이
           sendChatNotificationEmail(
             recipient.email,
             recipient.name,
+            recipient.userId,
             sender.name,
             content,
             !!attachPath,

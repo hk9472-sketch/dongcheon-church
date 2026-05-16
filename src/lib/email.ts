@@ -13,42 +13,60 @@ const transporter = nodemailer.createTransport({
 /**
  * 채팅 메시지 수신 알림 — 비접속 상태인 회원에게.
  * 발송 시점에 receiver 가 활성 세션 없으면 호출 (POST /api/chat 안).
+ *
+ * 중요: 같은 이메일을 여러 계정이 공유할 수 있어 receiver 의 이름+아이디를
+ * 본문 상단에 강조 표시. 메일을 본 사람이 "자기 앞으로 온 게 맞는지" 즉시
+ * 식별 가능하도록.
  */
 export async function sendChatNotificationEmail(
   to: string,
   receiverName: string,
+  receiverUserId: string,
   senderName: string,
   preview: string,
   hasAttach: boolean,
 ): Promise<void> {
   const siteName = process.env.SITE_NAME || "동천교회";
   const siteUrl = process.env.SITE_URL || "https://pkistdc.net";
-  const shortPreview = preview.slice(0, 200);
+  const fullPreview = preview.slice(0, 1500);
+  const escapeHtml = (s: string) =>
+    s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] || c));
+  const safePreview = escapeHtml(fullPreview).replace(/\n/g, "<br/>");
 
   await transporter.sendMail({
     from: process.env.SMTP_FROM || `${siteName} <noreply@pkistdc.net>`,
     to,
-    subject: `[${siteName}] ${senderName} 님이 메시지를 보냈습니다`,
+    subject: `[${siteName}] ${receiverName}님(${receiverUserId})께 ${senderName}님의 메시지`,
     html: `
-      <div style="max-width: 480px; margin: 0 auto; font-family: 'Noto Sans KR', sans-serif; color: #1f2937;">
-        <h2 style="color: #4f46e5;">새 메시지가 도착했습니다</h2>
-        <p>${receiverName}님,</p>
-        <p><strong>${senderName}</strong> 님이 메시지를 보냈습니다.</p>
-        <blockquote style="border-left: 3px solid #6366f1; padding: 8px 12px; margin: 12px 0; background: #f5f5ff; color: #374151; font-size: 14px;">
-          ${shortPreview || "<em>(빈 메시지)</em>"}
-          ${hasAttach ? '<div style="margin-top: 6px; color: #2563eb;">📎 첨부 파일 포함</div>' : ""}
+      <div style="max-width: 520px; margin: 0 auto; font-family: 'Noto Sans KR', sans-serif; color: #1f2937;">
+        <h2 style="color: #4f46e5; margin-bottom: 8px;">새 메시지가 도착했습니다</h2>
+
+        <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 10px 12px; margin: 12px 0; font-size: 14px;">
+          📩 <strong>${escapeHtml(receiverName)}</strong>님
+          <span style="font-family: monospace; background: #fff; padding: 1px 6px; border-radius: 3px; color: #92400e;">${escapeHtml(receiverUserId)}</span>
+          앞으로 보낸 메시지입니다.
+          <div style="font-size: 11px; color: #92400e; margin-top: 4px;">
+            같은 이메일을 다른 계정과 공유 중이라면 위 아이디로 로그인해야 메시지함에서 확인할 수 있습니다.
+          </div>
+        </div>
+
+        <p style="margin: 16px 0 6px;"><strong>${escapeHtml(senderName)}</strong> 님이 보냄</p>
+        <blockquote style="border-left: 3px solid #6366f1; padding: 10px 14px; margin: 8px 0; background: #f5f5ff; color: #374151; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">
+${safePreview || "<em>(빈 메시지)</em>"}${hasAttach ? '<div style="margin-top: 8px; color: #2563eb; font-size: 13px;">📎 첨부 파일이 포함되어 있습니다.</div>' : ""}
         </blockquote>
+
         <p style="text-align: center; margin: 24px 0;">
           <a href="${siteUrl}/messages"
-             style="display: inline-block; padding: 10px 20px;
+             style="display: inline-block; padding: 10px 22px;
                     background-color: #4f46e5; color: #ffffff;
                     text-decoration: none; border-radius: 6px;
                     font-size: 14px;">
-            메시지함 열기
+            메시지함 열기 (${escapeHtml(receiverUserId)} 로 로그인)
           </a>
         </p>
-        <p style="font-size: 12px; color: #999;">
-          이 메일은 동천교회 사이트에서 새 메시지를 받을 때 자동 발송됩니다.
+
+        <p style="font-size: 12px; color: #999; text-align: center;">
+          ${siteName} 사이트에서 새 메시지를 받을 때 자동 발송됩니다.
         </p>
       </div>
     `,

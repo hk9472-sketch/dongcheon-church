@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
   // 수신자 검증 (존재하는 회원만)
   const validUsers = await prisma.user.findMany({
     where: { id: { in: userIds } },
-    select: { id: true, name: true, email: true, emailVerified: true },
+    select: { id: true, userId: true, name: true, email: true, emailVerified: true },
   });
   if (validUsers.length === 0) {
     return NextResponse.json({ message: "유효한 수신자가 없습니다." }, { status: 400 });
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
   const activeIds = new Set(listActive().filter((r) => r.userId).map((r) => r.userId!));
   for (const u of validUsers) {
     if (u.email && u.emailVerified && !activeIds.has(u.id)) {
-      sendChatNotificationEmail(u.email, u.name, sender.name, content, !!attachPath)
+      sendChatNotificationEmail(u.email, u.name, u.userId, sender.name, content, !!attachPath)
         .catch((e) => console.error("[chat bulk email]", u.id, e));
     }
   }

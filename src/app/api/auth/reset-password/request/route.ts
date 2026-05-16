@@ -7,9 +7,9 @@ import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 // POST /api/auth/reset-password/request
 export async function POST(request: NextRequest) {
   try {
-    // Rate limit: IP당 1시간 3회
+    // Rate limit: IP당 2분 5회 (이메일 발송이라 너무 짧으면 SMTP 부담)
     const ip = getClientIp(request);
-    const ipLimit = checkRateLimit(`pw-reset-ip:${ip}`, 3, 60 * 60 * 1000);
+    const ipLimit = checkRateLimit(`pw-reset-ip:${ip}`, 5, 2 * 60 * 1000);
     if (!ipLimit.allowed) {
       return NextResponse.json(
         { message: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." },
@@ -26,10 +26,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 이메일 기준 Rate limit: 이메일당 1시간 3회
+    // 이메일 기준 Rate limit: 이메일당 2분 5회
     const emailKey = typeof email === "string" ? email.toLowerCase().trim() : "";
     if (emailKey) {
-      const emailLimit = checkRateLimit(`pw-reset-email:${emailKey}`, 3, 60 * 60 * 1000);
+      const emailLimit = checkRateLimit(`pw-reset-email:${emailKey}`, 5, 2 * 60 * 1000);
       if (!emailLimit.allowed) {
         return NextResponse.json(
           { message: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." },
