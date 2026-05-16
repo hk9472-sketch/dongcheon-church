@@ -9,6 +9,8 @@ interface UnreadMsg {
   fromGuest: string | null;
   fromName: string;
   content: string;
+  attachName?: string | null;
+  toBroadcast?: boolean;
   createdAt: string;
 }
 
@@ -80,7 +82,13 @@ export default function ChatContainer() {
       fetch(`/api/chat${q}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
-          if (d?.unread) setUnread(d.unread);
+          if (!d) return;
+          // 1:1 안 읽은 메시지 + broadcast 신규 (dismissed 기준으로 필터링)
+          const combined: UnreadMsg[] = [
+            ...(d.unread || []),
+            ...((d.broadcasts || []) as UnreadMsg[]).map((b) => ({ ...b, toBroadcast: true })),
+          ];
+          setUnread(combined);
         })
         .catch(() => {});
     };
@@ -105,18 +113,22 @@ export default function ChatContainer() {
   }, []);
 
   const openFromUnread = (m: UnreadMsg) => {
-    const p: ChatPeer = m.fromUserId
-      ? { kind: "user", id: String(m.fromUserId), displayName: m.fromName }
-      : { kind: "guest", id: m.fromGuest || "", displayName: m.fromName };
+    const p: ChatPeer = m.toBroadcast
+      ? { kind: "broadcast", id: "", displayName: "📢 전체 공지" }
+      : m.fromUserId
+        ? { kind: "user", id: String(m.fromUserId), displayName: m.fromName }
+        : { kind: "guest", id: m.fromGuest || "", displayName: m.fromName };
     setPeer(p);
-    // 팝업 dismiss
-    const idsFromPeer = unread
-      .filter((u) =>
-        m.fromUserId
-          ? u.fromUserId === m.fromUserId
-          : u.fromGuest === m.fromGuest,
-      )
-      .map((u) => u.id);
+    // 팝업 dismiss — broadcast 는 자기 자신 1개만, 1:1 은 같은 발신자 모두
+    const idsFromPeer = m.toBroadcast
+      ? [m.id]
+      : unread
+          .filter((u) =>
+            !u.toBroadcast && (m.fromUserId
+              ? u.fromUserId === m.fromUserId
+              : u.fromGuest === m.fromGuest),
+          )
+          .map((u) => u.id);
     addDismissed(idsFromPeer);
     dismissedRef.current = getDismissed();
     setUnread((cur) => cur.filter((u) => !idsFromPeer.includes(u.id)));
@@ -153,12 +165,21 @@ export default function ChatContainer() {
                 key={m.id}
                 type="button"
                 onClick={() => openFromUnread(m)}
-                className="w-full text-left px-3 py-2 border-b border-gray-100 hover:bg-rose-50 transition-colors"
+                className={`w-full text-left px-3 py-2 border-b border-gray-100 transition-colors ${
+                  m.toBroadcast ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-rose-50"
+                }`}
               >
-                <div className="text-xs font-bold text-gray-800 truncate">
-                  {m.fromName}
+                <div className="text-xs font-bold text-gray-800 truncate flex items-center gap-1">
+                  {m.toBroadcast && <span className="text-amber-700">📢</span>}
+                  <span className="truncate">{m.fromName}</span>
+                  {m.toBroadcast && (
+                    <span className="text-[10px] text-amber-700 font-normal">(전체 공지)</span>
+                  )}
                 </div>
-                <div className="text-[11px] text-gray-600 truncate">{m.content}</div>
+                <div className="text-[11px] text-gray-600 truncate">
+                  {m.content}
+                  {m.attachName && <span className="ml-1 text-blue-600">📎 {m.attachName}</span>}
+                </div>
                 <div className="text-[10px] text-gray-400 mt-0.5">
                   {new Date(m.createdAt).toLocaleString("ko-KR", {
                     timeZone: "Asia/Seoul",

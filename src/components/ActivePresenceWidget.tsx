@@ -171,6 +171,13 @@ export default function ActivePresenceWidget() {
       : { kind: "guest" as const, id: r.sessionId, displayName: r.displayName };
     window.dispatchEvent(new CustomEvent("dc:chat-open", { detail: { peer } }));
   };
+  const openBroadcast = () => {
+    window.dispatchEvent(
+      new CustomEvent("dc:chat-open", {
+        detail: { peer: { kind: "broadcast", id: "", displayName: "📢 전체 공지" } },
+      }),
+    );
+  };
 
   const baseStyle = { left: position.left, top: position.top };
 
@@ -247,14 +254,23 @@ export default function ActivePresenceWidget() {
         )}
       </div>
 
-      <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200 text-[10px] text-gray-400 rounded-b-lg flex items-center justify-between">
-        <span>5초 갱신 · 60초 무응답 제외</span>
-        <Link
-          href="/admin/visit-logs?recent=15"
-          className="text-indigo-600 hover:text-indigo-800 hover:underline"
+      <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200 text-[10px] text-gray-400 rounded-b-lg space-y-1">
+        <button
+          type="button"
+          onClick={openBroadcast}
+          className="w-full px-2 py-1 bg-rose-50 border border-rose-200 text-rose-700 rounded hover:bg-rose-100 transition-colors text-[11px] font-semibold"
         >
-          전체보기 →
-        </Link>
+          📢 전체 공지 보내기
+        </button>
+        <div className="flex items-center justify-between">
+          <span>5초 갱신 · 60초 무응답 제외</span>
+          <Link
+            href="/admin/visit-logs?recent=15"
+            className="text-indigo-600 hover:text-indigo-800 hover:underline"
+          >
+            전체보기 →
+          </Link>
+        </div>
       </div>
     </div>
   );
