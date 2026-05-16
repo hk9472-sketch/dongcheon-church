@@ -5,6 +5,8 @@ import path from "path";
 import prisma from "@/lib/db";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import { getUploadDir, getRelUploadPath } from "@/lib/uploadPath";
+import { listActive } from "@/lib/activePresence";
+import { sendChatNotificationEmail } from "@/lib/email";
 
 // 파일 첨부 화이트리스트 (게시판 write 와 동일 정책 적용 — 사용자 친숙)
 const ALLOWED_EXT = new Set([
@@ -132,6 +134,33 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // 비접속 회원에게 이메일 알림 — 1:1 회원 수신에 한해.
+  // 비회원(toGuest) 은 이메일 없음, broadcast 는 too noisy 라 skip.
+  if (toUserId) {
+    try {
+      const recipient = await prisma.user.findUnique({
+        where: { id: toUserId },
+        select: { id: true, name: true, email: true, emailVerified: true },
+      });
+      if (recipient?.email && recipient.emailVerified) {
+        // 활성 세션 (heartbeat) 안에 receiver 가 있는지 확인
+        const active = listActive().some((r) => r.userId === toUserId);
+        if (!active) {
+          // 비동기 발송 — 응답 지연 안 되도록 await 없이
+          sendChatNotificationEmail(
+            recipient.email,
+            recipient.name,
+            sender.name,
+            content,
+            !!attachPath,
+          ).catch((e) => console.error("[chat email]", e));
+        }
+      }
+    } catch (e) {
+      console.error("[chat notification check]", e);
+    }
+  }
+
   return NextResponse.json({ id: created.id, createdAt: created.createdAt });
 }
 
@@ -166,7 +195,7 @@ export async function GET(req: NextRequest) {
     // broadcast 대화 이력 — toBroadcast=true 모두 (발신자 무관, 시간순)
     if (kind === "b") {
       const messages = await prisma.chatMessage.findMany({
-        where: { toBroadcast: true },
+        where: { toBroadcast: true, deletedAt: null },
         orderBy: { createdAt: "asc" },
         take: 200,
       });
@@ -179,6 +208,7 @@ export async function GET(req: NextRequest) {
 
     const messages = await prisma.chatMessage.findMany({
       where: {
+        deletedAt: null,
         OR: [
           {
             fromUserId: meUserId,
@@ -196,6 +226,7 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { createdAt: "asc" },
       take: 200,
+      // (deletedAt 필터는 where 절에서 처리)
     });
 
     return NextResponse.json({ messages });
@@ -207,13 +238,14 @@ export async function GET(req: NextRequest) {
       where: {
         readAt: null,
         toBroadcast: false,
+        deletedAt: null,
         ...(meUserId ? { toUserId: meUserId } : { toGuest: meGuest }),
       },
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
     prisma.chatMessage.findMany({
-      where: { toBroadcast: true },
+      where: { toBroadcast: true, deletedAt: null },
       orderBy: { createdAt: "desc" },
       take: 20,
     }),

@@ -683,11 +683,15 @@ model ChatMessage {
   fromName    String    @db.VarChar(50)                // 표시명 (보낸 시점 스냅샷)
   toUserId    Int?
   toGuest     String?   @db.VarChar(64)
-  toBroadcast Boolean   @default(false)                // Phase 2 — 전체 발송
+  toBroadcast Boolean   @default(false)
   content     String    @db.Text
-  attachPath  String?   @db.VarChar(500)               // Phase 2 — 첨부 경로
+  attachPath  String?   @db.VarChar(500)
   attachName  String?   @db.VarChar(255)
   readAt      DateTime?
+  deletedAt   DateTime?                                // soft delete — 본인 발신만 가능
+  reportedBy  Int?                                     // 신고한 사용자 id (회원)
+  reportedAt  DateTime?
+  reportNote  String?   @db.VarChar(500)
   createdAt   DateTime  @default(now())
 
   @@index([toUserId, readAt])
