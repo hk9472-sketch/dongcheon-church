@@ -53,12 +53,15 @@ export default function ActivePresenceWidget() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [data, setData] = useState<ActiveData | null>(null);
+  // 기본값 = 닫힘. 자동으로 안 뜨고, 푸터 "현재" 클릭으로만 열림.
+  // localStorage 에 명시적 "0" 이 있으면(=사용자가 이전에 열어둔 상태) 그대로 유지,
+  // 그 외엔 모두 닫힘.
   const [collapsed, setCollapsed] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
+    if (typeof window === "undefined") return true;
     try {
-      return localStorage.getItem(COLLAPSE_KEY) === "1";
+      return localStorage.getItem(COLLAPSE_KEY) !== "0";
     } catch {
-      return false;
+      return true;
     }
   });
   const [position, setPosition] = useState<Position>({ left: 0, top: 120 });
