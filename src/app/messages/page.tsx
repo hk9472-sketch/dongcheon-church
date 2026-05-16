@@ -73,23 +73,41 @@ function MessagesContent() {
     window.dispatchEvent(new CustomEvent("dc:chat-open", { detail: { peer } }));
   };
 
-  // (1) 비로그인 + guestId 도 없는 경우 → 로그인 안내
-  if (meChecked && !me && !getGuestId()) {
+  // 비로그인 케이스 — guestId 있어도 무조건 로그인 안내 우선.
+  // 메일에서 진입(?as=...) 했을 때 빈 화면 보이던 문제 해결.
+  if (meChecked && !me) {
+    const target = "/messages" + (expectedUserId ? `?as=${expectedUserId}` : "");
     return (
       <div className="max-w-3xl mx-auto py-10">
-        <div className="bg-amber-50 border border-amber-300 rounded-lg p-6 text-center">
-          <p className="text-base font-bold text-amber-800 mb-2">로그인이 필요합니다</p>
-          <p className="text-sm text-amber-700 mb-4">
-            메시지함은 로그인한 사용자만 볼 수 있습니다.
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-8 text-center shadow-sm">
+          <p className="text-2xl mb-3">{expectedUserId ? "📩" : "🔒"}</p>
+          <p className="text-lg font-bold text-amber-900 mb-3">
+            {expectedUserId ? "메시지를 확인하려면 로그인이 필요합니다" : "로그인이 필요합니다"}
           </p>
+          {expectedUserId ? (
+            <p className="text-sm text-amber-800 mb-5 leading-relaxed">
+              이 메시지는{" "}
+              <code className="bg-white px-2 py-0.5 rounded border border-amber-200 font-bold">
+                {expectedUserId}
+              </code>{" "}
+              계정 앞으로 발송되었습니다.
+              <br />
+              해당 계정으로 로그인하시면 메시지 내용을 확인할 수 있습니다.
+            </p>
+          ) : (
+            <p className="text-sm text-amber-800 mb-5">
+              메시지함은 로그인한 사용자만 볼 수 있습니다.
+            </p>
+          )}
           <Link
-            href={`/auth/login?redirect=${encodeURIComponent(
-              "/messages" + (expectedUserId ? `?as=${expectedUserId}` : ""),
-            )}`}
-            className="inline-block px-5 py-2 bg-blue-700 text-white rounded hover:bg-blue-800"
+            href={`/auth/login?redirect=${encodeURIComponent(target)}`}
+            className="inline-block px-6 py-2.5 bg-blue-700 text-white rounded-lg hover:bg-blue-800 font-medium shadow-sm"
           >
-            로그인 하기
+            {expectedUserId ? `${expectedUserId} 로 로그인하기` : "로그인 하기"}
           </Link>
+          <p className="text-xs text-gray-500 mt-4">
+            로그인 후 자동으로 메시지함으로 돌아옵니다.
+          </p>
         </div>
       </div>
     );
@@ -128,14 +146,6 @@ function MessagesContent() {
               {expectedUserId} 로 다시 로그인
             </Link>
           </div>
-        </div>
-      )}
-
-      {/* 비회원 안내 */}
-      {meChecked && !me && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
-          비회원으로 접근 중입니다. 본인 브라우저로 받은 메시지만 표시됩니다.
-          회원 메시지는 <Link href="/auth/login?redirect=/messages" className="font-bold underline">로그인</Link> 후 확인하세요.
         </div>
       )}
 
