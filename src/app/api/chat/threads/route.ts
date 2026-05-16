@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
   const myMessages = await prisma.chatMessage.findMany({
     where: {
       toBroadcast: false,
+      deletedAt: null,
       OR: [
         { fromUserId: meUserId, fromGuest: meGuest },
         ...(meUserId ? [{ toUserId: meUserId }] : []),
@@ -95,7 +96,7 @@ export async function GET(req: NextRequest) {
 
   // broadcast — 최신 한 건 + 안 읽은 수
   const broadcastList = await prisma.chatMessage.findMany({
-    where: { toBroadcast: true },
+    where: { toBroadcast: true, deletedAt: null },
     orderBy: { createdAt: "desc" },
     take: 100,
   });
