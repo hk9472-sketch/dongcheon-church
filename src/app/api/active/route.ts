@@ -15,11 +15,13 @@ export async function GET() {
   if (!s || s.expires <= new Date()) {
     return NextResponse.json({ error: "권한 없음" }, { status: 403 });
   }
+  // 로그인 회원이면 모두 활성 사용자 목록 조회 가능 (메시지 기능 위해).
+  // 비회원은 차단 — 세션 없으면 위에서 이미 return 됨.
   const u = await prisma.user.findUnique({
     where: { id: s.userId },
     select: { isAdmin: true },
   });
-  if (!u || u.isAdmin !== 1) {
+  if (!u) {
     return NextResponse.json({ error: "권한 없음" }, { status: 403 });
   }
 

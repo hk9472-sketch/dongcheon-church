@@ -49,7 +49,9 @@ function getInitialPosition(): Position {
 }
 
 export default function ActivePresenceWidget() {
-  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean | null>(null);
+  // 로그인 회원이면 위젯 표시. 관리자(isAdmin <= 2) 여부는 전체공지/선별발송 버튼 노출용.
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [data, setData] = useState<ActiveData | null>(null);
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -69,17 +71,20 @@ export default function ActivePresenceWidget() {
     setPosition(getInitialPosition());
   }, []);
 
-  // 권한 확인 — isAdmin === 1 인 경우만 위젯 표시
+  // 로그인 여부 + 관리자 여부 확인
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
-      .then((d) => setIsSuperAdmin(d?.user?.isAdmin === 1))
-      .catch(() => setIsSuperAdmin(false));
+      .then((d) => {
+        setIsLoggedIn(!!d?.user);
+        setIsAdmin(d?.user && d.user.isAdmin <= 2);
+      })
+      .catch(() => setIsLoggedIn(false));
   }, []);
 
-  // 5초 폴링
+  // 5초 폴링 — 로그인 회원만 호출
   useEffect(() => {
-    if (!isSuperAdmin) return;
+    if (!isLoggedIn) return;
     const load = () => {
       fetch("/api/active")
         .then((r) => (r.ok ? r.json() : null))
@@ -91,7 +96,7 @@ export default function ActivePresenceWidget() {
     load();
     const t = setInterval(load, POLL_MS);
     return () => clearInterval(t);
-  }, [isSuperAdmin]);
+  }, [isLoggedIn]);
 
   // 외부(푸터 "현재" 클릭) 에서 펼치도록 요청
   useEffect(() => {
@@ -139,7 +144,7 @@ export default function ActivePresenceWidget() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  if (isSuperAdmin !== true) return null;
+  if (isLoggedIn !== true) return null;
 
   // ✕ 클릭 = 완전 종료 (collapsed=true → return null).
   // 다시 활성화는 푸터 "현재" 클릭 (dc:open-active-widget 이벤트) 만.
@@ -257,23 +262,25 @@ export default function ActivePresenceWidget() {
       </div>
 
       <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200 text-[10px] text-gray-400 rounded-b-lg space-y-1">
-        <div className="grid grid-cols-2 gap-1">
-          <button
-            type="button"
-            onClick={openBroadcast}
-            className="px-2 py-1 bg-rose-50 border border-rose-200 text-rose-700 rounded hover:bg-rose-100 transition-colors text-[11px] font-semibold"
-          >
-            📢 전체 공지
-          </button>
-          <button
-            type="button"
-            onClick={openBulk}
-            className="px-2 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded hover:bg-indigo-100 transition-colors text-[11px] font-semibold"
-          >
-            📋 선별 발송
-          </button>
-        </div>
-        <div className="text-[10px] text-gray-400">5초 갱신 · 60초 무응답 제외</div>
+        {isAdmin && (
+          <div className="grid grid-cols-2 gap-1">
+            <button
+              type="button"
+              onClick={openBroadcast}
+              className="px-2 py-1 bg-rose-50 border border-rose-200 text-rose-700 rounded hover:bg-rose-100 transition-colors text-[11px] font-semibold"
+            >
+              📢 전체 공지
+            </button>
+            <button
+              type="button"
+              onClick={openBulk}
+              className="px-2 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded hover:bg-indigo-100 transition-colors text-[11px] font-semibold"
+            >
+              📋 선별 발송
+            </button>
+          </div>
+        )}
+        <div className="text-[10px] text-gray-400">5초 갱신 · 60초 무응답 제외 · 클릭으로 1:1 대화</div>
       </div>
     </div>
   );

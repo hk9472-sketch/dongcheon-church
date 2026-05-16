@@ -21,6 +21,7 @@ function yesterdayKstYmd(): string {
 export default function VisitorCounter() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const pathname = usePathname();
   const firstRef = useRef(true);
 
@@ -67,13 +68,17 @@ export default function VisitorCounter() {
     return () => clearInterval(t);
   }, []);
 
-  // 최고관리자 여부 — 첫 mount 만 확인.
-  // isAdmin === 1 (최고관리자) 인 경우만 푸터의 현재/오늘/어제를 클릭 가능한 링크로 활성.
+  // 권한 확인 — 첫 mount 만.
+  // - 로그인 회원: "현재" 클릭으로 활성 사용자 위젯 열림 (메시지 기능)
+  // - 최고관리자(isAdmin === 1): "오늘/어제" 클릭으로 방문 로그 페이지 이동
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
       .then((d) => {
-        if (d?.user?.isAdmin === 1) setIsSuperAdmin(true);
+        if (d?.user) {
+          setIsLoggedIn(true);
+          if (d.user.isAdmin === 1) setIsSuperAdmin(true);
+        }
       })
       .catch(() => {});
   }, []);
@@ -128,7 +133,7 @@ export default function VisitorCounter() {
       <span>
         총계:<strong className="text-white ml-0.5">{(stats.total ?? 0).toLocaleString()}</strong>
       </span>
-      {isSuperAdmin ? (
+      {isLoggedIn ? (
         <button
           type="button"
           onClick={onCurrentClick}
