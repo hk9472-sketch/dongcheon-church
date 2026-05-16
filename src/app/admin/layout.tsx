@@ -278,17 +278,32 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 {ADMIN_GROUPS.map((g) => {
                   const groupOpen = !groupCollapsed[g.key];
                   return (
-                    <div key={g.key} className="border-t border-gray-100">
+                    <div key={g.key} className="border-t-2 border-gray-200">
                       <button
                         type="button"
                         onClick={() => toggleGroup(g.key)}
-                        className="w-full flex items-center justify-between px-4 py-1.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hover:bg-gray-50 transition-colors"
+                        className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-bold transition-colors ${
+                          groupOpen
+                            ? "bg-slate-100 text-slate-800 hover:bg-slate-200"
+                            : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+                        }`}
                         title={groupOpen ? "접기" : "펼치기"}
                       >
-                        <span>{g.label}</span>
-                        <span className="text-gray-400">{groupOpen ? "▾" : "▸"}</span>
+                        <span className="flex items-center gap-1.5">
+                          <span
+                            className={`inline-block w-4 h-4 text-xs text-center leading-4 rounded transition-transform ${
+                              groupOpen ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-700"
+                            }`}
+                          >
+                            {groupOpen ? "−" : "+"}
+                          </span>
+                          {g.label}
+                        </span>
+                        <span className="text-[10px] text-gray-400">
+                          {groupOpen ? "" : `${g.items.length}개`}
+                        </span>
                       </button>
-                      {groupOpen && <div className="pb-1">{g.items.map(renderItem)}</div>}
+                      {groupOpen && <div className="py-0.5">{g.items.map(renderItem)}</div>}
                     </div>
                   );
                 })}
