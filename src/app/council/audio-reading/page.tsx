@@ -1,8 +1,48 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+
+/**
+ * 클라이언트에서 mp3 파일의 duration + peaks 동시 추출.
+ * WebAudio 의 decodeAudioData 로 PCM 디코딩 후 N 개 샘플로 다운샘플.
+ * 큰 파일이면 시간 좀 걸리지만 — 업로드 시 한 번만, 이후 모든 사용자는 재디코딩 없음.
+ */
+async function extractDurationAndPeaks(
+  file: File,
+  samples: number,
+): Promise<{ durationMs: number; peaks: number[] }> {
+  try {
+    const arrayBuf = await file.arrayBuffer();
+    type AudioCtxCtor = typeof AudioContext;
+    const w = window as unknown as { AudioContext?: AudioCtxCtor; webkitAudioContext?: AudioCtxCtor };
+    const Ctor = w.AudioContext ?? w.webkitAudioContext;
+    if (!Ctor) return { durationMs: 0, peaks: [] };
+    const ctx = new Ctor();
+    const buf: AudioBuffer = await new Promise((resolve, reject) => {
+      ctx.decodeAudioData(arrayBuf.slice(0), resolve, reject);
+    });
+    const channelData = buf.getChannelData(0);
+    const block = Math.max(1, Math.floor(channelData.length / samples));
+    const peaks: number[] = [];
+    for (let i = 0; i < samples; i++) {
+      const start = i * block;
+      const end = Math.min(channelData.length, start + block);
+      let max = 0;
+      for (let j = start; j < end; j++) {
+        const v = Math.abs(channelData[j]);
+        if (v > max) max = v;
+      }
+      peaks.push(Number(max.toFixed(4)));
+    }
+    const durationMs = Math.floor(buf.duration * 1000);
+    ctx.close().catch(() => {});
+    return { durationMs, peaks };
+  } catch {
+    return { durationMs: 0, peaks: [] };
+  }
+}
 
 interface Item {
   id: number;
@@ -27,7 +67,6 @@ export default function AudioReadingListPage() {
   const [content, setContent] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const audioMetaRef = useRef<HTMLAudioElement | null>(null);
 
   const reload = () => {
     fetch("/api/audio-reading")
@@ -46,29 +85,19 @@ export default function AudioReadingListPage() {
 
     setSubmitting(true);
     try {
-      // 음성 길이 추출
-      const durationMs = await new Promise<number>((resolve) => {
-        const url = URL.createObjectURL(audioFile);
-        const a = new Audio();
-        audioMetaRef.current = a;
-        a.preload = "metadata";
-        a.onloadedmetadata = () => {
-          const ms = Math.floor(a.duration * 1000);
-          URL.revokeObjectURL(url);
-          resolve(Number.isFinite(ms) ? ms : 0);
-        };
-        a.onerror = () => {
-          URL.revokeObjectURL(url);
-          resolve(0);
-        };
-        a.src = url;
-      });
+      // 음성 디코딩 — duration + peaks 한 번에 추출 (WebAudio).
+      // peaks: 2000 샘플 정도면 wavesurfer 표시에 충분. 서버에 함께 저장 → 재방문 시
+      // mp3 다시 디코딩 안 함.
+      const { durationMs, peaks } = await extractDurationAndPeaks(audioFile, 2000);
 
       const fd = new FormData();
       fd.append("title", title.trim());
       fd.append("content", content);
       fd.append("audio", audioFile);
       fd.append("durationMs", String(durationMs));
+      if (peaks && peaks.length > 0) {
+        fd.append("peaks", JSON.stringify(peaks));
+      }
 
       const res = await fetch("/api/audio-reading", { method: "POST", body: fd });
       if (!res.ok) {
@@ -148,7 +177,7 @@ export default function AudioReadingListPage() {
             disabled={submitting}
             className="px-5 py-2 text-sm font-medium bg-indigo-700 text-white rounded hover:bg-indigo-800 disabled:opacity-50"
           >
-            {submitting ? "등록 중..." : "등록"}
+            {submitting ? "음성 분석 + 업로드 중..." : "등록"}
           </button>
         </div>
       </form>

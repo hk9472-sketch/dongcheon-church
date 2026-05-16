@@ -86,6 +86,18 @@ export async function POST(req: NextRequest) {
   const content = String(form.get("content") || "");
   const durationMs = parseInt(String(form.get("durationMs") || "0"), 10) || 0;
   const audio = form.get("audio");
+  // peaks JSON 문자열 — 클라이언트에서 WebAudio 로 추출한 파형 샘플 배열.
+  // 형식: number[] (각 샘플 -1~1). 길이는 보통 1000~2000.
+  const peaksRaw = String(form.get("peaks") || "");
+  let peaksJson: number[] | null = null;
+  if (peaksRaw) {
+    try {
+      const parsed = JSON.parse(peaksRaw);
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed.length <= 8000) {
+        peaksJson = parsed.map((v) => Number(v)).filter((v) => Number.isFinite(v));
+      }
+    } catch {}
+  }
 
   if (!title) {
     return NextResponse.json({ message: "제목을 입력하세요." }, { status: 400 });
@@ -124,6 +136,7 @@ export async function POST(req: NextRequest) {
       audioPath,
       durationMs,
       paragraphs: paragraphs as unknown as object,
+      peaksJson: peaksJson as unknown as object,
       createdBy: me.id,
     },
   });

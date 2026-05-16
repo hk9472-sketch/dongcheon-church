@@ -639,6 +639,7 @@ model ReadingSession {
   audioPath  String   @db.VarChar(500)              // 업로드 경로 (uploadRoot 상대)
   durationMs Int      @default(0)                   // 음성 총 길이
   paragraphs Json     // [{ text, startMs, endMs }, ...]
+  peaksJson  Json?    // 사전 추출된 파형 peaks [-1~1 float * N] — wavesurfer 즉시 렌더용
   createdBy  Int?                                    // 회원 id (작성자)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

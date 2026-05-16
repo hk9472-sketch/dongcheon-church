@@ -16,6 +16,7 @@ interface Session {
   audioPath: string;
   durationMs: number;
   paragraphs: Paragraph[];
+  peaksJson?: number[] | null;
 }
 
 function fmtTime(ms: number): string {
@@ -62,10 +63,12 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
   }, [data]);
 
   // wavesurfer — 파형 시각화. 동일 audio element 와 동기화 (media=audioRef.current).
+  // peaksJson 있으면 즉시 렌더 (mp3 디코딩 skip). 없으면 wavesurfer 가 자체 디코딩.
   useEffect(() => {
     if (!data || !waveContainerRef.current || !audioRef.current) return;
-    if (waveSurferRef.current) return; // 이미 인스턴스 있음
+    if (waveSurferRef.current) return;
 
+    const hasPeaks = Array.isArray(data.peaksJson) && data.peaksJson.length > 0;
     const ws = WaveSurfer.create({
       container: waveContainerRef.current,
       media: audioRef.current,
@@ -78,9 +81,20 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
       barRadius: 2,
       height: 80,
       normalize: true,
+      // 사전 추출된 peaks + duration 제공 시 wavesurfer 가 fetch/디코딩 skip
+      ...(hasPeaks
+        ? {
+            peaks: [data.peaksJson as number[]],
+            duration: data.durationMs / 1000,
+          }
+        : {}),
     });
     waveSurferRef.current = ws;
     ws.on("ready", () => setWaveReady(true));
+    // peaks 가 사전 제공된 경우 ready 이벤트가 늦을 수도 있어 즉시 표시
+    if (hasPeaks) {
+      setWaveReady(true);
+    }
     return () => {
       ws.destroy();
       waveSurferRef.current = null;
