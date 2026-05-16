@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import ChatDialog, { ChatPeer, SelfIdentity } from "./ChatDialog";
+import BulkSendDialog from "./BulkSendDialog";
 
 interface UnreadMsg {
   id: number;
@@ -56,6 +57,7 @@ export default function ChatContainer() {
   const [self, setSelf] = useState<SelfIdentity | null>(null);
   const [peer, setPeer] = useState<ChatPeer | null>(null);
   const [unread, setUnread] = useState<UnreadMsg[]>([]);
+  const [showBulk, setShowBulk] = useState(false);
   const dismissedRef = useRef<Set<number>>(new Set());
 
   // 자기 정체성 — 로그인 사용자면 userId, 아니면 guestId
@@ -108,8 +110,13 @@ export default function ChatContainer() {
       const detail = (e as CustomEvent).detail as { peer: ChatPeer } | undefined;
       if (detail?.peer) setPeer(detail.peer);
     };
+    const onBulk = () => setShowBulk(true);
     window.addEventListener("dc:chat-open", onOpen as EventListener);
-    return () => window.removeEventListener("dc:chat-open", onOpen as EventListener);
+    window.addEventListener("dc:chat-bulk-open", onBulk);
+    return () => {
+      window.removeEventListener("dc:chat-open", onOpen as EventListener);
+      window.removeEventListener("dc:chat-bulk-open", onBulk);
+    };
   }, []);
 
   const openFromUnread = (m: UnreadMsg) => {
@@ -200,6 +207,9 @@ export default function ChatContainer() {
           onClose={() => setPeer(null)}
         />
       )}
+
+      {/* 선별 발송 모달 */}
+      {showBulk && <BulkSendDialog onClose={() => setShowBulk(false)} />}
     </>
   );
 }
