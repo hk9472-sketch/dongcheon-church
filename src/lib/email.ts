@@ -56,7 +56,7 @@ ${safePreview || "<em>(빈 메시지)</em>"}${hasAttach ? '<div style="margin-to
         </blockquote>
 
         <p style="text-align: center; margin: 24px 0;">
-          <a href="${siteUrl}/messages"
+          <a href="${siteUrl}/messages?as=${encodeURIComponent(receiverUserId)}"
              style="display: inline-block; padding: 10px 22px;
                     background-color: #4f46e5; color: #ffffff;
                     text-decoration: none; border-radius: 6px;

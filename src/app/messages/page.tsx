@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 interface Thread {
   peerKey: string;
@@ -9,6 +11,12 @@ interface Thread {
   lastAt: string;
   unread: number;
   isBroadcast: boolean;
+}
+
+interface Me {
+  id: number;
+  userId: string;
+  name: string;
 }
 
 const SESSION_KEY = "dc_active_session_id";
@@ -22,19 +30,37 @@ function getGuestId(): string | null {
   }
 }
 
-export default function MessagesPage() {
+function MessagesContent() {
+  const searchParams = useSearchParams();
+  const expectedUserId = searchParams.get("as"); // 이메일 링크의 ?as=hk9472
+
+  const [me, setMe] = useState<Me | null>(null);
+  const [meChecked, setMeChecked] = useState(false);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // 로그인 상태 확인
   useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.user) setMe({ id: d.user.id, userId: d.user.userId, name: d.user.name });
+      })
+      .catch(() => {})
+      .finally(() => setMeChecked(true));
+  }, []);
+
+  // threads 로드
+  useEffect(() => {
+    if (!meChecked) return;
     const gid = getGuestId();
-    const q = gid ? `?guestId=${encodeURIComponent(gid)}` : "";
+    const q = !me && gid ? `?guestId=${encodeURIComponent(gid)}` : "";
     fetch(`/api/chat/threads${q}`)
       .then((r) => r.json())
       .then((d) => setThreads(d.threads || []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [meChecked, me]);
 
   const openThread = (t: Thread) => {
     const m = t.peerKey.match(/^([ugb]):(.*)$/);
@@ -47,12 +73,71 @@ export default function MessagesPage() {
     window.dispatchEvent(new CustomEvent("dc:chat-open", { detail: { peer } }));
   };
 
+  // (1) 비로그인 + guestId 도 없는 경우 → 로그인 안내
+  if (meChecked && !me && !getGuestId()) {
+    return (
+      <div className="max-w-3xl mx-auto py-10">
+        <div className="bg-amber-50 border border-amber-300 rounded-lg p-6 text-center">
+          <p className="text-base font-bold text-amber-800 mb-2">로그인이 필요합니다</p>
+          <p className="text-sm text-amber-700 mb-4">
+            메시지함은 로그인한 사용자만 볼 수 있습니다.
+          </p>
+          <Link
+            href={`/auth/login?redirect=${encodeURIComponent(
+              "/messages" + (expectedUserId ? `?as=${expectedUserId}` : ""),
+            )}`}
+            className="inline-block px-5 py-2 bg-blue-700 text-white rounded hover:bg-blue-800"
+          >
+            로그인 하기
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // (2) 이메일 링크의 as= 와 현재 로그인 계정이 다를 때
+  const accountMismatch = !!(expectedUserId && me && me.userId !== expectedUserId);
+
   return (
     <div className="max-w-3xl mx-auto py-6 space-y-4">
       <div className="flex items-center gap-3">
         <span className="inline-block w-1 h-7 bg-indigo-700 rounded-full" />
         <h1 className="text-xl font-bold text-gray-800">메시지함</h1>
+        {me && (
+          <span className="text-xs text-gray-500">
+            ({me.name} · <code>{me.userId}</code>)
+          </span>
+        )}
       </div>
+
+      {/* 계정 불일치 경고 */}
+      {accountMismatch && (
+        <div className="bg-rose-50 border border-rose-300 rounded-lg p-4 space-y-2">
+          <p className="text-sm font-bold text-rose-800">
+            ⚠ 이 메시지는 <code className="bg-white px-1.5 py-0.5 rounded">{expectedUserId}</code> 앞으로 발송된 것입니다.
+          </p>
+          <p className="text-xs text-rose-700">
+            현재 <strong>{me?.userId}</strong> 계정으로 로그인되어 있어 해당 메시지가 보이지 않을 수 있습니다.
+            같은 이메일을 여러 계정이 공유 중이라면, 메시지를 받은 계정으로 다시 로그인해 주세요.
+          </p>
+          <div className="flex gap-2 pt-1">
+            <Link
+              href={`/auth/login?redirect=${encodeURIComponent(`/messages?as=${expectedUserId}`)}`}
+              className="px-3 py-1.5 text-xs bg-rose-600 text-white rounded hover:bg-rose-700"
+            >
+              {expectedUserId} 로 다시 로그인
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* 비회원 안내 */}
+      {meChecked && !me && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+          비회원으로 접근 중입니다. 본인 브라우저로 받은 메시지만 표시됩니다.
+          회원 메시지는 <Link href="/auth/login?redirect=/messages" className="font-bold underline">로그인</Link> 후 확인하세요.
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         {loading && (
@@ -111,5 +196,13 @@ export default function MessagesPage() {
         대화를 클릭하면 우하단에 대화창이 열립니다.
       </p>
     </div>
+  );
+}
+
+export default function MessagesPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-12 text-gray-400">로딩 중...</div>}>
+      <MessagesContent />
+    </Suspense>
   );
 }
