@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import prisma from "@/lib/db";
+import LegalDocumentView from "@/components/legal/LegalDocumentView";
 
 export const metadata: Metadata = {
   title: "개인정보처리방침 | 동천교회",
@@ -6,7 +8,17 @@ export const metadata: Metadata = {
     "동천교회 홈페이지의 개인정보 수집·이용·보관·파기 및 정보주체의 권리에 관한 처리방침을 안내합니다.",
 };
 
-export default function PrivacyPolicyPage() {
+export const dynamic = "force-dynamic";
+
+export default async function PrivacyPolicyPage() {
+  // DB 에 등록된 최신 버전이 있으면 그것을 표시. 없으면 아래 정적 fallback.
+  const current = await prisma.legalDocumentVersion
+    .findFirst({ where: { docType: "privacy" }, orderBy: { createdAt: "desc" } })
+    .catch(() => null);
+  if (current) {
+    return <LegalDocumentView title="개인정보처리방침" current={current} />;
+  }
+
   const effectiveDate = "2026년 4월 13일";
 
   return (

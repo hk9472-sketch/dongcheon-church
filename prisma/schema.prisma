@@ -648,6 +648,28 @@ model ReadingSession {
 }
 
 // ============================================================
+// 법적 문서 (개인정보처리방침 · 이용약관) 버전 이력
+// docType: "privacy" (개인정보처리방침) | "terms" (이용약관)
+// changeType: "revision" (개정 — 실질적 변경, 시행일 표기) | "improvement" (개선 — 표현·오탈자)
+// 현재 적용 버전 = 같은 docType 의 가장 최근 row.
+// 모든 변경을 row 로 보존 → 이력 + 두 버전 간 diff 비교 가능.
+// ============================================================
+model LegalDocumentVersion {
+  id            Int       @id @default(autoincrement())
+  docType       String    @db.VarChar(20)
+  content       String    @db.MediumText
+  version       String    @db.VarChar(20)             // 표시용 (예: "1.0", "2.0", "2.1")
+  changeType    String    @db.VarChar(20)             // "revision" | "improvement"
+  changeNote    String?   @db.Text                    // 변경 사유 요약
+  effectiveDate DateTime?                              // 개정 시 시행일 (개선은 null 허용)
+  createdBy     Int?
+  createdAt     DateTime  @default(now())
+
+  @@index([docType, createdAt])
+  @@map("legal_document_versions")
+}
+
+// ============================================================
 // 권찰회 출석부 - 부서 (장년반, 중간반, 유년주교)
 // ============================================================
 model CouncilDept {

@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import prisma from "@/lib/db";
+import LegalDocumentView from "@/components/legal/LegalDocumentView";
 
 export const metadata: Metadata = {
   title: "이용약관 | 동천교회",
@@ -6,7 +8,17 @@ export const metadata: Metadata = {
     "동천교회 홈페이지 서비스의 이용과 관련하여 교회와 회원 간의 권리, 의무 및 책임사항을 정한 이용약관입니다.",
 };
 
-export default function TermsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function TermsPage() {
+  // DB 에 등록된 최신 버전이 있으면 그것을 표시. 없으면 아래 정적 fallback.
+  const current = await prisma.legalDocumentVersion
+    .findFirst({ where: { docType: "terms" }, orderBy: { createdAt: "desc" } })
+    .catch(() => null);
+  if (current) {
+    return <LegalDocumentView title="이용약관" current={current} />;
+  }
+
   const effectiveDate = "2026년 4월 13일";
 
   return (
