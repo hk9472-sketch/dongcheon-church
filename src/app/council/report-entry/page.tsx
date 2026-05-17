@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { handleArrowNav, useSelectOnFocus } from "@/lib/useArrowNav";
+import { handleArrowNav } from "@/lib/useArrowNav";
 import HelpButton from "@/components/HelpButton";
 import FloppyIcon from "@/components/icons/FloppyIcon";
 
@@ -48,7 +48,6 @@ function rowSum(row: ReportRow) {
 }
 
 export default function ReportEntryPage() {
-  useSelectOnFocus();
   const [groups, setGroups] = useState<GroupInfo[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<number>(0);
   const [date, setDate] = useState(todayStr());

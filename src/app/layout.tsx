@@ -7,6 +7,7 @@ import ActiveHeartbeat from "@/components/ActiveHeartbeat";
 import ActivePresenceWidget from "@/components/ActivePresenceWidget";
 import ChatContainer from "@/components/chat/ChatContainer";
 import ScrollRestorer from "@/components/ScrollRestorer";
+import SelectOnFocusGlobal from "@/components/SelectOnFocusGlobal";
 import prisma from "@/lib/db";
 import React from "react";
 
@@ -199,6 +200,7 @@ export default async function RootLayout({
         <ScrollRestorer />
         <VisitorTracker />
         <ActiveHeartbeat />
+        <SelectOnFocusGlobal />
         <Header />
         <main className="flex-1 w-full max-w-[1450px] mx-auto px-4 py-2">
           {children}
