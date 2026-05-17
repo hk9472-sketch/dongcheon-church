@@ -1285,6 +1285,19 @@ export default function ReadingPage() {
                       {inlineEdit ? "편집 취소" : "텍스트 편집"}
                     </button>
                   )}
+                  {isAdmin && selected?.audioPath && (
+                    <button
+                      onClick={() => setLineEditMode((p) => !p)}
+                      className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+                        lineEditMode
+                          ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                          : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
+                      }`}
+                      title="각 절 옆 ⏱ 시작 버튼 표시 — 클릭으로 현재 재생 시점을 그 절의 시작 시간으로 설정"
+                    >
+                      {lineEditMode ? "줄 편집 종료" : "⏱ 줄 편집"}
+                    </button>
+                  )}
                 </div>
                 <button
                   onClick={() => setShowDisplaySettings(!showDisplaySettings)}
