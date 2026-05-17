@@ -373,7 +373,7 @@ export default function OverallPage() {
                   <th colSpan={6} className="border border-gray-300 px-1 py-1 bg-blue-50">장년반</th>
                   <th colSpan={6} className="border border-gray-300 px-1 py-1 bg-green-50">중간반</th>
                   <th colSpan={2} className="border border-gray-300 px-1 py-1 bg-orange-50">총계</th>
-                  <th colSpan={3} className="border border-gray-300 px-1 py-1 bg-purple-50">성경</th>
+                  <th rowSpan={3} className="border border-gray-300 px-1 py-1 bg-purple-50 w-10">성경</th>
                   <th rowSpan={3} className="border border-gray-300 px-1 py-1 w-10">기도</th>
                 </tr>
                 <tr className="bg-gray-50">
@@ -389,9 +389,6 @@ export default function OverallPage() {
                   <th rowSpan={2} className="border border-gray-300 px-1 py-1 bg-green-50 w-10">계</th>
                   <th rowSpan={2} className="border border-gray-300 px-1 py-1 bg-orange-50 w-10">전주</th>
                   <th rowSpan={2} className="border border-gray-300 px-1 py-1 bg-orange-50 w-10">금주</th>
-                  <th rowSpan={2} className="border border-gray-300 px-1 py-1 bg-purple-50 w-10">남</th>
-                  <th rowSpan={2} className="border border-gray-300 px-1 py-1 bg-purple-50 w-10">여</th>
-                  <th rowSpan={2} className="border border-gray-300 px-1 py-1 bg-purple-50 w-10">합계</th>
                 </tr>
                 <tr className="bg-gray-50">
                   <th className="border border-gray-300 px-1 py-0.5 bg-blue-50 text-[10px] w-10">전주</th>
@@ -405,7 +402,6 @@ export default function OverallPage() {
                   const aTotal = adultTotal(d);
                   const mTotal = midTotal(d);
                   const gc = grandCurrent(d);
-                  const bibleTotal = d.bibleMale + d.bibleFemale;
                   return (
                     <tr key={d.groupId} className="hover:bg-gray-50">
                       <td className="border border-gray-300 px-2 py-1 text-center font-medium">{d.groupName}</td>
@@ -426,12 +422,10 @@ export default function OverallPage() {
                       {/* 총계 */}
                       <td className="border border-gray-300 px-1 py-1 text-center text-gray-400">{d.prevGrandTotal}</td>
                       <td className="border border-gray-300 px-1 py-1 text-center font-bold bg-orange-50/50">{gc}</td>
-                      {/* 성경(남/여/합계) */}
+                      {/* 성경 (이전 남/여 통합 — bibleMale 컬럼을 전체 의미로 사용) */}
                       <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} data-row={i} data-col={8} onKeyDown={handleArrowNav} value={d.bibleMale} onChange={(e) => updateDistrict(i, "bibleMale", Number(e.target.value) || 0)} className={inputCls} /></td>
-                      <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} data-row={i} data-col={9} onKeyDown={handleArrowNav} value={d.bibleFemale} onChange={(e) => updateDistrict(i, "bibleFemale", Number(e.target.value) || 0)} className={inputCls} /></td>
-                      <td className="border border-gray-300 px-1 py-1 text-center font-bold bg-purple-50/50">{bibleTotal}</td>
                       {/* 기도 */}
-                      <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} data-row={i} data-col={10} onKeyDown={handleArrowNav} value={d.prayer} onChange={(e) => updateDistrict(i, "prayer", Number(e.target.value) || 0)} className={inputCls} /></td>
+                      <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} data-row={i} data-col={9} onKeyDown={handleArrowNav} value={d.prayer} onChange={(e) => updateDistrict(i, "prayer", Number(e.target.value) || 0)} className={inputCls} /></td>
                     </tr>
                   );
                 })}
@@ -452,9 +446,7 @@ export default function OverallPage() {
                   <td className="border border-gray-300 px-1 py-1 text-center bg-green-100/50">{districtMidTotalAll}</td>
                   <td className="border border-gray-300 px-1 py-1 text-center">{districtTotals.prevGrandTotal}</td>
                   <td className="border border-gray-300 px-1 py-1 text-center bg-orange-100/50">{districtAdultTotalAll + districtMidTotalAll}</td>
-                  <td className="border border-gray-300 px-1 py-1 text-center">{districtTotals.bibleMale}</td>
-                  <td className="border border-gray-300 px-1 py-1 text-center">{districtTotals.bibleFemale}</td>
-                  <td className="border border-gray-300 px-1 py-1 text-center bg-purple-100/50">{districtTotals.bibleMale + districtTotals.bibleFemale}</td>
+                  <td className="border border-gray-300 px-1 py-1 text-center bg-purple-100/50">{districtTotals.bibleMale}</td>
                   <td className="border border-gray-300 px-1 py-1 text-center">{districtTotals.prayer}</td>
                 </tr>
               </tbody>
@@ -494,25 +486,25 @@ export default function OverallPage() {
                 {teachers.map((t, i) => (
                   <tr key={i} className="hover:bg-gray-50">
                     <td className="border border-gray-300 px-0 py-0">
-                      <input type="number" min={0} value={t.sortOrder} onChange={(e) => updateTeacher(i, "sortOrder", Number(e.target.value) || 0)}
+                      <input type="number" min={0} data-row={i} data-col={0} onKeyDown={handleArrowNav} value={t.sortOrder} onChange={(e) => updateTeacher(i, "sortOrder", Number(e.target.value) || 0)}
                         className="w-full text-center py-0.5 text-xs border-0 bg-transparent focus:ring-1 focus:ring-indigo-300" />
                     </td>
                     <td className="border border-gray-300 px-0 py-0">
-                      <input type="text" value={t.className} onChange={(e) => updateTeacher(i, "className", e.target.value)}
+                      <input type="text" data-row={i} data-col={1} onKeyDown={handleArrowNav} value={t.className} onChange={(e) => updateTeacher(i, "className", e.target.value)}
                         className="w-full px-1 py-0.5 text-xs border-0 bg-transparent text-center focus:ring-1 focus:ring-indigo-300" />
                     </td>
                     <td className="border border-gray-300 px-0 py-0">
-                      <input type="text" value={t.teacherName} onChange={(e) => updateTeacher(i, "teacherName", e.target.value)}
+                      <input type="text" data-row={i} data-col={2} onKeyDown={handleArrowNav} value={t.teacherName} onChange={(e) => updateTeacher(i, "teacherName", e.target.value)}
                         className="w-full px-1 py-0.5 text-xs border-0 bg-transparent text-center focus:ring-1 focus:ring-indigo-300" />
                     </td>
-                    <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} value={t.jugyo} onChange={(e) => updateTeacher(i, "jugyo", Number(e.target.value) || 0)} className={inputCls} /></td>
-                    <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} value={t.midJugyo1} onChange={(e) => updateTeacher(i, "midJugyo1", Number(e.target.value) || 0)} className={inputCls} /></td>
-                    <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} value={t.midJugyo2} onChange={(e) => updateTeacher(i, "midJugyo2", Number(e.target.value) || 0)} className={inputCls} /></td>
-                    <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} value={t.midMiddle} onChange={(e) => updateTeacher(i, "midMiddle", Number(e.target.value) || 0)} className={inputCls} /></td>
-                    <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} value={t.midAdult} onChange={(e) => updateTeacher(i, "midAdult", Number(e.target.value) || 0)} className={inputCls} /></td>
+                    <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} data-row={i} data-col={3} onKeyDown={handleArrowNav} value={t.jugyo} onChange={(e) => updateTeacher(i, "jugyo", Number(e.target.value) || 0)} className={inputCls} /></td>
+                    <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} data-row={i} data-col={4} onKeyDown={handleArrowNav} value={t.midJugyo1} onChange={(e) => updateTeacher(i, "midJugyo1", Number(e.target.value) || 0)} className={inputCls} /></td>
+                    <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} data-row={i} data-col={5} onKeyDown={handleArrowNav} value={t.midJugyo2} onChange={(e) => updateTeacher(i, "midJugyo2", Number(e.target.value) || 0)} className={inputCls} /></td>
+                    <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} data-row={i} data-col={6} onKeyDown={handleArrowNav} value={t.midMiddle} onChange={(e) => updateTeacher(i, "midMiddle", Number(e.target.value) || 0)} className={inputCls} /></td>
+                    <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} data-row={i} data-col={7} onKeyDown={handleArrowNav} value={t.midAdult} onChange={(e) => updateTeacher(i, "midAdult", Number(e.target.value) || 0)} className={inputCls} /></td>
                     <td className="border border-gray-300 px-1 py-1 text-center text-gray-400">{t.prevTotal}</td>
                     <td className="border border-gray-300 px-1 py-1 text-center font-bold bg-orange-50/50">{teacherCurrentTotal(t)}</td>
-                    <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} value={t.jugyoAfternoon} onChange={(e) => updateTeacher(i, "jugyoAfternoon", Number(e.target.value) || 0)} className={inputCls} /></td>
+                    <td className="border border-gray-300 px-0 py-0"><input type="number" min={0} data-row={i} data-col={8} onKeyDown={handleArrowNav} value={t.jugyoAfternoon} onChange={(e) => updateTeacher(i, "jugyoAfternoon", Number(e.target.value) || 0)} className={inputCls} /></td>
                     <td className="border border-gray-300 px-0 py-0 text-center print:hidden">
                       <button onClick={() => setTeachers((prev) => prev.filter((_, j) => j !== i))}
                         className="text-red-400 hover:text-red-600 text-[10px]">✕</button>
