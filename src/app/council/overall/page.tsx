@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { handleArrowNav } from "@/lib/useArrowNav";
+import { handleArrowNav, useSelectOnFocus } from "@/lib/useArrowNav";
 import HelpButton from "@/components/HelpButton";
 import FloppyIcon from "@/components/icons/FloppyIcon";
 
@@ -65,6 +65,7 @@ function downloadExcel(filename: string) {
 }
 
 export default function OverallPage() {
+  useSelectOnFocus();
   const [date, setDate] = useState(todayStr());
   const [tab, setTab] = useState<Tab>("district");
   const [summary, setSummary] = useState<SummaryData | null>(null);

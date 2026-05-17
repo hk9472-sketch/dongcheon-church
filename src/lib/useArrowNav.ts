@@ -1,4 +1,48 @@
-import { KeyboardEvent } from "react";
+import { KeyboardEvent, FocusEvent, useEffect } from "react";
+
+/**
+ * 페이지 안의 모든 number/text input 에서 포커스 시 전체 텍스트 자동 선택.
+ * 입력 폼이 큰 페이지(권찰보고서/전체출석보고 등)에서 input 마다 onFocus
+ * 안 달고 한 줄로 처리. document focusin 으로 모든 input 캡처.
+ *
+ * 사용법:
+ *   import { useSelectOnFocus } from "@/lib/useArrowNav";
+ *   useSelectOnFocus();
+ */
+export function useSelectOnFocus() {
+  useEffect(() => {
+    const onFocusIn = (e: Event) => {
+      const t = e.target as HTMLElement | null;
+      if (!t || t.tagName !== "INPUT") return;
+      const inp = t as HTMLInputElement;
+      if (inp.type === "number" || inp.type === "text") {
+        // Chrome 등에서 mouseup 이 select 를 해제하므로 다음 tick 에 select.
+        setTimeout(() => {
+          try { inp.select(); } catch {}
+        }, 0);
+      }
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, []);
+}
+
+/**
+ * 포커스 시 input 의 모든 텍스트 자동 선택 — 마우스 클릭/Tab/터치 어디서든 동작.
+ * 사용자가 곧장 새 값 입력해 덮어쓰기 가능.
+ *
+ * setTimeout 0 — 일부 브라우저(특히 Chrome)는 mouseup 이 select 를 해제하므로
+ * 다음 tick 에서 select() 호출.
+ *
+ * 사용법:
+ *   <input onFocus={selectOnFocus} ... />
+ */
+export function selectOnFocus(e: FocusEvent<HTMLInputElement>) {
+  const el = e.currentTarget;
+  setTimeout(() => {
+    try { el.select(); } catch {}
+  }, 0);
+}
 
 /**
  * 테이블 내 input 간 화살표키 이동 핸들러
