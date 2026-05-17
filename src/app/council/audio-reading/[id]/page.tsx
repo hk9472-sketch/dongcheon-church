@@ -174,14 +174,14 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
     (p) => currentMs >= p.startMs && currentMs < p.endMs,
   );
 
-  // 활성 문단이 바뀌면 본문 영역 내에서 자동 스크롤 (편집 모드 X 일 때만 — 작업자가
-  // 다른 문단 보면서 시간 찍을 때 자동 스크롤이 방해되므로).
+  // 활성 문단이 바뀌면 본문 영역 내에서 자동 스크롤 — 맨 위로 올라가게 ("start").
+  // 편집 모드 X 일 때만 (작업자가 다른 문단 보면서 시간 찍을 때 방해되므로).
   useEffect(() => {
     if (editMode) return;
     if (activeIdx < 0) return;
     const el = paraRefs.current[activeIdx];
     if (el) {
-      el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      el.scrollIntoView({ block: "start", behavior: "smooth" });
     }
   }, [activeIdx, editMode]);
 
