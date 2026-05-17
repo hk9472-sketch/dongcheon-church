@@ -322,15 +322,29 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
             );
           })}
         </div>
+        {/* audio element 는 wavesurfer 가 점유 — 화면에 native controls 표시는 0:00/0:00
+            으로 잘못 나오므로 숨김. 모든 컨트롤은 위의 큰 ▶ 버튼 + 파형 클릭 + 본문 클릭. */}
         <audio
           ref={audioRef}
           src={`/${data.audioPath}`}
-          controls
           preload="metadata"
-          className="w-full"
+          className="hidden"
         />
-        <p className="text-[11px] text-gray-400 text-right">
-          파형 마커 또는 본문 문단을 클릭하면 그 시점으로 이동
+
+        {/* 진행 슬라이더 (custom) */}
+        <input
+          type="range"
+          min={0}
+          max={data.durationMs}
+          step={100}
+          value={currentMs}
+          onChange={(e) => jumpTo(Number(e.target.value))}
+          className="w-full accent-indigo-600 cursor-pointer"
+          title="드래그로 위치 이동"
+        />
+
+        <p className="text-[11px] text-gray-400 text-center">
+          🎯 본문 문단 클릭 · 파형 위 막대(│) 클릭 · 진행바 드래그 — 어디서든 그 시점부터 재생
         </p>
       </div>
 
