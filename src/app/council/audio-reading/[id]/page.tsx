@@ -40,6 +40,8 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
   const [waveReady, setWaveReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
+  // 본문 집중 모드 — fixed inset-0 오버레이로 헤더/파형/사이드/푸터 모두 가림.
+  const [focusMode, setFocusMode] = useState(false);
   // 파형 접기 — localStorage 영속.
   const [waveCollapsed, setWaveCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -183,6 +185,22 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
     }
   }, [activeIdx, editMode]);
 
+  // ESC 로 집중 모드 종료
+  useEffect(() => {
+    if (!focusMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFocusMode(false);
+    };
+    window.addEventListener("keydown", onKey);
+    // body scroll 잠금
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [focusMode]);
+
   if (!data) {
     return <div className="text-center py-12 text-gray-400">불러오는 중...</div>;
   }
@@ -269,7 +287,106 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
     }
   };
 
+  // 집중 모드 오버레이 — 페이지 헤더/파형/사이트 헤더·푸터 모두 가림.
+  // body overflow:hidden 이미 적용. ESC 또는 ✕ 로 종료.
+  const focusOverlay = focusMode ? (
+    <div className="fixed inset-0 z-[100] bg-white flex flex-col">
+      {/* 미니 컨트롤 바 */}
+      <div className="shrink-0 flex items-center gap-3 px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+        <button
+          type="button"
+          onClick={() => {
+            const ws = waveSurferRef.current;
+            if (ws) { try { ws.playPause(); return; } catch {} }
+            const a = audioRef.current;
+            if (!a) return;
+            if (a.paused) a.play().catch(() => {}); else a.pause();
+          }}
+          className="shrink-0 w-10 h-10 rounded-full bg-indigo-600 text-white text-lg flex items-center justify-center hover:bg-indigo-700"
+          title={isPlaying ? "일시정지" : "재생"}
+        >
+          {isPlaying ? "❚❚" : "▶"}
+        </button>
+        <input
+          type="range"
+          min={0}
+          max={data.durationMs}
+          step={100}
+          value={currentMs}
+          onChange={(e) => jumpTo(Number(e.target.value))}
+          className="flex-1 accent-indigo-600 cursor-pointer"
+        />
+        <div className="shrink-0 text-xs font-mono text-gray-700 whitespace-nowrap">
+          {fmtTime(currentMs)} / {fmtTime(data.durationMs)}
+        </div>
+        {activeIdx >= 0 && (
+          <div className="shrink-0 text-[10px] text-indigo-700 font-semibold whitespace-nowrap">
+            #{activeIdx + 1}/{paragraphs.length}
+          </div>
+        )}
+        {/* 글씨 크기 컨트롤 (집중 모드에서도 필요) */}
+        <div className="shrink-0 flex items-center gap-0.5 text-xs">
+          <button
+            type="button"
+            onClick={() => changeFontLevel(-1)}
+            disabled={fontLevel === 0}
+            className="w-6 h-6 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-30"
+          >
+            A−
+          </button>
+          <button
+            type="button"
+            onClick={() => changeFontLevel(1)}
+            disabled={fontLevel === 4}
+            className="w-6 h-6 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-30 font-bold"
+          >
+            A+
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => setFocusMode(false)}
+          className="shrink-0 px-3 h-8 border border-gray-300 bg-white rounded hover:bg-gray-100 text-xs font-semibold"
+          title="종료 (ESC)"
+        >
+          ✕ 종료
+        </button>
+      </div>
+
+      {/* 본문 — 풀스크린 안 스크롤 */}
+      <ol className="flex-1 overflow-y-auto divide-y divide-gray-100 max-w-3xl w-full mx-auto px-4 py-4">
+        {paragraphs.map((p, idx) => {
+          const isActive = idx === activeIdx;
+          return (
+            <li
+              key={idx}
+              ref={(el) => { paraRefs.current[idx] = el; }}
+              className={`px-4 py-3 transition-colors cursor-pointer ${
+                isActive
+                  ? "bg-yellow-100 border-l-[6px] border-yellow-500 shadow-inner"
+                  : "hover:bg-gray-50"
+              }`}
+              onClick={() => jumpTo(p.startMs)}
+            >
+              <p
+                className={`leading-relaxed ${
+                  isActive
+                    ? `text-gray-900 font-bold ${FONT_CLASS_ACTIVE[fontLevel]}`
+                    : `text-gray-700 ${FONT_CLASS[fontLevel]}`
+                }`}
+              >
+                {p.text}
+              </p>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  ) : null;
+
   return (
+    <>
+    {focusOverlay}
     <div className="space-y-4">
       {/* 헤더 */}
       <div className="flex items-center gap-3 flex-wrap">
@@ -377,6 +494,14 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
             title={waveCollapsed ? "파형 펼치기" : "파형 접기"}
           >
             {waveCollapsed ? "▼" : "▲"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setFocusMode(true)}
+            className="shrink-0 px-2 h-7 flex items-center gap-1 border border-indigo-300 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 text-xs font-semibold"
+            title="본문만 보기 (ESC 종료)"
+          >
+            ⛶ 집중
           </button>
         </div>
 
@@ -557,5 +682,6 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
         )}
       </div>
     </div>
+    </>
   );
 }
