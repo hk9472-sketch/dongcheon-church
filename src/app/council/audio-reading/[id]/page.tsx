@@ -43,6 +43,7 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveContainerRef = useRef<HTMLDivElement | null>(null);
   const waveSurferRef = useRef<WaveSurfer | null>(null);
+  const paraRefs = useRef<(HTMLLIElement | null)[]>([]);
 
   useEffect(() => {
     fetch(`/api/audio-reading/${id}`)
@@ -82,6 +83,11 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
     if (waveSurferRef.current) return;
 
     const hasPeaks = Array.isArray(data.peaksJson) && data.peaksJson.length > 0;
+    // 음성 길이에 따라 minPxPerSec 동적 조정 — 긴 음성도 가로 스크롤로 정밀 조작.
+    // 5분 미만은 fit (container 너비), 30분 미만은 30px/초, 그 이상은 50px/초.
+    const durSec = data.durationMs / 1000;
+    const minPxPerSec = durSec < 5 * 60 ? 0 : durSec < 30 * 60 ? 30 : 50;
+
     const ws = WaveSurfer.create({
       container: waveContainerRef.current,
       media: audioRef.current,
@@ -94,6 +100,9 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
       barRadius: 2,
       height: 80,
       normalize: true,
+      minPxPerSec,
+      autoScroll: true,           // 재생 따라 가로 스크롤 자동
+      autoCenter: true,
       // 사전 추출된 peaks + duration 제공 시 wavesurfer 가 fetch/디코딩 skip
       ...(hasPeaks
         ? {
@@ -114,14 +123,26 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
     };
   }, [data]);
 
-  if (!data) {
-    return <div className="text-center py-12 text-gray-400">불러오는 중...</div>;
-  }
-
   // 현재 재생 중인 문단 index (startMs <= currentMs < endMs)
+  // useEffect 의존성으로 사용하기 위해 hook 전에 계산.
   const activeIdx = paragraphs.findIndex(
     (p) => currentMs >= p.startMs && currentMs < p.endMs,
   );
+
+  // 활성 문단이 바뀌면 본문 영역 내에서 자동 스크롤 (편집 모드 X 일 때만 — 작업자가
+  // 다른 문단 보면서 시간 찍을 때 자동 스크롤이 방해되므로).
+  useEffect(() => {
+    if (editMode) return;
+    if (activeIdx < 0) return;
+    const el = paraRefs.current[activeIdx];
+    if (el) {
+      el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [activeIdx, editMode]);
+
+  if (!data) {
+    return <div className="text-center py-12 text-gray-400">불러오는 중...</div>;
+  }
 
   const jumpTo = (ms: number) => {
     // wavesurfer 인스턴스 있으면 setTime 으로 sync (audio 와 파형 cursor 함께 이동).
@@ -308,33 +329,36 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
           </div>
         </div>
 
-        {/* 파형 컨테이너 */}
-        <div className="relative">
-          <div ref={waveContainerRef} className="w-full" />
-          {!waveReady && (
-            <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-400">
-              파형 분석 중...
-            </div>
-          )}
-          {/* 문단 시작점 마커 — 파형 위에 세로선. 클릭 시 그 시점으로 점프.
-              wavesurfer canvas 위에 떠야 하므로 z-10 + relative stacking context. */}
-          {waveReady && data.durationMs > 0 && paragraphs.map((p, idx) => {
-            const left = (p.startMs / data.durationMs) * 100;
-            const isActive = idx === activeIdx;
-            return (
-              <button
-                key={idx}
-                type="button"
-                onClick={(e) => { e.stopPropagation(); jumpTo(p.startMs); }}
-                className="absolute top-0 h-full w-1 -translate-x-1/2 hover:w-1.5 transition-all z-10 cursor-pointer"
-                style={{
-                  left: `${left}%`,
-                  background: isActive ? "#dc2626" : "rgba(99,102,241,0.6)",
-                }}
-                title={`#${idx + 1} ${fmtTime(p.startMs)} — ${p.text.slice(0, 30)}...`}
-              />
-            );
-          })}
+        {/* 파형 컨테이너 — wavesurfer 가 minPxPerSec 으로 너비 확장 시 가로 스크롤 발생.
+            마커는 wavesurfer 컨테이너의 형제로 같은 부모 width 안에서 absolute % 배치 →
+            wavesurfer 의 가로 스크롤과 함께 따라감. */}
+        <div className="overflow-x-auto">
+          <div className="relative" style={{ minWidth: "100%" }}>
+            <div ref={waveContainerRef} />
+            {!waveReady && (
+              <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-400">
+                파형 분석 중...
+              </div>
+            )}
+            {/* 문단 시작점 마커 — wavesurfer canvas 위에 z-10 으로 떠 클릭 캡처. */}
+            {waveReady && data.durationMs > 0 && paragraphs.map((p, idx) => {
+              const left = (p.startMs / data.durationMs) * 100;
+              const isActive = idx === activeIdx;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); jumpTo(p.startMs); }}
+                  className="absolute top-0 h-full w-1 -translate-x-1/2 hover:w-1.5 transition-all z-10 cursor-pointer"
+                  style={{
+                    left: `${left}%`,
+                    background: isActive ? "#dc2626" : "rgba(99,102,241,0.6)",
+                  }}
+                  title={`#${idx + 1} ${fmtTime(p.startMs)} — ${p.text.slice(0, 30)}...`}
+                />
+              );
+            })}
+          </div>
         </div>
         {/* audio element 는 wavesurfer 가 점유 — native controls 는 0:00/0:00 으로
             잘못 보이므로 표시 X. display:none 은 일부 브라우저에서 audio 동작 차단
@@ -364,9 +388,10 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
         </p>
       </div>
 
-      {/* 문단 리스트 */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+      {/* 문단 리스트 — 박스 안 max-height + 내부 스크롤. 헤더는 sticky 로 항상 위.
+          활성 문단은 진한 인디고 배경 + 굵은 좌측 바 + 굵은 글씨로 강조. */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="sticky top-0 z-20 px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-sm font-bold text-gray-700">본문 · 문단별 싱크</h2>
           {editMode && (
             <span className="text-[11px] text-gray-500">
@@ -374,14 +399,17 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
             </span>
           )}
         </div>
-        <ol className="divide-y divide-gray-100">
+        <ol className="divide-y divide-gray-100 max-h-[55vh] overflow-y-auto">
           {paragraphs.map((p, idx) => {
             const isActive = idx === activeIdx;
             return (
               <li
                 key={idx}
+                ref={(el) => { paraRefs.current[idx] = el; }}
                 className={`px-4 py-3 transition-colors ${
-                  isActive ? "bg-indigo-50 border-l-4 border-indigo-500" : "hover:bg-gray-50"
+                  isActive
+                    ? "bg-yellow-100 border-l-[6px] border-yellow-500 shadow-inner"
+                    : "hover:bg-gray-50"
                 }`}
               >
                 <div className="flex items-start gap-3">
@@ -389,7 +417,11 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
                   <button
                     type="button"
                     onClick={() => jumpTo(p.startMs)}
-                    className="shrink-0 text-xs font-mono text-gray-500 hover:text-indigo-700 hover:underline w-14 text-left pt-0.5"
+                    className={`shrink-0 text-xs font-mono w-14 text-left pt-0.5 ${
+                      isActive
+                        ? "text-amber-800 font-bold"
+                        : "text-gray-500 hover:text-indigo-700 hover:underline"
+                    }`}
                     title="이 문단으로 점프"
                   >
                     {fmtTime(p.startMs)}
@@ -398,7 +430,7 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
                   {/* 본문 */}
                   <p
                     className={`flex-1 text-sm leading-relaxed cursor-pointer ${
-                      isActive ? "text-gray-900 font-medium" : "text-gray-700"
+                      isActive ? "text-gray-900 font-bold text-base" : "text-gray-700"
                     }`}
                     onClick={() => jumpTo(p.startMs)}
                   >
