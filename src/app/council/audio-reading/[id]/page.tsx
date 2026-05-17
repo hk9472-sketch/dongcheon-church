@@ -40,10 +40,32 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
   const [waveReady, setWaveReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
+  // 본문 글씨 크기 레벨 0~4 (작게/보통/크게/더크게/매우크게). localStorage 영속.
+  const [fontLevel, setFontLevel] = useState<number>(() => {
+    if (typeof window === "undefined") return 1;
+    try {
+      const v = localStorage.getItem("dc_audio_reading_fontsize");
+      const n = v ? parseInt(v, 10) : 1;
+      return Number.isFinite(n) && n >= 0 && n <= 4 ? n : 1;
+    } catch { return 1; }
+  });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveContainerRef = useRef<HTMLDivElement | null>(null);
   const waveSurferRef = useRef<WaveSurfer | null>(null);
   const paraRefs = useRef<(HTMLLIElement | null)[]>([]);
+
+  const changeFontLevel = (delta: number) => {
+    setFontLevel((cur) => {
+      const next = Math.min(4, Math.max(0, cur + delta));
+      try { localStorage.setItem("dc_audio_reading_fontsize", String(next)); } catch {}
+      return next;
+    });
+  };
+
+  // Tailwind 클래스 매핑 — 일반 / 활성 (활성은 한 단계 더 큰 글씨)
+  const FONT_CLASS = ["text-xs", "text-sm", "text-base", "text-lg", "text-xl"];
+  const FONT_CLASS_ACTIVE = ["text-sm", "text-base", "text-lg", "text-xl", "text-2xl"];
+  const FONT_LABEL = ["작게", "보통", "크게", "더크게", "매우크게"];
 
   useEffect(() => {
     fetch(`/api/audio-reading/${id}`)
@@ -389,15 +411,41 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
       </div>
 
       {/* 문단 리스트 — 박스 안 max-height + 내부 스크롤. 헤더는 sticky 로 항상 위.
-          활성 문단은 진한 인디고 배경 + 굵은 좌측 바 + 굵은 글씨로 강조. */}
+          활성 문단은 진한 노랑 배경 + 굵은 좌측 바 + 굵은 글씨로 강조. */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="sticky top-0 z-20 px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+        <div className="sticky top-0 z-20 px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-sm font-bold text-gray-700">본문 · 문단별 싱크</h2>
-          {editMode && (
-            <span className="text-[11px] text-gray-500">
-              ⏱ = 현재 재생 시점을 이 문단 시작으로 / ◀▶ = ±100ms 미세 조정 / 클릭 = 이 문단으로 점프
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {/* 글씨 크기 조절 */}
+            <div className="flex items-center gap-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => changeFontLevel(-1)}
+                disabled={fontLevel === 0}
+                className="w-6 h-6 border border-gray-300 rounded text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                title="글씨 작게"
+              >
+                A−
+              </button>
+              <span className="px-1.5 text-gray-500 w-12 text-center">
+                {FONT_LABEL[fontLevel]}
+              </span>
+              <button
+                type="button"
+                onClick={() => changeFontLevel(1)}
+                disabled={fontLevel === 4}
+                className="w-6 h-6 border border-gray-300 rounded text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed font-bold"
+                title="글씨 크게"
+              >
+                A+
+              </button>
+            </div>
+            {editMode && (
+              <span className="text-[11px] text-gray-500">
+                ⏱ 찍기 / ◀▶ ±100ms / 클릭 = 점프
+              </span>
+            )}
+          </div>
         </div>
         <ol className="divide-y divide-gray-100 max-h-[55vh] overflow-y-auto">
           {paragraphs.map((p, idx) => {
@@ -427,10 +475,12 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
                     {fmtTime(p.startMs)}
                   </button>
 
-                  {/* 본문 */}
+                  {/* 본문 — 글씨 크기는 헤더의 A−/A+ 로 조절 (5단계, localStorage 영속) */}
                   <p
-                    className={`flex-1 text-sm leading-relaxed cursor-pointer ${
-                      isActive ? "text-gray-900 font-bold text-base" : "text-gray-700"
+                    className={`flex-1 leading-relaxed cursor-pointer ${
+                      isActive
+                        ? `text-gray-900 font-bold ${FONT_CLASS_ACTIVE[fontLevel]}`
+                        : `text-gray-700 ${FONT_CLASS[fontLevel]}`
                     }`}
                     onClick={() => jumpTo(p.startMs)}
                   >
