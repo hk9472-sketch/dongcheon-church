@@ -264,13 +264,19 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
           <button
             type="button"
             onClick={() => {
+              // wavesurfer 가 audio element 를 점유 중이므로 wavesurfer 통제 우선.
+              // playPause() 가 audio 와 파형 cursor 동시 sync.
+              const ws = waveSurferRef.current;
+              if (ws) {
+                try { ws.playPause(); return; } catch {}
+              }
               const a = audioRef.current;
               if (!a) return;
               if (a.paused) a.play().catch(() => {});
               else a.pause();
             }}
             className="shrink-0 w-12 h-12 rounded-full bg-indigo-600 text-white text-xl flex items-center justify-center hover:bg-indigo-700 shadow-sm transition-colors"
-            title={isPlaying ? "일시정지 (Space)" : "재생 (Space)"}
+            title={isPlaying ? "일시정지" : "재생"}
           >
             {isPlaying ? "❚❚" : "▶"}
           </button>
@@ -322,13 +328,14 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
             );
           })}
         </div>
-        {/* audio element 는 wavesurfer 가 점유 — 화면에 native controls 표시는 0:00/0:00
-            으로 잘못 나오므로 숨김. 모든 컨트롤은 위의 큰 ▶ 버튼 + 파형 클릭 + 본문 클릭. */}
+        {/* audio element 는 wavesurfer 가 점유 — native controls 는 0:00/0:00 으로
+            잘못 보이므로 표시 X. display:none 은 일부 브라우저에서 audio 동작 차단
+            가능성이 있어 sr-only 패턴으로 화면 밖에 배치. */}
         <audio
           ref={audioRef}
           src={`/${data.audioPath}`}
-          preload="metadata"
-          className="hidden"
+          preload="auto"
+          className="sr-only"
         />
 
         {/* 진행 슬라이더 (custom) */}
