@@ -39,6 +39,7 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
   const [saving, setSaving] = useState(false);
   const [waveReady, setWaveReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveContainerRef = useRef<HTMLDivElement | null>(null);
   const waveSurferRef = useRef<WaveSurfer | null>(null);
@@ -257,6 +258,13 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
         </div>
       </div>
 
+      {/* 에러 표시 */}
+      {audioError && (
+        <div className="bg-rose-50 border border-rose-300 rounded p-3 text-sm text-rose-800">
+          ⚠ {audioError}
+        </div>
+      )}
+
       {/* 음성 플레이어 + 파형 */}
       <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-2">
         {/* 큰 재생 버튼 — 가장 잘 보이는 진입점 */}
@@ -333,9 +341,10 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
             가능성이 있어 sr-only 패턴으로 화면 밖에 배치. */}
         <audio
           ref={audioRef}
-          src={`/${data.audioPath}`}
+          src={`/api/audio-reading/file/${data.id}`}
           preload="auto"
           className="sr-only"
+          onError={() => setAudioError("음성 파일을 불러올 수 없습니다.")}
         />
 
         {/* 진행 슬라이더 (custom) */}
