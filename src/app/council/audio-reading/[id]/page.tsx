@@ -38,6 +38,7 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [waveReady, setWaveReady] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveContainerRef = useRef<HTMLDivElement | null>(null);
   const waveSurferRef = useRef<WaveSurfer | null>(null);
@@ -53,13 +54,24 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
       .catch(() => {});
   }, [id]);
 
-  // currentTime 폴링 (audio 의 timeupdate 사용)
+  // currentTime + play/pause 상태 폴링
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
     const onTime = () => setCurrentMs(Math.floor(a.currentTime * 1000));
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    const onEnded = () => setIsPlaying(false);
     a.addEventListener("timeupdate", onTime);
-    return () => a.removeEventListener("timeupdate", onTime);
+    a.addEventListener("play", onPlay);
+    a.addEventListener("pause", onPause);
+    a.addEventListener("ended", onEnded);
+    return () => {
+      a.removeEventListener("timeupdate", onTime);
+      a.removeEventListener("play", onPlay);
+      a.removeEventListener("pause", onPause);
+      a.removeEventListener("ended", onEnded);
+    };
   }, [data]);
 
   // wavesurfer — 파형 시각화. 동일 audio element 와 동기화 (media=audioRef.current).
@@ -111,6 +123,16 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
   );
 
   const jumpTo = (ms: number) => {
+    // wavesurfer 인스턴스 있으면 setTime 으로 sync (audio 와 파형 cursor 함께 이동).
+    // 단순히 audio.currentTime 만 바꾸면 wavesurfer v7 의 내부 상태와 어긋남.
+    const ws = waveSurferRef.current;
+    if (ws) {
+      try {
+        ws.setTime(ms / 1000);
+        ws.play().catch(() => {});
+        return;
+      } catch {}
+    }
     const a = audioRef.current;
     if (!a) return;
     a.currentTime = ms / 1000;
@@ -236,8 +258,43 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
       </div>
 
       {/* 음성 플레이어 + 파형 */}
-      <div className="bg-white rounded-lg border border-gray-200 p-3">
-        {/* 파형 컨테이너 — wavesurfer 가 그림. 문단 시작점은 absolute 마커로 오버레이. */}
+      <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-2">
+        {/* 큰 재생 버튼 — 가장 잘 보이는 진입점 */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              const a = audioRef.current;
+              if (!a) return;
+              if (a.paused) a.play().catch(() => {});
+              else a.pause();
+            }}
+            className="shrink-0 w-12 h-12 rounded-full bg-indigo-600 text-white text-xl flex items-center justify-center hover:bg-indigo-700 shadow-sm transition-colors"
+            title={isPlaying ? "일시정지 (Space)" : "재생 (Space)"}
+          >
+            {isPlaying ? "❚❚" : "▶"}
+          </button>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-gray-800 truncate">
+              {isPlaying ? "재생 중" : "재생 대기"}
+            </div>
+            <div className="text-[11px] text-gray-500">
+              아래 본문 문단을 클릭하면 그 위치부터 재생됩니다.
+            </div>
+          </div>
+          <div className="shrink-0 text-right">
+            <div className="text-xs font-mono text-gray-700">
+              {fmtTime(currentMs)} / {fmtTime(data.durationMs)}
+            </div>
+            {activeIdx >= 0 && (
+              <div className="text-[10px] text-indigo-700 font-semibold mt-0.5">
+                문단 #{activeIdx + 1} / {paragraphs.length}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 파형 컨테이너 */}
         <div className="relative">
           <div ref={waveContainerRef} className="w-full" />
           {!waveReady && (
@@ -245,7 +302,8 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
               파형 분석 중...
             </div>
           )}
-          {/* 문단 시작점 마커 — 파형 위에 세로선으로 표시. 클릭하면 점프. */}
+          {/* 문단 시작점 마커 — 파형 위에 세로선. 클릭 시 그 시점으로 점프.
+              wavesurfer canvas 위에 떠야 하므로 z-10 + relative stacking context. */}
           {waveReady && data.durationMs > 0 && paragraphs.map((p, idx) => {
             const left = (p.startMs / data.durationMs) * 100;
             const isActive = idx === activeIdx;
@@ -253,11 +311,11 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
               <button
                 key={idx}
                 type="button"
-                onClick={() => jumpTo(p.startMs)}
-                className="absolute top-0 h-full w-[2px] -translate-x-1/2 hover:w-1 transition-all"
+                onClick={(e) => { e.stopPropagation(); jumpTo(p.startMs); }}
+                className="absolute top-0 h-full w-1 -translate-x-1/2 hover:w-1.5 transition-all z-10 cursor-pointer"
                 style={{
                   left: `${left}%`,
-                  background: isActive ? "#dc2626" : "rgba(99,102,241,0.4)",
+                  background: isActive ? "#dc2626" : "rgba(99,102,241,0.6)",
                 }}
                 title={`#${idx + 1} ${fmtTime(p.startMs)} — ${p.text.slice(0, 30)}...`}
               />
@@ -269,17 +327,11 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
           src={`/${data.audioPath}`}
           controls
           preload="metadata"
-          className="w-full mt-2"
+          className="w-full"
         />
-        <div className="mt-1 text-xs text-gray-500 flex items-center gap-3 flex-wrap">
-          <span>현재: <span className="font-mono">{fmtTime(currentMs)}</span></span>
-          <span>총: <span className="font-mono">{fmtTime(data.durationMs)}</span></span>
-          <span>문단: <span className="font-mono">{paragraphs.length}</span>개</span>
-          {activeIdx >= 0 && (
-            <span className="text-indigo-700 font-semibold">현재 문단 #{activeIdx + 1}</span>
-          )}
-          <span className="ml-auto text-[11px] text-gray-400">파형 마커 클릭으로 해당 문단 점프</span>
-        </div>
+        <p className="text-[11px] text-gray-400 text-right">
+          파형 마커 또는 본문 문단을 클릭하면 그 시점으로 이동
+        </p>
       </div>
 
       {/* 문단 리스트 */}
