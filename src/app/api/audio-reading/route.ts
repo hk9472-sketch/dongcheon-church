@@ -93,7 +93,8 @@ export async function POST(req: NextRequest) {
   if (peaksRaw) {
     try {
       const parsed = JSON.parse(peaksRaw);
-      if (Array.isArray(parsed) && parsed.length > 0 && parsed.length <= 8000) {
+      // 최대 25000 샘플 — 1시간+ 음성도 1초당 6샘플 정도 수용. JSON 약 250KB.
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed.length <= 25000) {
         peaksJson = parsed.map((v) => Number(v)).filter((v) => Number.isFinite(v));
       }
     } catch {}

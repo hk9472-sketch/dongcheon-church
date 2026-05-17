@@ -40,6 +40,19 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
   const [waveReady, setWaveReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
+  // 파형 접기 — localStorage 영속.
+  const [waveCollapsed, setWaveCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try { return localStorage.getItem("dc_audio_reading_wave_collapsed") === "1"; }
+    catch { return false; }
+  });
+  const toggleWaveCollapsed = () => {
+    setWaveCollapsed((p) => {
+      const next = !p;
+      try { localStorage.setItem("dc_audio_reading_wave_collapsed", next ? "1" : "0"); } catch {}
+      return next;
+    });
+  };
   // 본문 글씨 크기 레벨 0~4 (작게/보통/크게/더크게/매우크게). localStorage 영속.
   const [fontLevel, setFontLevel] = useState<number>(() => {
     if (typeof window === "undefined") return 1;
@@ -105,10 +118,18 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
     if (waveSurferRef.current) return;
 
     const hasPeaks = Array.isArray(data.peaksJson) && data.peaksJson.length > 0;
-    // 음성 길이에 따라 minPxPerSec 동적 조정 — 긴 음성도 가로 스크롤로 정밀 조작.
-    // 5분 미만은 fit (container 너비), 30분 미만은 30px/초, 그 이상은 50px/초.
+    // 음성 길이에 따라 minPxPerSec 동적 조정.
+    // peaks 샘플 갯수 기준으로 1샘플당 약 1.5~3px 되도록 — sparse 막대 안 보이게.
+    // peaks 없으면 wavesurfer 자체 디코딩 → fit 폭.
     const durSec = data.durationMs / 1000;
-    const minPxPerSec = durSec < 5 * 60 ? 0 : durSec < 30 * 60 ? 30 : 50;
+    const peakCount = Array.isArray(data.peaksJson) ? data.peaksJson.length : 0;
+    let minPxPerSec = 0;
+    if (peakCount > 0 && durSec > 0) {
+      // 1샘플당 약 2px (가로 스크롤 적당) — peakCount 적으면 작은 너비로 sparse 회피
+      minPxPerSec = Math.max(0, Math.min(80, Math.floor((peakCount * 2) / durSec)));
+      // 너무 작으면 (5분 미만 짧은 음성) fit
+      if (durSec < 5 * 60) minPxPerSec = 0;
+    }
 
     const ws = WaveSurfer.create({
       container: waveContainerRef.current,
@@ -349,12 +370,18 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
               </div>
             )}
           </div>
+          <button
+            type="button"
+            onClick={toggleWaveCollapsed}
+            className="shrink-0 w-7 h-7 flex items-center justify-center border border-gray-300 rounded text-gray-600 hover:bg-gray-100 text-xs"
+            title={waveCollapsed ? "파형 펼치기" : "파형 접기"}
+          >
+            {waveCollapsed ? "▼" : "▲"}
+          </button>
         </div>
 
-        {/* 파형 컨테이너 — wavesurfer 가 minPxPerSec 으로 너비 확장 시 가로 스크롤 발생.
-            마커는 wavesurfer 컨테이너의 형제로 같은 부모 width 안에서 absolute % 배치 →
-            wavesurfer 의 가로 스크롤과 함께 따라감. */}
-        <div className="overflow-x-auto">
+        {/* 파형 컨테이너 — 헤더의 ▲/▼ 버튼으로 접기/펼치기. 접힘 상태는 localStorage 영속. */}
+        <div className={`overflow-x-auto ${waveCollapsed ? "hidden" : ""}`}>
           <div className="relative" style={{ minWidth: "100%" }}>
             <div ref={waveContainerRef} />
             {!waveReady && (
@@ -461,19 +488,21 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  {/* 시간 + 점프 버튼 */}
-                  <button
-                    type="button"
-                    onClick={() => jumpTo(p.startMs)}
-                    className={`shrink-0 text-xs font-mono w-14 text-left pt-0.5 ${
-                      isActive
-                        ? "text-amber-800 font-bold"
-                        : "text-gray-500 hover:text-indigo-700 hover:underline"
-                    }`}
-                    title="이 문단으로 점프"
-                  >
-                    {fmtTime(p.startMs)}
-                  </button>
+                  {/* 시간 + 점프 버튼 — 편집 모드에서만 표시 (일반 청취 시엔 깔끔하게) */}
+                  {editMode && (
+                    <button
+                      type="button"
+                      onClick={() => jumpTo(p.startMs)}
+                      className={`shrink-0 text-xs font-mono w-14 text-left pt-0.5 ${
+                        isActive
+                          ? "text-amber-800 font-bold"
+                          : "text-gray-500 hover:text-indigo-700 hover:underline"
+                      }`}
+                      title="이 문단으로 점프"
+                    >
+                      {fmtTime(p.startMs)}
+                    </button>
+                  )}
 
                   {/* 본문 — 글씨 크기는 헤더의 A−/A+ 로 조절 (5단계, localStorage 영속) */}
                   <p

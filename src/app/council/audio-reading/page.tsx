@@ -86,9 +86,19 @@ export default function AudioReadingListPage() {
     setSubmitting(true);
     try {
       // 음성 디코딩 — duration + peaks 한 번에 추출 (WebAudio).
-      // peaks: 2000 샘플 정도면 wavesurfer 표시에 충분. 서버에 함께 저장 → 재방문 시
-      // mp3 다시 디코딩 안 함.
-      const { durationMs, peaks } = await extractDurationAndPeaks(audioFile, 2000);
+      // 샘플 수는 음성 길이에 비례 — 짧은 음성도 부드럽게, 긴 음성도 sparse 안 보이게.
+      // 1초당 약 6샘플, 최소 1500, 최대 20000.
+      // duration 추정용 임시 audio (디코딩 전에 sampleCount 결정 필요).
+      const tmpUrl = URL.createObjectURL(audioFile);
+      const estDurSec = await new Promise<number>((resolve) => {
+        const a = new Audio();
+        a.preload = "metadata";
+        a.onloadedmetadata = () => { resolve(Number.isFinite(a.duration) ? a.duration : 0); URL.revokeObjectURL(tmpUrl); };
+        a.onerror = () => { resolve(0); URL.revokeObjectURL(tmpUrl); };
+        a.src = tmpUrl;
+      });
+      const sampleCount = Math.max(1500, Math.min(20000, Math.floor(estDurSec * 6)));
+      const { durationMs, peaks } = await extractDurationAndPeaks(audioFile, sampleCount);
 
       const fd = new FormData();
       fd.append("title", title.trim());
