@@ -422,20 +422,25 @@ export default function ReadingPage() {
     }
   };
 
-  const saveLineTime = async () => {
+  /**
+   * 줄 시작 시간 저장 — 인자 없으면 editLineIndex 사용.
+   * 본문 줄 옆 "시작" 버튼이 직접 lineIdx 전달 가능.
+   */
+  const saveLineTime = async (lineIdx: number = editLineIndex) => {
     if (!selected) return;
     setLineEditMsg(null);
     try {
+      const startSec = audioRef.current?.currentTime ?? currentTime;
       // 이전 시간 → delta 계산 (뒤쪽 자동 줄 cascade shift 용)
-      const prev = lineTimes.find((lt) => lt.lineIndex === editLineIndex);
-      const delta = prev ? currentTime - prev.startSec : 0;
+      const prev = lineTimes.find((lt) => lt.lineIndex === lineIdx);
+      const delta = prev ? startSec - prev.startSec : 0;
 
       const res = await fetch(`/api/council/reading/${selected.id}/line-times`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          lineIndex: editLineIndex,
-          startSec: currentTime,
+          lineIndex: lineIdx,
+          startSec,
           manual: true,
         }),
       });
@@ -446,7 +451,7 @@ export default function ReadingPage() {
       let shifted = 0;
       if (Math.abs(delta) > 0.01) {
         const targets = lineTimes.filter(
-          (lt) => lt.lineIndex > editLineIndex && !lt.manuallyAdjusted
+          (lt) => lt.lineIndex > lineIdx && !lt.manuallyAdjusted
         );
         await Promise.all(
           targets.map(async (lt) => {
@@ -477,7 +482,7 @@ export default function ReadingPage() {
           ? ` · 뒤쪽 자동 ${shifted}줄 ${delta > 0 ? "+" : ""}${delta.toFixed(1)}초 이동`
           : "";
       setLineEditMsg(
-        `${editLineIndex + 1}번 줄 시작 시간 ${formatTime(currentTime)} 저장됨${shiftMsg}`
+        `${lineIdx + 1}번 줄 시작 시간 ${formatTime(startSec)} 저장됨${shiftMsg}`
       );
     } catch (e) {
       setLineEditMsg(`오류: ${e instanceof Error ? e.message : String(e)}`);
@@ -1401,21 +1406,35 @@ export default function ReadingPage() {
                   <div>
                     {visualLines.map((vLine, idx) => {
                       const isActive = activeLine === idx;
+                      // 본문은 whitespace-nowrap 이라 wrap 없음 → visualLine[idx] === lines[idx].
+                      // lineEditMode 활성 시 줄 옆에 "⏱ 시작" 버튼 — 현재 재생 시점으로 startSec 저장.
                       return (
                         <div
                           key={idx}
                           ref={isActive ? (el) => { el?.scrollIntoView({ behavior: "smooth", block: "center" }); } : undefined}
-                          onClick={() => selected.audioPath && handleLineClick(idx)}
                           style={{ fontSize: `${fontSize}px`, lineHeight: 1.8 }}
-                          className={`px-3 rounded-sm transition-all whitespace-nowrap overflow-hidden ${
-                            selected.audioPath ? "cursor-pointer" : ""
-                          } ${
+                          className={`px-3 rounded-sm transition-all whitespace-nowrap overflow-hidden flex items-center gap-2 ${
                             isActive
                               ? "bg-blue-50 ring-1 ring-blue-300 font-medium text-blue-900"
                               : "hover:bg-gray-50 text-gray-700"
                           }`}
                         >
-                          {vLine.text}
+                          {lineEditMode && selected.audioPath && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); saveLineTime(idx); }}
+                              className="shrink-0 px-1.5 py-0.5 text-[10px] border border-indigo-300 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 font-semibold"
+                              title="현재 재생 시점을 이 줄 시작 시간으로 설정"
+                            >
+                              ⏱ 시작
+                            </button>
+                          )}
+                          <span
+                            className={`flex-1 ${selected.audioPath ? "cursor-pointer" : ""}`}
+                            onClick={() => selected.audioPath && handleLineClick(idx)}
+                          >
+                            {vLine.text}
+                          </span>
                         </div>
                       );
                     })}
