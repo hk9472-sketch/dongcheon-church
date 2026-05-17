@@ -442,7 +442,7 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
             </div>
             {editMode && (
               <span className="text-[11px] text-gray-500">
-                ⏱ 찍기 / ◀▶ ±100ms / 클릭 = 점프
+                ⏱ 시작 / ◀▶ ±100ms / 클릭 = 점프
               </span>
             )}
           </div>
@@ -504,7 +504,7 @@ export default function AudioReadingDetailPage({ params }: { params: Promise<{ i
                         className="px-2 h-7 text-xs border border-indigo-300 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100"
                         title="현재 재생 시점으로 시작 시간 설정"
                       >
-                        ⏱ 찍기
+                        ⏱ 시작
                       </button>
                       <button
                         type="button"
