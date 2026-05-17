@@ -199,19 +199,21 @@ export default function ReadingPlayerPage({ params }: { params: Promise<{ id: st
   };
 
   // ===== 싱크 편집 핸들러 =====
-  const saveLineTime = async () => {
+  // lineIdx 명시 시 그 줄, 없으면 editLineIndex 사용. 본문 줄의 ⏱ 시작 버튼이 직접 전달.
+  const saveLineTime = async (lineIdx: number = editLineIndex) => {
     if (!reading) return;
     setEditMsg(null);
     try {
-      const prev = lineTimes.find((lt) => lt.lineIndex === editLineIndex);
-      const delta = prev ? currentTime - prev.startSec : 0;
+      const startSec = audioRef.current?.currentTime ?? currentTime;
+      const prev = lineTimes.find((lt) => lt.lineIndex === lineIdx);
+      const delta = prev ? startSec - prev.startSec : 0;
 
       const res = await fetch(`/api/council/reading/${reading.id}/line-times`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          lineIndex: editLineIndex,
-          startSec: currentTime,
+          lineIndex: lineIdx,
+          startSec,
           manual: true,
         }),
       });
@@ -222,7 +224,7 @@ export default function ReadingPlayerPage({ params }: { params: Promise<{ id: st
       let shifted = 0;
       if (Math.abs(delta) > 0.01) {
         const targets = lineTimes.filter(
-          (lt) => lt.lineIndex > editLineIndex && !lt.manuallyAdjusted
+          (lt) => lt.lineIndex > lineIdx && !lt.manuallyAdjusted
         );
         await Promise.all(
           targets.map(async (lt) => {
@@ -253,7 +255,7 @@ export default function ReadingPlayerPage({ params }: { params: Promise<{ id: st
           ? ` · 뒤쪽 자동 ${shifted}줄 ${delta > 0 ? "+" : ""}${delta.toFixed(1)}초 이동`
           : "";
       setEditMsg(
-        `${editLineIndex + 1}번 줄 ${formatTime(currentTime)} 저장됨${shiftMsg}`
+        `${lineIdx + 1}번 줄 ${formatTime(startSec)} 저장됨${shiftMsg}`
       );
     } catch (e) {
       setEditMsg(`오류: ${e instanceof Error ? e.message : String(e)}`);
@@ -535,7 +537,7 @@ export default function ReadingPlayerPage({ params }: { params: Promise<{ id: st
                 ))}
               </select>
               <button
-                onClick={saveLineTime}
+                onClick={() => saveLineTime()}
                 className="px-2 py-0.5 text-xs bg-amber-600 text-white rounded hover:bg-amber-700"
               >
                 {editLineIndex + 1}번 줄 시작으로 저장
@@ -642,18 +644,38 @@ export default function ReadingPlayerPage({ params }: { params: Promise<{ id: st
           return (
             <div
               key={rawIdx}
-              onClick={() => seekToLine(rawIdx)}
-              className={`px-3 py-2 rounded cursor-pointer transition-colors ${
+              className={`px-3 py-2 rounded transition-colors flex items-start gap-2 ${
                 isActive
                   ? "bg-amber-100 text-amber-900 font-bold"
                   : "hover:bg-gray-100 text-gray-800"
               }`}
-              title="클릭하면 이 줄부터 재생"
             >
-              <span className="text-gray-300 text-xs mr-2 font-mono align-baseline">
-                {rawIdx + 1}
-              </span>
-              {line}
+              {/* 싱크 편집 모드 — 각 줄 옆 ⏱ 시작 버튼. 클릭으로 현재 재생 시점을
+                  그 줄의 startSec 로 저장. saveLineTime 이 lineIdx 인자 받음. */}
+              {isAdmin && editMode && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditLineIndex(rawIdx);
+                    saveLineTime(rawIdx);
+                  }}
+                  className="shrink-0 px-1.5 py-0.5 text-[10px] border border-indigo-300 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 font-semibold whitespace-nowrap"
+                  title="현재 재생 시점을 이 줄 시작 시간으로 설정"
+                >
+                  ⏱ 시작
+                </button>
+              )}
+              <div
+                onClick={() => seekToLine(rawIdx)}
+                className="flex-1 cursor-pointer"
+                title="클릭하면 이 줄부터 재생"
+              >
+                <span className="text-gray-300 text-xs mr-2 font-mono align-baseline">
+                  {rawIdx + 1}
+                </span>
+                {line}
+              </div>
             </div>
           );
         })}
