@@ -253,31 +253,31 @@ export default function BibleReaderPage() {
   };
 
   // 절-시간 편집 핸들러 (관리자만)
-  const saveVerseTime = async () => {
+  // verseNo 명시 시 그 절, 없으면 editVerse 사용. 본문 절 옆 ⏱ 시작 버튼이 직접 전달.
+  // currentTime 도 audio 실시간 시각 우선 — state 지연 회피.
+  const saveVerseTime = async (verseNo: number = editVerse) => {
     if (!selectedBook) return;
     setEditMsg(null);
     try {
-      // 1) 이 절의 이전 시간 (있으면) — 뒤쪽 자동 절 shift 계산용
-      const prev = verseTimes.find((vt) => vt.verse === editVerse);
-      const delta = prev ? currentTime - prev.startSec : 0;
+      const startSec = audioRef.current?.currentTime ?? currentTime;
+      const prev = verseTimes.find((vt) => vt.verse === verseNo);
+      const delta = prev ? startSec - prev.startSec : 0;
 
-      // 2) 이 절 저장 (수동)
       const res = await fetch(
         `/api/bible/${selectedBook.id}/${selectedChapter}/verse-times`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ verse: editVerse, startSec: currentTime, manual: true }),
+          body: JSON.stringify({ verse: verseNo, startSec, manual: true }),
         }
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "저장 실패");
 
-      // 3) delta 가 있으면 뒤쪽 자동 절(이 절보다 verse 큰 + manuallyAdjusted=false)도 같이 shift
       let shifted = 0;
       if (Math.abs(delta) > 0.01) {
         const targets = verseTimes.filter(
-          (vt) => vt.verse > editVerse && !vt.manuallyAdjusted
+          (vt) => vt.verse > verseNo && !vt.manuallyAdjusted
         );
         await Promise.all(
           targets.map(async (vt) => {
@@ -299,7 +299,6 @@ export default function BibleReaderPage() {
         );
       }
 
-      // 4) 목록 갱신
       const tres = await fetch(
         `/api/bible/${selectedBook.id}/${selectedChapter}/verse-times`
       );
@@ -308,7 +307,7 @@ export default function BibleReaderPage() {
       const shiftMsg = shifted > 0
         ? ` · 뒤쪽 자동 ${shifted}절 ${delta > 0 ? "+" : ""}${delta.toFixed(1)}초 이동`
         : "";
-      setEditMsg(`${editVerse}절 시작 시간 ${formatTime(currentTime)} 저장됨${shiftMsg}`);
+      setEditMsg(`${verseNo}절 시작 시간 ${formatTime(startSec)} 저장됨${shiftMsg}`);
     } catch (e) {
       setEditMsg(`오류: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -1108,7 +1107,7 @@ export default function BibleReaderPage() {
                   ))}
                 </select>
                 <button
-                  onClick={saveVerseTime}
+                  onClick={() => saveVerseTime()}
                   className="px-3 py-1 text-xs bg-amber-600 text-white rounded hover:bg-amber-700"
                 >
                   이 시각을 {editVerse}절 시작으로 저장
@@ -1276,6 +1275,22 @@ export default function BibleReaderPage() {
                       : "hover:bg-gray-50"
                   }`}
                 >
+                  {/* 싱크 편집 모드 — 각 절 옆 ⏱ 시작 버튼. 클릭으로 현재 재생 시점을
+                      그 절 startSec 로 저장. saveVerseTime 이 verseNo 인자 받음. */}
+                  {isAdmin && editMode && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditVerse(verse.verse);
+                        saveVerseTime(verse.verse);
+                      }}
+                      className="shrink-0 px-1.5 py-0.5 text-[10px] border border-indigo-300 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 font-semibold whitespace-nowrap self-start mt-0.5"
+                      title="현재 재생 시점을 이 절 시작 시간으로 설정"
+                    >
+                      ⏱ 시작
+                    </button>
+                  )}
                   <span className={`font-bold text-sm min-w-[2rem] text-right flex-shrink-0 ${
                     isActive ? "text-blue-700" : "text-blue-500"
                   }`}>
