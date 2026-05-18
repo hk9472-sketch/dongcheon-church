@@ -80,6 +80,7 @@ export default function CouncilLayout({ children }: { children: React.ReactNode 
     { href: "/council/overall", label: "전체출석보고" },
     { href: "/council/report", label: "보고서 조회" },
     { href: "/council/summary", label: "보고서 집계" },
+    { href: "/council/overall-history", label: "전체출석 조회·집계" },
     { href: "/council/audio-reading", label: "설교재독" },
   ];
 
