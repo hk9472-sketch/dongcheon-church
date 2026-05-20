@@ -302,6 +302,41 @@ export default function DepositTable({ category }: Props) {
         >
           조회
         </button>
+
+        {/* 회계 반영 — 기간 내 입금을 합계 또는 일자별 voucher 로 생성.
+            연보 계정과목 매핑(duesJeondo|duesBuild) 으로부터 unitId/accountId 결정. */}
+        <button
+          type="button"
+          onClick={async () => {
+            const mode = confirm(
+              `${dateFrom} ~ ${dateTo} ${category} 입금을 회계 전표로 반영합니다.\n\n` +
+              `[확인] = 일자별 voucher (각 회원 row 포함)\n` +
+              `[취소] = 단일 합계 voucher 만 생성`
+            ) ? "row" : "summary";
+            const ok = confirm(`${mode === "row" ? "일자별" : "합계"} 모드로 반영하시겠습니까?`);
+            if (!ok) return;
+            try {
+              const res = await fetch("/api/accounting/dues/reflect", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ category, from: dateFrom, to: dateTo, mode }),
+              });
+              const d = await res.json();
+              if (!res.ok) {
+                alert(d.message || "반영 실패");
+                return;
+              }
+              alert(`반영 완료\n전표 ${d.voucherCount}건 · 합계 ${d.totalAmount.toLocaleString("ko-KR")}원 · 입금 ${d.depositCount}건`);
+            } catch (e) {
+              alert("오류: " + (e instanceof Error ? e.message : String(e)));
+            }
+          }}
+          className="rounded border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-100 font-semibold"
+          title="기간 내 입금을 회계 전표로 반영"
+        >
+          📒 회계 반영
+        </button>
+
         <button
           type="button"
           onClick={() => setRows((p) => [...p, blankRow()])}

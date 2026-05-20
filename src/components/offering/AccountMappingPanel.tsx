@@ -13,6 +13,9 @@ const OFFERING_KINDS: { key: string; label: string }[] = [
   { key: "harvest", label: "추수감사" },
   { key: "christmas", label: "성탄감사" },
   { key: "sundaySchool", label: "주일학교" },
+  // 월정입금 (전도회·건축) 도 같은 매핑 패널에서 관리.
+  { key: "duesJeondo", label: "전도회 월정입금" },
+  { key: "duesBuild", label: "건축 월정입금" },
 ];
 
 interface Account {

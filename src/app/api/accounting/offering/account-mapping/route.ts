@@ -17,6 +17,9 @@ const OFFERING_KEYS = [
   "harvest",
   "christmas",
   "sundaySchool",
+  // 월정입금 (전도회·건축) — 같은 매핑 모델 재사용.
+  "duesJeondo",
+  "duesBuild",
 ] as const;
 
 export async function GET() {

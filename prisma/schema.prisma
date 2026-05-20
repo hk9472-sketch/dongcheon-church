@@ -1302,6 +1302,7 @@ model MonthlyDuesDeposit {
 
 // 연보종류 → 계정과목 매핑 (전표 자동 반영용).
 // offeringKey 는 enum 같은 고정 키. 같은 accountId 를 여러 키가 공유 가능.
+// 전도회/건축 월정 입금도 같은 모델 재사용 — offeringKey="duesJeondo"|"duesBuild".
 model OfferingAccountMapping {
   id          Int      @id @default(autoincrement())
   offeringKey String   @unique @db.VarChar(20)  // tithe/sunday/thanks/special/oil/easter/midyear/harvest/christmas/sundaySchool
