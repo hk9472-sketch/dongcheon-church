@@ -54,7 +54,7 @@ export default function AccountReportPage() {
       .then((d) => {
         const list = (d.units || d || []).filter((u: any) => u.isActive);
         setUnits(list);
-        if (list.length > 0 && !unitId) setUnitId(String(list[0].id));
+        // 기본값 = "전체" (unitId="" 유지). 첫 단위로 자동 선택하지 않음.
       });
   }, []);
 
