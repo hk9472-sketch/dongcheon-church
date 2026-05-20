@@ -60,9 +60,9 @@ export default function DepositTable({ category }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cellRefs = useRef<Array<Array<HTMLInputElement | null>>>([]);
-  // 월정명단 — 컴포넌트 마운트 시 1회 로드 + cache.
+  // 월정명단 — 컴포넌트 마운트 시 1회 로드 + cache. 화면에 일괄 표시 안 함,
+  // 행별 이름 자동 매칭과 🔍 모달 검색에만 사용.
   const [members, setMembers] = useState<Member[]>([]);
-  const [showRoster, setShowRoster] = useState(false);
   // 회원 선택 모달
   const [pickerOpenForIdx, setPickerOpenForIdx] = useState<number | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
@@ -346,51 +346,13 @@ export default function DepositTable({ category }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800">{category} 입금</h1>
-          <p className="text-xs text-gray-500 mt-1">
-            번호 직접 입력 / 이름 입력 후 ↹(Tab) 으로 자동 매칭 / 🔍 버튼으로 명단 검색.
-            ↑↓/Enter 로 행 이동, 마지막 행 ↓ 누르면 새 행.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowRoster((s) => !s)}
-          className="shrink-0 px-3 py-1.5 text-xs border border-gray-300 rounded hover:bg-gray-100"
-        >
-          {showRoster ? "▲ 명단 접기" : `▼ 명단 보기 (${members.length}명)`}
-        </button>
+      <div>
+        <h1 className="text-xl font-bold text-gray-800">{category} 입금</h1>
+        <p className="text-xs text-gray-500 mt-1">
+          번호 직접 입력 / 이름 입력 후 ↹(Tab) 으로 자동 매칭 / 🔍 버튼으로 명단 검색.
+          ↑↓/Enter 로 행 이동, 마지막 행 ↓ 누르면 새 행.
+        </p>
       </div>
-
-      {/* 월정명단 (collapsible) */}
-      {showRoster && (
-        <div className="bg-blue-50/40 border border-blue-200 rounded-lg p-3 max-h-60 overflow-y-auto">
-          <table className="w-full text-xs">
-            <thead className="text-gray-500">
-              <tr>
-                <th className="px-2 py-1 text-left w-12">번호</th>
-                <th className="px-2 py-1 text-left">이름</th>
-                <th className="px-2 py-1 text-right w-24">월정</th>
-              </tr>
-            </thead>
-            <tbody>
-              {members.length === 0 && (
-                <tr><td colSpan={3} className="text-center text-gray-400 py-3">등록된 명단 없음</td></tr>
-              )}
-              {members.map((m) => (
-                <tr key={m.id} className="hover:bg-white">
-                  <td className="px-2 py-0.5 font-mono">{m.memberNo}</td>
-                  <td className="px-2 py-0.5">{m.name}</td>
-                  <td className="px-2 py-0.5 text-right font-mono">
-                    {m.monthlyAmount ? fmt(m.monthlyAmount) : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
 
       {/* 회원 선택 모달 (검색) */}
       {pickerOpenForIdx !== null && (
