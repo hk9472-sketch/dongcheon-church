@@ -156,6 +156,7 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
 
   const settingsItems = [
     { href: "/accounting/settings/accounts", label: "계정과목" },
+    { href: "/accounting/settings/account-mapping", label: "계정과목 매핑" },
     { href: "/accounting/settings/units", label: "회계단위" },
     { href: "/accounting/settings/balance", label: "이월잔액" },
   ];

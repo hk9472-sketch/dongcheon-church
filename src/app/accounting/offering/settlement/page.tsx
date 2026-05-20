@@ -8,7 +8,6 @@ import type {
 } from "@/lib/offeringAllocation";
 import { allocate as allocateFn } from "@/lib/offeringAllocation";
 import PostVoucherModal from "@/components/offering/PostVoucherModal";
-import AccountMappingPanel from "@/components/offering/AccountMappingPanel";
 
 interface Categories {
   amtTithe: number;
@@ -66,7 +65,8 @@ export default function OfferingSettlementPage() {
   const [counts, setCounts] = useState<DenomCounts>(ZERO_COUNTS);
   const [allocation, setAllocation] = useState<AllocationResult | null>(null);
   const [voucherOpen, setVoucherOpen] = useState(false);
-  const [tab, setTab] = useState<"settlement" | "mapping">("settlement");
+  // 계정과목 매핑은 /accounting/settings/account-mapping 로 분리. 결산 페이지는 결산만.
+  const tab = "settlement" as const;
 
   // 분배표의 매수 셀을 편집할 때 호출 — 일반/십일조 매수를 직접 수정.
   // 매수 변경 시 같은 단위의 다른 측 매수는 (전체 매수 - 변경값) 으로 자동 sync.
@@ -399,33 +399,7 @@ export default function OfferingSettlementPage() {
         )}
       </div>
 
-      {/* 탭 */}
-      <div className="flex border-b border-gray-200">
-        <button
-          type="button"
-          onClick={() => setTab("settlement")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 ${
-            tab === "settlement"
-              ? "border-teal-600 text-teal-700"
-              : "border-transparent text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          결산
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("mapping")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 ${
-            tab === "mapping"
-              ? "border-teal-600 text-teal-700"
-              : "border-transparent text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          계정과목 매핑
-        </button>
-      </div>
-
-      {tab === "mapping" && <AccountMappingPanel />}
+      {/* 계정과목 매핑 탭은 /accounting/settings/account-mapping 로 분리. */}
 
       {tab === "settlement" && error && (
         <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
