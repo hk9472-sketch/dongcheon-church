@@ -19,7 +19,22 @@ export async function GET(req: NextRequest) {
     where: { category, isActive: true },
     orderBy: { memberNo: "asc" },
   });
-  return NextResponse.json({ members });
+
+  // 현재 연도 월정 금액도 함께 조회 (입금 화면에서 명단에 금액 표시 + 자동 채움).
+  const year = new Date().getFullYear();
+  const amounts = members.length > 0
+    ? await prisma.monthlyDuesAmount.findMany({
+        where: { category, year, memberId: { in: members.map((m) => m.id) } },
+        select: { memberId: true, amount: true },
+      })
+    : [];
+  const amountMap = new Map(amounts.map((a) => [a.memberId, a.amount]));
+  const withAmount = members.map((m) => ({
+    ...m,
+    monthlyAmount: amountMap.get(m.id) ?? null,
+  }));
+
+  return NextResponse.json({ members: withAmount });
 }
 
 // POST /api/accounting/dues/members

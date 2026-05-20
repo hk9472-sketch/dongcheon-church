@@ -46,6 +46,13 @@ function blankRow(): Deposit {
   };
 }
 
+interface Member {
+  id: number;
+  memberNo: number;
+  name: string;
+  monthlyAmount?: number;
+}
+
 export default function DepositTable({ category }: Props) {
   const [dateFrom, setDateFrom] = useState(monthAgoStr());
   const [dateTo, setDateTo] = useState(todayStr());
@@ -53,6 +60,84 @@ export default function DepositTable({ category }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cellRefs = useRef<Array<Array<HTMLInputElement | null>>>([]);
+  // 월정명단 — 컴포넌트 마운트 시 1회 로드 + cache.
+  const [members, setMembers] = useState<Member[]>([]);
+  const [showRoster, setShowRoster] = useState(false);
+  // 회원 선택 모달
+  const [pickerOpenForIdx, setPickerOpenForIdx] = useState<number | null>(null);
+  const [pickerQuery, setPickerQuery] = useState("");
+  // 같은 이름이 여러 명일 때 후보 표시 (이름 입력 후 onBlur)
+  const [nameCandidates, setNameCandidates] = useState<{ idx: number; matches: Member[] } | null>(null);
+
+  // 월정명단 로드
+  useEffect(() => {
+    fetch(`/api/accounting/dues/members?category=${encodeURIComponent(category)}`)
+      .then((r) => r.json())
+      .then((d) => setMembers(d.members || []))
+      .catch(() => setMembers([]));
+  }, [category]);
+
+  /** 이름으로 회원 매칭 — 단일 일치는 자동 채움, 복수면 후보 모달 띄움. */
+  const matchByName = (idx: number, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const matches = members.filter((m) => m.name === trimmed);
+    if (matches.length === 1) {
+      const m = matches[0];
+      setRows((prev) => {
+        const next = [...prev];
+        next[idx] = {
+          ...next[idx],
+          memberId: m.id,
+          memberNo: String(m.memberNo),
+          memberName: m.name,
+          status: "dirty",
+        };
+        return next;
+      });
+    } else if (matches.length > 1) {
+      setNameCandidates({ idx, matches });
+    } else {
+      // 부분 일치 fallback — 이름 일부를 포함하는 회원
+      const partial = members.filter((m) => m.name.includes(trimmed));
+      if (partial.length === 1) {
+        const m = partial[0];
+        setRows((prev) => {
+          const next = [...prev];
+          next[idx] = {
+            ...next[idx],
+            memberId: m.id,
+            memberNo: String(m.memberNo),
+            memberName: m.name,
+            status: "dirty",
+          };
+          return next;
+        });
+      } else if (partial.length > 1) {
+        setNameCandidates({ idx, matches: partial });
+      }
+      // 0 건이면 그대로 두고 사용자에게 표시
+    }
+  };
+
+  /** 모달에서 회원 선택 시 row 갱신. */
+  const pickMember = (idx: number, m: Member) => {
+    setRows((prev) => {
+      const next = [...prev];
+      next[idx] = {
+        ...next[idx],
+        memberId: m.id,
+        memberNo: String(m.memberNo),
+        memberName: m.name,
+        status: "dirty",
+        amount: next[idx].amount || (m.monthlyAmount ? String(m.monthlyAmount) : next[idx].amount),
+      };
+      return next;
+    });
+    setPickerOpenForIdx(null);
+    setPickerQuery("");
+    setNameCandidates(null);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -261,13 +346,131 @@ export default function DepositTable({ category }: Props) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800">{category} 입금</h1>
-        <p className="text-xs text-gray-500 mt-1">
-          일자/고유번호/금액/회차(1~12월)/비고. ↑↓/Enter 로 행 이동, 마지막 행 ↓ 누르면 새 행.
-          회원이 없으면 먼저 {category} 월정에서 등록.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-gray-800">{category} 입금</h1>
+          <p className="text-xs text-gray-500 mt-1">
+            번호 직접 입력 / 이름 입력 후 ↹(Tab) 으로 자동 매칭 / 🔍 버튼으로 명단 검색.
+            ↑↓/Enter 로 행 이동, 마지막 행 ↓ 누르면 새 행.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowRoster((s) => !s)}
+          className="shrink-0 px-3 py-1.5 text-xs border border-gray-300 rounded hover:bg-gray-100"
+        >
+          {showRoster ? "▲ 명단 접기" : `▼ 명단 보기 (${members.length}명)`}
+        </button>
       </div>
+
+      {/* 월정명단 (collapsible) */}
+      {showRoster && (
+        <div className="bg-blue-50/40 border border-blue-200 rounded-lg p-3 max-h-60 overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="text-gray-500">
+              <tr>
+                <th className="px-2 py-1 text-left w-12">번호</th>
+                <th className="px-2 py-1 text-left">이름</th>
+                <th className="px-2 py-1 text-right w-24">월정</th>
+              </tr>
+            </thead>
+            <tbody>
+              {members.length === 0 && (
+                <tr><td colSpan={3} className="text-center text-gray-400 py-3">등록된 명단 없음</td></tr>
+              )}
+              {members.map((m) => (
+                <tr key={m.id} className="hover:bg-white">
+                  <td className="px-2 py-0.5 font-mono">{m.memberNo}</td>
+                  <td className="px-2 py-0.5">{m.name}</td>
+                  <td className="px-2 py-0.5 text-right font-mono">
+                    {m.monthlyAmount ? fmt(m.monthlyAmount) : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* 회원 선택 모달 (검색) */}
+      {pickerOpenForIdx !== null && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setPickerOpenForIdx(null)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 py-2 bg-indigo-600 text-white rounded-t-lg flex items-center justify-between">
+              <h3 className="text-sm font-bold">{category} 월정명단</h3>
+              <button onClick={() => setPickerOpenForIdx(null)} className="text-xs">✕</button>
+            </div>
+            <div className="px-3 py-2 border-b border-gray-200">
+              <input
+                type="text"
+                value={pickerQuery}
+                onChange={(e) => setPickerQuery(e.target.value)}
+                placeholder="이름 또는 번호 검색"
+                className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                autoFocus
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-xs">
+                <tbody>
+                  {members
+                    .filter((m) =>
+                      !pickerQuery ||
+                      m.name.includes(pickerQuery) ||
+                      String(m.memberNo).includes(pickerQuery)
+                    )
+                    .map((m) => (
+                      <tr
+                        key={m.id}
+                        className="border-b border-gray-100 hover:bg-indigo-50 cursor-pointer"
+                        onClick={() => pickMember(pickerOpenForIdx, m)}
+                      >
+                        <td className="px-3 py-2 font-mono w-14">{m.memberNo}</td>
+                        <td className="px-3 py-2 font-medium">{m.name}</td>
+                        <td className="px-3 py-2 text-right font-mono text-gray-500 w-24">
+                          {m.monthlyAmount ? fmt(m.monthlyAmount) : ""}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 동명이인 후보 모달 — 이름 입력 시 같은 이름 여러 명일 때 */}
+      {nameCandidates && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setNameCandidates(null)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 py-2 bg-amber-500 text-white rounded-t-lg text-sm font-bold">
+              동명이인 — 하나 선택
+            </div>
+            <ul className="divide-y divide-gray-100">
+              {nameCandidates.matches.map((m) => (
+                <li
+                  key={m.id}
+                  onClick={() => pickMember(nameCandidates.idx, m)}
+                  className="px-4 py-2 cursor-pointer hover:bg-amber-50 flex items-center justify-between text-sm"
+                >
+                  <span>
+                    <span className="font-mono mr-2 text-gray-500">#{m.memberNo}</span>
+                    <strong>{m.name}</strong>
+                  </span>
+                  {m.monthlyAmount && (
+                    <span className="text-xs text-gray-400 font-mono">{fmt(m.monthlyAmount)}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div className="px-4 py-2 border-t border-gray-200 text-right">
+              <button onClick={() => setNameCandidates(null)} className="text-xs text-gray-500 hover:underline">
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
@@ -394,7 +597,26 @@ export default function DepositTable({ category }: Props) {
                       className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-right font-mono"
                     />
                   </td>
-                  <td className="px-2 py-1 text-xs text-gray-700">{r.memberName}</td>
+                  <td className="px-2 py-1">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={r.memberName}
+                        onChange={(e) => update(idx, "memberName", e.target.value)}
+                        onBlur={(e) => matchByName(idx, e.target.value)}
+                        placeholder="이름"
+                        className="flex-1 rounded border border-gray-200 px-1.5 py-0.5 text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setPickerOpenForIdx(idx); setPickerQuery(""); }}
+                        className="shrink-0 px-1.5 py-0.5 text-[10px] border border-gray-300 rounded hover:bg-gray-100"
+                        title="월정명단에서 회원 선택"
+                      >
+                        🔍
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-2 py-1">
                     <input
                       ref={setCellRef(idx, 2)}
