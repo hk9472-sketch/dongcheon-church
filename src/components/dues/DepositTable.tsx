@@ -68,6 +68,9 @@ export default function DepositTable({ category }: Props) {
   const [pickerQuery, setPickerQuery] = useState("");
   // 같은 이름이 여러 명일 때 후보 표시 (이름 입력 후 onBlur)
   const [nameCandidates, setNameCandidates] = useState<{ idx: number; matches: Member[] } | null>(null);
+  // 회계 반영 모달
+  const [reflectOpen, setReflectOpen] = useState(false);
+  const [reflectBusy, setReflectBusy] = useState(false);
 
   // 월정명단 로드
   useEffect(() => {
@@ -329,6 +332,30 @@ export default function DepositTable({ category }: Props) {
     }
   };
 
+  const reflectRun = async (mode: "row" | "summary") => {
+    setReflectBusy(true);
+    try {
+      const res = await fetch("/api/accounting/dues/reflect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category, from: dateFrom, to: dateTo, mode }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        alert(d.message || "반영 실패");
+        return;
+      }
+      alert(
+        `반영 완료\n전표 ${d.voucherCount}건 · 합계 ${d.totalAmount.toLocaleString("ko-KR")}원 · 입금 ${d.depositCount}건`,
+      );
+      setReflectOpen(false);
+    } catch (e) {
+      alert("오류: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setReflectBusy(false);
+    }
+  };
+
   const deleteRow = async (idx: number) => {
     const r = rows[idx];
     if (r.id === 0) {
@@ -434,6 +461,68 @@ export default function DepositTable({ category }: Props) {
         </div>
       )}
 
+      {/* 회계 반영 모드 선택 모달 */}
+      {reflectOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => !reflectBusy && setReflectOpen(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-2 bg-blue-600 text-white rounded-t-lg text-sm font-bold">
+              📒 회계 반영 모드 선택
+            </div>
+            <div className="px-4 py-3 text-sm text-gray-700 space-y-2">
+              <div>
+                {dateFrom} ~ {dateTo} <strong>{category}</strong> 입금을
+                회계 전표로 반영합니다.
+              </div>
+              <ul className="text-xs text-gray-600 space-y-1 list-disc pl-5">
+                <li>
+                  <strong>개별</strong> — 회원별 입금 row 를 모두 포함하는 일자별
+                  voucher 생성
+                </li>
+                <li>
+                  <strong>일괄</strong> — 기간 합계 단일 voucher 만 생성 (개별
+                  row 없음)
+                </li>
+              </ul>
+            </div>
+            <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReflectOpen(false)}
+                disabled={reflectBusy}
+                className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => reflectRun("summary")}
+                disabled={reflectBusy}
+                className="rounded border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm text-amber-800 hover:bg-amber-100 font-semibold disabled:opacity-50"
+              >
+                일괄
+              </button>
+              <button
+                type="button"
+                onClick={() => reflectRun("row")}
+                disabled={reflectBusy}
+                className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 font-semibold disabled:opacity-50"
+              >
+                개별
+              </button>
+            </div>
+            {reflectBusy && (
+              <div className="px-4 pb-3 text-xs text-gray-500">반영 중...</div>
+            )}
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
           {error}
@@ -472,30 +561,7 @@ export default function DepositTable({ category }: Props) {
             연보 계정과목 매핑(duesJeondo|duesBuild) 으로부터 unitId/accountId 결정. */}
         <button
           type="button"
-          onClick={async () => {
-            const mode = confirm(
-              `${dateFrom} ~ ${dateTo} ${category} 입금을 회계 전표로 반영합니다.\n\n` +
-              `[확인] = 일자별 voucher (각 회원 row 포함)\n` +
-              `[취소] = 단일 합계 voucher 만 생성`
-            ) ? "row" : "summary";
-            const ok = confirm(`${mode === "row" ? "일자별" : "합계"} 모드로 반영하시겠습니까?`);
-            if (!ok) return;
-            try {
-              const res = await fetch("/api/accounting/dues/reflect", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ category, from: dateFrom, to: dateTo, mode }),
-              });
-              const d = await res.json();
-              if (!res.ok) {
-                alert(d.message || "반영 실패");
-                return;
-              }
-              alert(`반영 완료\n전표 ${d.voucherCount}건 · 합계 ${d.totalAmount.toLocaleString("ko-KR")}원 · 입금 ${d.depositCount}건`);
-            } catch (e) {
-              alert("오류: " + (e instanceof Error ? e.message : String(e)));
-            }
-          }}
+          onClick={() => setReflectOpen(true)}
           className="rounded border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-100 font-semibold"
           title="기간 내 입금을 회계 전표로 반영"
         >
