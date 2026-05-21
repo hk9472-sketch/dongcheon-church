@@ -35,6 +35,9 @@ export default function DuesTable({ category }: Props) {
   ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 전년회원 불러오기 모달
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyBusy, setCopyBusy] = useState(false);
 
   // 행간 화살표 이동용 refs (existing rows: 2 cols (amount만 편집), new rows: 3 cols)
   const cellRefs = useRef<Array<Array<HTMLInputElement | null>>>([]);
@@ -160,6 +163,32 @@ export default function DuesTable({ category }: Props) {
     }
   };
 
+  const runCopyFromPrev = async (overwrite: boolean) => {
+    setCopyBusy(true);
+    try {
+      const res = await fetch("/api/accounting/dues/amounts/copy-from-prev", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category, year, overwrite }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        alert(d.error || "복사 실패");
+        return;
+      }
+      alert(
+        `복사 완료\n복사: ${d.copied}건 · 건너뜀: ${d.skipped}건` +
+          (d.message ? `\n${d.message}` : ""),
+      );
+      setCopyOpen(false);
+      load();
+    } catch (e) {
+      alert("오류: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setCopyBusy(false);
+    }
+  };
+
   const updateNewRow = (idx: number, field: keyof NewMember, value: string) => {
     setNewRows((prev) => {
       const next = [...prev];
@@ -248,12 +277,82 @@ export default function DuesTable({ category }: Props) {
         </button>
         <button
           type="button"
+          onClick={() => setCopyOpen(true)}
+          className="rounded border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm text-amber-800 hover:bg-amber-100 font-semibold"
+          title={`${year - 1}년 월정액을 ${year}년으로 복사`}
+        >
+          📋 전년회원 불러오기
+        </button>
+        <button
+          type="button"
           onClick={() => setNewRows((p) => [...p, { inputNo: "", inputName: "", inputAmount: "" }])}
           className="ml-auto rounded border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50"
         >
           + 회원 추가
         </button>
       </div>
+
+      {/* 전년회원 불러오기 모달 */}
+      {copyOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => !copyBusy && setCopyOpen(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-2 bg-amber-500 text-white rounded-t-lg text-sm font-bold">
+              📋 {year - 1}년 {category} 회원 → {year}년 으로 불러오기
+            </div>
+            <div className="px-4 py-3 text-sm text-gray-700 space-y-2">
+              <div>
+                전년도 ({year - 1}) 에 월정액이 등록된 <strong>{category}</strong> 회원의
+                금액을 올해 ({year}) 로 복사합니다.
+              </div>
+              <ul className="text-xs text-gray-600 list-disc pl-5 space-y-1">
+                <li>
+                  <strong>빈 항목만</strong> — 올해 미설정/0원 회원만 채움 (이미 입력된
+                  금액은 보존)
+                </li>
+                <li>
+                  <strong>덮어쓰기</strong> — 올해 이미 입력된 금액도 전년 값으로 변경
+                </li>
+                <li>탈퇴(비활성) 회원은 자동 제외</li>
+              </ul>
+            </div>
+            <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCopyOpen(false)}
+                disabled={copyBusy}
+                className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => runCopyFromPrev(true)}
+                disabled={copyBusy}
+                className="rounded border border-red-300 bg-red-50 px-3 py-1.5 text-sm text-red-700 hover:bg-red-100 disabled:opacity-50"
+              >
+                덮어쓰기
+              </button>
+              <button
+                type="button"
+                onClick={() => runCopyFromPrev(false)}
+                disabled={copyBusy}
+                className="rounded bg-amber-600 px-3 py-1.5 text-sm text-white hover:bg-amber-700 font-semibold disabled:opacity-50"
+              >
+                빈 항목만
+              </button>
+            </div>
+            {copyBusy && (
+              <div className="px-4 pb-3 text-xs text-gray-500">복사 중...</div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
         <table className="w-full text-sm">
