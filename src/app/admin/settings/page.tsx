@@ -6,6 +6,7 @@ import MediaBaseUrlSetting from "@/components/admin/MediaBaseUrlSetting";
 import MediaFtpSetting from "@/components/admin/MediaFtpSetting";
 import LiveWorshipSetting from "@/components/admin/LiveWorshipSetting";
 import SettingsPreview from "@/components/admin/SettingsPreview";
+import WidgetLayoutEditor from "@/components/admin/WidgetLayoutEditor";
 import { AdminDbContent } from "@/app/admin/db/page";
 
 // ==================== 테마 (색상) ====================
@@ -621,6 +622,9 @@ export default function AdminSettingsPage() {
       {/* ==================== 위젯 탭 ==================== */}
       {activeTab === "widget" && (
         <>
+          {/* 위젯 배치 편집기 — 최상단 */}
+          <WidgetLayoutEditor />
+
           {/* 위젯 관련 섹션만 (위젯 레이아웃 + 위젯 외관) */}
           {SKIN_SECTIONS.filter((s) => s.title.includes("위젯")).map((section) => (
             <div key={section.title} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
