@@ -183,89 +183,149 @@ export default function AdminMemberEditPage() {
           </div>
         </section>
 
-        {/* 권한 설정 */}
+        {/* 권한 설정 — 세 가지 진입권한을 카테고리로 분리해서 표시.
+            1) 관리 진입권한   → /admin 전체 사용
+            2) 권찰회 진입권한 → /council 전체 사용
+            3) 행정실 진입권한 → /accounting 의 [전표입력/연보관리/월정관리] 각각 토글 */}
         <section className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-            <h2 className="text-sm font-bold text-gray-700">권한 설정</h2>
+            <h2 className="text-sm font-bold text-gray-700">진입권한 설정</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              각 영역의 메뉴와 화면은 아래 권한에 따라 자동으로 표시·숨김됩니다.
+            </p>
           </div>
-          <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">관리자 등급</label>
-              <select
-                value={isAdmin}
-                onChange={(e) => setIsAdmin(parseInt(e.target.value, 10))}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-              >
-                <option value={1}>전체 관리자</option>
-                <option value={2}>그룹 관리자</option>
-                <option value={3}>일반 회원</option>
-              </select>
+          <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* ===== 1) 관리 진입권한 ===== */}
+            <div className="border border-blue-200 bg-blue-50/30 rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-blue-700">관리 진입권한</h3>
+                <span className="text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">/admin</span>
+              </div>
+              <p className="text-[11px] text-gray-500 leading-snug">
+                전체/그룹 관리자만 관리페이지 전체를 사용할 수 있습니다.
+              </p>
+              <div>
+                <label className="block text-[11px] font-medium text-gray-600 mb-1">관리자 등급</label>
+                <select
+                  value={isAdmin}
+                  onChange={(e) => setIsAdmin(parseInt(e.target.value, 10))}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                >
+                  <option value={1}>전체 관리자 (관리 진입 가능)</option>
+                  <option value={2}>그룹 관리자 (관리 진입 가능)</option>
+                  <option value={3}>일반 회원 (관리 진입 불가)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-gray-600 mb-1">회원 레벨</label>
+                <select
+                  value={level}
+                  onChange={(e) => setLevel(parseInt(e.target.value, 10))}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((v) => (
+                    <option key={v} value={v}>
+                      레벨 {v} {v === 1 ? "(최고관리자)" : v === 10 ? "(일반회원)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">게시판 권한 등에 사용</p>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">레벨</label>
-              <select
-                value={level}
-                onChange={(e) => setLevel(parseInt(e.target.value, 10))}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((v) => (
-                  <option key={v} value={v}>
-                    레벨 {v} {v === 1 ? "(최고관리자)" : v === 10 ? "(일반회원)" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">권찰회 접근</label>
-              <label className="flex items-center gap-2 px-3 py-2 cursor-pointer">
+
+            {/* ===== 2) 권찰회 진입권한 ===== */}
+            <div className="border border-emerald-200 bg-emerald-50/30 rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-emerald-700">권찰회 진입권한</h3>
+                <span className="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">/council</span>
+              </div>
+              <p className="text-[11px] text-gray-500 leading-snug">
+                체크하면 권찰회 전체 메뉴(출석·보고서·구역 등)를 사용할 수 있습니다.
+                관리자 등급(전체/그룹) 은 자동 허용.
+              </p>
+              <label className="flex items-center gap-2 px-2 py-2 cursor-pointer bg-white rounded border border-emerald-200">
                 <input
                   type="checkbox"
                   checked={councilAccess}
                   onChange={(e) => setCouncilAccess(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                 />
-                <span className="text-sm text-gray-700">권찰회 출석부 접근 허용</span>
+                <span className="text-sm text-gray-700 font-medium">권찰회 진입 허용</span>
               </label>
+              {isAdmin > 2 && councilAccess && (
+                <p className="text-[10px] text-emerald-700 leading-snug">
+                  아래 <strong>권찰회 구역 접근 권한</strong> 에서 체크한 구역만 입력/조회 가능합니다.
+                </p>
+              )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">행정실 권한</label>
-              <div className="space-y-1 px-3 py-2">
-                <label className="flex items-center gap-2 cursor-pointer">
+
+            {/* ===== 3) 행정실 진입권한 ===== */}
+            <div className="border border-teal-200 bg-teal-50/30 rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-teal-700">행정실 진입권한</h3>
+                <span className="text-[10px] text-teal-700 bg-teal-100 px-1.5 py-0.5 rounded">/accounting</span>
+              </div>
+              <p className="text-[11px] text-gray-500 leading-snug">
+                체크한 항목의 메뉴와 화면만 표시됩니다. 셋 다 미체크면 행정실 자체에 진입 불가.
+                관리자 등급(전체/그룹) 은 자동으로 셋 다 허용.
+              </p>
+              <div className="space-y-1.5 bg-white rounded border border-teal-200 p-2">
+                <label className="flex items-start gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={accLedgerAccess}
                     onChange={(e) => setAccLedgerAccess(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                    className="mt-0.5 w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
                   />
-                  <span className="text-sm text-gray-700">회계관리 (전표, 보고서, 마감)</span>
+                  <span className="text-sm text-gray-700">
+                    <strong>행정실 (전표입력)</strong>
+                    <span className="block text-[10px] text-gray-400">
+                      전표입력·전표현황·월별/계정별/일자별 보고서·결산·마감·설정
+                    </span>
+                  </span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="flex items-start gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={accOfferingAccess}
                     onChange={(e) => setAccOfferingAccess(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    className="mt-0.5 w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                   />
-                  <span className="text-sm text-gray-700">연보관리 (연보입력, 내역, 집계)</span>
+                  <span className="text-sm text-gray-700">
+                    <strong>연보관리</strong>
+                    <span className="block text-[10px] text-gray-400">
+                      연보입력·연보내역·연보집계·감사연보·기부금영수증
+                    </span>
+                  </span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer pl-6">
+                <label className={`flex items-start gap-2 cursor-pointer pl-6 ${!accOfferingAccess ? "opacity-50" : ""}`}>
                   <input
                     type="checkbox"
                     checked={accMemberEditAccess}
                     onChange={(e) => setAccMemberEditAccess(e.target.checked)}
                     disabled={!accOfferingAccess}
-                    className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-40"
+                    className="mt-0.5 w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-40"
                   />
-                  <span className={`text-sm ${accOfferingAccess ? "text-gray-700" : "text-gray-400"}`}>관리번호 입력/수정 (성명 조회 포함)</span>
+                  <span className={`text-sm ${accOfferingAccess ? "text-gray-700" : "text-gray-400"}`}>
+                    └ 관리번호 입력/수정
+                    <span className="block text-[10px] text-gray-400">
+                      성명 조회·관리상세·소속증명서 추가 노출
+                    </span>
+                  </span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="flex items-start gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={accDuesAccess}
                     onChange={(e) => setAccDuesAccess(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    className="mt-0.5 w-4 h-4 rounded border-gray-300 text-fuchsia-600 focus:ring-fuchsia-500"
                   />
-                  <span className="text-sm text-gray-700">월정관리 (전도회/건축 회원·월정·입금)</span>
+                  <span className="text-sm text-gray-700">
+                    <strong>월정관리</strong>
+                    <span className="block text-[10px] text-gray-400">
+                      전도회·건축 월정회원·월정액·입금
+                    </span>
+                  </span>
                 </label>
               </div>
             </div>
