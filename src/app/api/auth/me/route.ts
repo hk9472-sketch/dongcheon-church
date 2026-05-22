@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
         accountAccess: true,
         accLedgerAccess: true,
         accOfferingAccess: true,
+        accDuesAccess: true,
         accMemberEditAccess: true,
       },
     });

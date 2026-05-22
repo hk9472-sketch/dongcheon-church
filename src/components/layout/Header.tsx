@@ -37,6 +37,10 @@ interface SessionUser {
   isAdmin: number;
   councilAccess?: boolean;
   accountAccess?: boolean;
+  accLedgerAccess?: boolean;
+  accOfferingAccess?: boolean;
+  accDuesAccess?: boolean;
+  accMemberEditAccess?: boolean;
 }
 
 export default function Header() {
@@ -218,7 +222,11 @@ export default function Header() {
                       권찰회
                     </Link>
                   )}
-                  {(user.accountAccess || user.isAdmin <= 2) && (
+                  {(user.accountAccess ||
+                    user.accLedgerAccess ||
+                    user.accOfferingAccess ||
+                    user.accDuesAccess ||
+                    user.isAdmin <= 2) && (
                     <Link
                       href="/accounting"
                       className="px-3 py-1.5 text-xs font-medium text-teal-600 border border-teal-200 rounded-lg hover:bg-teal-50 transition-colors"
@@ -339,7 +347,11 @@ export default function Header() {
                 {(user.councilAccess || user.isAdmin <= 2) && (
                   <Link href="/council" className="text-sm text-indigo-600 font-medium" onClick={() => setMenuOpen(false)}>권찰회</Link>
                 )}
-                {(user.accountAccess || user.isAdmin <= 2) && (
+                {(user.accountAccess ||
+                  user.accLedgerAccess ||
+                  user.accOfferingAccess ||
+                  user.accDuesAccess ||
+                  user.isAdmin <= 2) && (
                   <Link href="/accounting" className="text-sm text-teal-600 font-medium" onClick={() => setMenuOpen(false)}>행정실</Link>
                 )}
                 <button onClick={() => { handleLogout(); setMenuOpen(false); }} className="text-sm text-gray-500">

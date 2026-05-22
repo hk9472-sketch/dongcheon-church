@@ -6,15 +6,17 @@ interface AccountPerms {
   isAdmin: boolean;
   hasLedger: boolean;
   hasOffering: boolean;
+  hasDues: boolean;
   hasMemberEdit: boolean;
   loading: boolean;
 }
 
-const CACHE_KEY = "accountPerms.v1";
+const CACHE_KEY = "accountPerms.v2";
 const DEFAULT: Omit<AccountPerms, "loading"> = {
   isAdmin: false,
   hasLedger: false,
   hasOffering: false,
+  hasDues: false,
   hasMemberEdit: false,
 };
 
@@ -59,6 +61,7 @@ export function useAccountPerms(): AccountPerms {
           isAdmin: admin,
           hasLedger: admin || u.accLedgerAccess || u.accountAccess || false,
           hasOffering: admin || u.accOfferingAccess || u.accountAccess || false,
+          hasDues: admin || u.accDuesAccess || false,
           hasMemberEdit: admin || u.accMemberEditAccess || false,
         };
         writeCache(next);
