@@ -52,9 +52,8 @@ export default function AdminMemberEditPage() {
   const [member, setMember] = useState<MemberData | null>(null);
   const [boards, setBoards] = useState<BoardInfo[]>([]);
 
-  // 수정 가능한 필드
+  // 수정 가능한 필드 — level 은 isAdmin 등급에서 서버가 자동 계산하므로 UI 노출 X.
   const [isAdmin, setIsAdmin] = useState(3);
-  const [level, setLevel] = useState(10);
   const [councilAccess, setCouncilAccess] = useState(false);
   const [accLedgerAccess, setAccLedgerAccess] = useState(false);
   const [accOfferingAccess, setAccOfferingAccess] = useState(false);
@@ -74,7 +73,6 @@ export default function AdminMemberEditPage() {
         setMember(data.user);
         setBoards(data.boards);
         setIsAdmin(data.user.isAdmin);
-        setLevel(data.user.level);
         setCouncilAccess(data.user.councilAccess);
         setAccLedgerAccess(data.user.accLedgerAccess ?? data.user.accountAccess ?? false);
         setAccOfferingAccess(data.user.accOfferingAccess ?? data.user.accountAccess ?? false);
@@ -117,7 +115,7 @@ export default function AdminMemberEditPage() {
       const res = await fetch(`/api/admin/members/${memberId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isAdmin, level, councilAccess, accLedgerAccess, accOfferingAccess, accDuesAccess, accMemberEditAccess, boardPermissions, groupAccessIds }),
+        body: JSON.stringify({ isAdmin, councilAccess, accLedgerAccess, accOfferingAccess, accDuesAccess, accMemberEditAccess, boardPermissions, groupAccessIds }),
       });
 
       if (res.ok) {
@@ -203,6 +201,7 @@ export default function AdminMemberEditPage() {
               </div>
               <p className="text-[11px] text-gray-500 leading-snug">
                 전체/그룹 관리자만 관리페이지 전체를 사용할 수 있습니다.
+                게시판 권한 레벨도 등급에 따라 자동 부여됩니다.
               </p>
               <div>
                 <label className="block text-[11px] font-medium text-gray-600 mb-1">관리자 등급</label>
@@ -216,21 +215,13 @@ export default function AdminMemberEditPage() {
                   <option value={3}>일반 회원 (관리 진입 불가)</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-[11px] font-medium text-gray-600 mb-1">회원 레벨</label>
-                <select
-                  value={level}
-                  onChange={(e) => setLevel(parseInt(e.target.value, 10))}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-                >
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((v) => (
-                    <option key={v} value={v}>
-                      레벨 {v} {v === 1 ? "(최고관리자)" : v === 10 ? "(일반회원)" : ""}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-gray-400 mt-1">게시판 권한 등에 사용</p>
-              </div>
+              <p className="text-[10px] text-gray-400 leading-snug pt-1 border-t border-blue-100">
+                현재 게시판 권한 레벨:{" "}
+                <strong className="text-gray-600 font-mono">
+                  {isAdmin === 1 ? "1" : isAdmin === 2 ? "2" : member.level ?? 10}
+                </strong>{" "}
+                — 등급 변경 시 저장하면 자동 갱신됩니다.
+              </p>
             </div>
 
             {/* ===== 2) 권찰회 진입권한 ===== */}

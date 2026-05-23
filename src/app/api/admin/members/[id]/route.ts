@@ -89,12 +89,35 @@ export async function PUT(
   const body = await request.json();
 
   try {
-    // 회원 기본 권한 수정
+    // 회원편집에서 더 이상 level 을 직접 받지 않음 — isAdmin 등급으로부터 자동 계산.
+    //  · isAdmin=1 (전체관리자) → level=1
+    //  · isAdmin=2 (그룹관리자) → level=2
+    //  · isAdmin=3 (일반회원)
+    //      ㄴ 기존 level 이 1 또는 2 (관리자였다가 강등) → 9 로 조정
+    //      ㄴ 그 외 (3~99, 기존 일반회원/세분화 레벨) → 보존
+    //  · body.level 이 명시적으로 들어오면 그 값을 우선 적용 (운영툴/마이그레이션 호환)
+    const targetAdmin = body.isAdmin ?? 3;
+    let targetLevel: number;
+    if (typeof body.level === "number") {
+      targetLevel = body.level;
+    } else if (targetAdmin === 1) {
+      targetLevel = 1;
+    } else if (targetAdmin === 2) {
+      targetLevel = 2;
+    } else {
+      const existing = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { level: true },
+      });
+      const cur = existing?.level ?? 10;
+      targetLevel = cur <= 2 ? 9 : cur;
+    }
+
     await prisma.user.update({
       where: { id: userId },
       data: {
-        isAdmin: body.isAdmin ?? 3,
-        level: body.level ?? 10,
+        isAdmin: targetAdmin,
+        level: targetLevel,
         councilAccess: body.councilAccess ?? false,
         accountAccess: (body.accLedgerAccess || body.accOfferingAccess) ?? false,
         accLedgerAccess: body.accLedgerAccess ?? false,
