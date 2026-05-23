@@ -201,7 +201,7 @@ export default function AdminMemberEditPage() {
               </div>
               <p className="text-[11px] text-gray-500 leading-snug">
                 전체/그룹 관리자만 관리페이지 전체를 사용할 수 있습니다.
-                게시판 권한 레벨도 등급에 따라 자동 부여됩니다.
+                특정 게시판만 위임하려면 아래 <strong>게시판별 권한</strong> 을 사용하세요.
               </p>
               <div>
                 <label className="block text-[11px] font-medium text-gray-600 mb-1">관리자 등급</label>
@@ -215,13 +215,6 @@ export default function AdminMemberEditPage() {
                   <option value={3}>일반 회원 (관리 진입 불가)</option>
                 </select>
               </div>
-              <p className="text-[10px] text-gray-400 leading-snug pt-1 border-t border-blue-100">
-                현재 게시판 권한 레벨:{" "}
-                <strong className="text-gray-600 font-mono">
-                  {isAdmin === 1 ? "1" : isAdmin === 2 ? "2" : member.level ?? 10}
-                </strong>{" "}
-                — 등급 변경 시 저장하면 자동 갱신됩니다.
-              </p>
             </div>
 
             {/* ===== 2) 권찰회 진입권한 ===== */}
@@ -367,11 +360,15 @@ export default function AdminMemberEditPage() {
           </section>
         )}
 
-        {/* 게시판별 권한 */}
+        {/* 게시판별 권한 — 특정 게시판의 관리(다른 사람 글 수정/삭제) 를 위임할 때 사용 */}
         <section className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-            <h2 className="text-sm font-bold text-gray-700">게시판별 권한</h2>
-            <p className="text-xs text-gray-400 mt-0.5">다른 사용자가 작성한 글에 대한 수정/삭제 권한을 설정합니다.</p>
+            <h2 className="text-sm font-bold text-gray-700">게시판별 권한 (게시판 관리 위임)</h2>
+            <p className="text-xs text-gray-500 mt-0.5 leading-snug">
+              특정 회원에게 <strong>특정 게시판의 관리권</strong> 을 맡길 때 사용합니다.
+              체크하면 그 게시판에서 <strong>다른 사용자의 글도 수정/삭제</strong> 가능.
+              관리자 등급을 올리지 않고도 게시판 단위로 권한을 분리할 수 있습니다.
+            </p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
