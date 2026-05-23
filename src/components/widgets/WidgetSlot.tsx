@@ -98,9 +98,9 @@ export default function WidgetSlot({ tabs }: { tabs: WidgetTab[] }) {
       className="bg-white rounded-lg shadow-sm overflow-hidden flex flex-col"
       style={{ border: "var(--skin-widget-border-width) solid var(--skin-widget-border-color)" }}
     >
-      {/* 탭 헤더 */}
+      {/* 탭 헤더 — overflow-y-hidden 으로 세로 스크롤바 차단 (브라우저별 이슈 회피) */}
       <div
-        className="flex items-stretch flex-shrink-0 overflow-x-auto"
+        className="flex items-stretch flex-shrink-0 overflow-x-auto overflow-y-hidden"
         style={{
           backgroundColor: "var(--skin-widget-header-bg)",
           borderBottom:
@@ -114,30 +114,35 @@ export default function WidgetSlot({ tabs }: { tabs: WidgetTab[] }) {
               key={t.key}
               type="button"
               onClick={() => setActive(i)}
-              className={`px-2.5 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap transition-colors border-r border-gray-200 last:border-r-0 ${
+              className={`px-2 sm:px-2.5 py-1 text-xs sm:text-sm whitespace-nowrap transition-colors border-r border-gray-200 last:border-r-0 flex items-center gap-0.5 ${
                 isActive
-                  ? "bg-white -mb-px border-b-2 border-b-blue-600 font-semibold text-blue-700"
-                  : "text-gray-600 hover:bg-white/60"
+                  ? "bg-white -mb-px border-b-2 border-b-blue-600 font-semibold"
+                  : "hover:bg-white/60 opacity-70"
               }`}
-              style={
-                isActive
-                  ? {
-                      fontFamily: "var(--skin-widget-name-font)",
-                      fontSize: "var(--skin-widget-name-size)",
-                      fontWeight: "var(--skin-widget-name-weight)" as never,
-                    }
-                  : undefined
-              }
+              style={{
+                fontFamily: "var(--skin-widget-name-font)",
+                fontSize: "var(--skin-widget-name-size)",
+                color: "var(--skin-widget-name-color)",
+                fontWeight: isActive
+                  ? ("var(--skin-widget-name-weight)" as never)
+                  : undefined,
+              }}
               title={t.title}
             >
-              {t.title}
+              <span
+                className="flex-shrink-0 text-[11px] leading-none"
+                style={{ color: "var(--theme-nav-from)" }}
+              >
+                ▶
+              </span>
+              <span>{t.title}</span>
             </button>
           );
         })}
         {/* 활성 탭의 더보기 — 우측 정렬 */}
         <Link
           href={activeTab.href}
-          className="ml-auto px-2 sm:px-3 flex items-center hover:opacity-80 transition-opacity"
+          className="ml-auto px-2 sm:px-3 flex items-center hover:opacity-80 transition-opacity flex-shrink-0"
           style={{
             fontFamily: "var(--skin-widget-more-font)",
             fontSize: "var(--skin-widget-more-size)",
