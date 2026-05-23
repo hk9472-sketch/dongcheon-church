@@ -67,7 +67,7 @@ const ADMIN_GROUPS: { key: string; label: string; items: Item[] }[] = [
         external: true,
       },
       {
-        label: "레거시 (제로보드)",
+        label: "이전홈페이지",
         href: "http://35.212.199.48:8080/",
         icon: "🗄️",
         external: true,
