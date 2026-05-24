@@ -133,6 +133,7 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
     { href: "/accounting/offering/member-numbers", label: "관리번호 변경" },
     { href: "/accounting/offering/donor-info", label: "관리상세" },
     { href: "/accounting/offering/entry", label: "연보입력" },
+    { href: "/accounting/offering/multi-entry", label: "연보통합입력" },
     { href: "/accounting/offering/by-type", label: "연보별입력" },
     { href: "/accounting/offering/edit", label: "연보일괄수정" },
     { href: "/accounting/offering/settlement", label: "일별결산" },
@@ -146,10 +147,12 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
   const duesItems = [
     { href: "/accounting/dues/jeondo/dues", label: "전도회월정" },
     { href: "/accounting/dues/jeondo/deposit", label: "전도회입금" },
+    { href: "/accounting/dues/jeondo/deposit-matrix", label: "전도회입금(일괄)" },
     { href: "/accounting/dues/jeondo/by-period", label: "전도회 기간별 현황" },
     { href: "/accounting/dues/jeondo/by-member", label: "전도회 회원별 현황" },
     { href: "/accounting/dues/build/dues", label: "건축월정" },
     { href: "/accounting/dues/build/deposit", label: "건축입금" },
+    { href: "/accounting/dues/build/deposit-matrix", label: "건축입금(일괄)" },
     { href: "/accounting/dues/build/by-period", label: "건축 기간별 현황" },
     { href: "/accounting/dues/build/by-member", label: "건축 회원별 현황" },
   ];
