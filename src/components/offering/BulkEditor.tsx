@@ -51,6 +51,14 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
   const [typeFilter, setTypeFilter] = useState<OfferingType | "all">(
     fixedType ?? "all",
   );
+  // 신규 행이 생길 때 자동으로 들어갈 기준일자 (사용자가 변경하면 다음 추가부터 반영).
+  // load 가 의존성에 defaultDate 를 두면 변경할 때마다 재조회되므로,
+  // 항상 최신값을 읽되 load 재생성은 안 시키기 위해 ref 동기화.
+  const [defaultDate, setDefaultDate] = useState(todayStr());
+  const defaultDateRef = useRef(defaultDate);
+  useEffect(() => {
+    defaultDateRef.current = defaultDate;
+  }, [defaultDate]);
   const [rows, setRows] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +89,7 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
       e.preventDefault();
       // 마지막 행에서 ↓ 누르면 새 빈 행 추가 후 그 행으로 이동
       if (row === rows.length - 1) {
-        setRows((prev) => [...prev, blankRow(fixedType)]);
+        setRows((prev) => [...prev, blankRow(fixedType, defaultDate)]);
         // 다음 tick 에 새 행에 ref 가 등록되므로 setTimeout
         setTimeout(() => focusCell(row + 1, col), 0);
       } else {
@@ -125,7 +133,7 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
         status: "saved",
       }));
       // 끝에 빈 행 1개 (신규 입력용)
-      mapped.push(blankRow(fixedType));
+      mapped.push(blankRow(fixedType, defaultDateRef.current));
       setRows(mapped);
     } catch (e) {
       setError(e instanceof Error ? e.message : "조회 실패");
@@ -217,7 +225,7 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
           const n = [...prev];
           n[idx] = { ...n[idx], id: newId, status: "saved", message: "저장됨" };
           // 새 빈 행 추가
-          if (idx === n.length - 1) n.push(blankRow(fixedType));
+          if (idx === n.length - 1) n.push(blankRow(fixedType, defaultDateRef.current));
           return n;
         });
       } else {
@@ -353,6 +361,17 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
             </select>
           </div>
         )}
+        {/* 기준일자 — 새 행이 추가될 때마다 이 날짜로 채워짐 */}
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">기준일자</label>
+          <input
+            type="date"
+            value={defaultDate}
+            onChange={(e) => setDefaultDate(e.target.value)}
+            className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm"
+            title="새 줄 추가 시 자동으로 이 날짜가 입력됩니다"
+          />
+        </div>
         <button
           type="button"
           onClick={load}
@@ -363,7 +382,9 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
         </button>
         <button
           type="button"
-          onClick={() => setRows((prev) => [...prev, blankRow(fixedType)])}
+          onClick={() =>
+            setRows((prev) => [...prev, blankRow(fixedType, defaultDateRef.current)])
+          }
           disabled={loading}
           className="ml-auto rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
         >
@@ -551,15 +572,16 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
         ※ 노란 배경 = 신규 행, 주황 배경 = 변경됨(저장 필요). 각 행의 ✓ 로 저장, ✕ 로 삭제.
         일자도 셀에서 수정 가능. ↑↓ 또는 Enter 로 같은 컬럼 위/아래 행 이동, 마지막 행에서
         ↓ 누르면 빈 행이 자동 추가됨. 상단 "+ 줄 추가" 로도 즉시 행 생성 가능.
+        새 줄의 일자는 상단 <strong>기준일자</strong> 값으로 자동 채워집니다.
       </div>
     </div>
   );
 }
 
-function blankRow(fixedType?: OfferingType): Entry {
+function blankRow(fixedType?: OfferingType, defaultDate?: string): Entry {
   return {
     id: 0,
-    date: todayStr(),
+    date: defaultDate || todayStr(),
     memberId: "",
     memberName: "",
     offeringType: fixedType ?? "주일연보",
