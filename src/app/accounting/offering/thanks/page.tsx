@@ -43,9 +43,17 @@ export default function ThanksOfferingPage() {
   const { hasMemberEdit } = useAccountPerms();
   const [dateFrom, setDateFrom] = useState(monthStartStr());
   const [dateTo, setDateTo] = useState(todayStr());
+  // 인쇄 기준일자 — 단일 일자, 출력물 헤더에 표시.
+  // 기본값은 종료일과 동일.
+  const [printDate, setPrintDate] = useState(todayStr());
   const [entries, setEntries] = useState<ThanksEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const openPrint = (mode: "ad" | "list" | "handout") => {
+    const url = `/accounting/offering/thanks/print?mode=${mode}&date=${encodeURIComponent(printDate)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   const fetchEntries = useCallback(async () => {
     setLoading(true);
@@ -105,8 +113,48 @@ export default function ThanksOfferingPage() {
             onClick={() => window.print()}
             className="px-4 py-2 bg-gray-100 text-gray-600 text-sm rounded-lg hover:bg-gray-200 transition-colors"
           >
-            인쇄
+            인쇄(화면)
           </button>
+        </div>
+
+        {/* 인쇄 양식 — 기준일자 + 3종 버튼 */}
+        <div className="mt-4 pt-4 border-t border-gray-200 flex flex-wrap items-end gap-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">기준일자 (출력물에 표시)</label>
+            <input
+              type="date"
+              value={printDate}
+              onChange={(e) => setPrintDate(e.target.value)}
+              className="px-3 py-2 border border-amber-300 bg-amber-50 rounded-lg text-sm"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => openPrint("ad")}
+            className="px-4 py-2 bg-rose-600 text-white text-sm rounded-lg hover:bg-rose-700 font-semibold"
+            title="광고용 — top 7개 + 안내문 3줄"
+          >
+            🖨 광고용
+          </button>
+          <button
+            type="button"
+            onClick={() => openPrint("list")}
+            className="px-4 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 font-semibold"
+            title="등재용 — 1단, 전체, 6번 후 구분선"
+          >
+            🖨 등재용
+          </button>
+          <button
+            type="button"
+            onClick={() => openPrint("handout")}
+            className="px-4 py-2 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700 font-semibold"
+            title="배부용 — 2단, 전체"
+          >
+            🖨 배부용
+          </button>
+          <p className="text-[11px] text-gray-500 ml-2">
+            ※ 인쇄 대화상자에서 <strong>“헤더 및 바닥글”</strong> 옵션을 꺼야 양식이 깨끗하게 출력됩니다.
+          </p>
         </div>
       </div>
 
