@@ -146,6 +146,27 @@ export default function DuesTable({ category }: Props) {
     }
   };
 
+  /** 변경된(dirty/error) 기존 row + 입력된 신규 row 를 한번에 처리 */
+  const saveAll = async () => {
+    setError(null);
+    // 1) dirty/error 인 기존 행
+    const dirtyIdx = rows
+      .map((r, i) => ({ r, i }))
+      .filter(({ r }) => r.status === "dirty" || r.status === "error")
+      .map(({ i }) => i);
+    for (const i of dirtyIdx) {
+      await saveAmount(i);
+    }
+    // 2) 이름 입력된 신규 행 (마지막 빈 행은 자동 skip)
+    const newToSave = newRows
+      .map((nr, i) => ({ nr, i }))
+      .filter(({ nr }) => nr.inputName.trim() !== "");
+    // 인덱스가 변하지 않도록 역순으로 처리
+    for (const { i } of [...newToSave].reverse()) {
+      await saveNewRow(i);
+    }
+  };
+
   const deleteMember = async (idx: number) => {
     const r = rows[idx];
     if (!confirm(`${r.memberNo}. ${r.name} 회원을 삭제할까요?\n(입금 내역이 있으면 삭제 불가)`)) {
@@ -282,6 +303,19 @@ export default function DuesTable({ category }: Props) {
           title={`${year - 1}년 월정액을 ${year}년으로 복사`}
         >
           📋 전년회원 불러오기
+        </button>
+        <button
+          type="button"
+          onClick={saveAll}
+          disabled={
+            loading ||
+            (!rows.some((r) => r.status === "dirty" || r.status === "error") &&
+              !newRows.some((nr) => nr.inputName.trim() !== ""))
+          }
+          className="rounded bg-blue-600 px-4 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50 font-semibold"
+          title="변경된 월정액 + 입력된 신규 회원 일괄 저장"
+        >
+          💾 일괄 저장
         </button>
         <button
           type="button"

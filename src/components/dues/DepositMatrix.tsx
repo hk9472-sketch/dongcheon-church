@@ -53,7 +53,9 @@ export default function DepositMatrix({ category }: Props) {
       const yearEnd = `${year}-12-31`;
 
       const [mRes, dRes] = await Promise.all([
-        fetch(`/api/accounting/dues/members?category=${encodeURIComponent(category)}`),
+        fetch(
+          `/api/accounting/dues/members?category=${encodeURIComponent(category)}&year=${year}`,
+        ),
         fetch(
           `/api/accounting/dues/deposits?category=${encodeURIComponent(category)}` +
             `&dateFrom=${yearStart}&dateTo=${yearEnd}`,

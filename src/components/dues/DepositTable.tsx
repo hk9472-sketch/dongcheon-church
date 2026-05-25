@@ -74,7 +74,7 @@ export default function DepositTable({ category }: Props) {
 
   // 월정명단 로드
   useEffect(() => {
-    fetch(`/api/accounting/dues/members?category=${encodeURIComponent(category)}`)
+    fetch(`/api/accounting/dues/members?category=${encodeURIComponent(category)}&year=${new Date().getFullYear()}`)
       .then((r) => r.json())
       .then((d) => setMembers(d.members || []))
       .catch(() => setMembers([]));

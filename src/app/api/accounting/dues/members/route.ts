@@ -4,8 +4,11 @@ import { checkAccAccess } from "@/lib/accountAuth";
 
 const VALID_CATEGORIES = ["전도회", "건축"] as const;
 
-// GET /api/accounting/dues/members?category=전도회
-//   해당 단위의 활성 회원 목록 (memberNo asc)
+// GET /api/accounting/dues/members?category=전도회&year=2026
+//   해당 단위의 활성 회원 목록 (memberNo asc) + 연도별 월정액.
+//   year 미지정 시 현재 연도. 해당 연도에 amount 가 없거나 0 인 회원은
+//   가장 최근(과거) 연도의 amount 로 fallback — 신년에 월정액을 아직
+//   안 옮긴 경우에도 매트릭스/입금 화면에서 금액이 자동 표시되도록.
 export async function GET(req: NextRequest) {
   const acc = await checkAccAccess("dues");
   if (!acc.ok) return NextResponse.json({ error: acc.error }, { status: acc.status });
@@ -14,24 +17,55 @@ export async function GET(req: NextRequest) {
   if (!VALID_CATEGORIES.includes(category as never)) {
     return NextResponse.json({ error: "잘못된 category" }, { status: 400 });
   }
+  const yearParam = req.nextUrl.searchParams.get("year");
+  const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
+  if (!Number.isFinite(year)) {
+    return NextResponse.json({ error: "잘못된 year" }, { status: 400 });
+  }
 
   const members = await prisma.monthlyDuesMember.findMany({
     where: { category, isActive: true },
     orderBy: { memberNo: "asc" },
   });
 
-  // 현재 연도 월정 금액도 함께 조회 (입금 화면에서 명단에 금액 표시 + 자동 채움).
-  const year = new Date().getFullYear();
-  const amounts = members.length > 0
-    ? await prisma.monthlyDuesAmount.findMany({
-        where: { category, year, memberId: { in: members.map((m) => m.id) } },
-        select: { memberId: true, amount: true },
-      })
-    : [];
-  const amountMap = new Map(amounts.map((a) => [a.memberId, a.amount]));
+  if (members.length === 0) {
+    return NextResponse.json({ members: [] });
+  }
+
+  const memberIds = members.map((m) => m.id);
+
+  // 1) 요청 연도의 amount
+  const currentAmounts = await prisma.monthlyDuesAmount.findMany({
+    where: { category, year, memberId: { in: memberIds } },
+    select: { memberId: true, amount: true },
+  });
+  const currentMap = new Map(currentAmounts.map((a) => [a.memberId, a.amount]));
+
+  // 2) 요청 연도에 amount 가 없거나 0 인 회원은 과거 가장 최근 연도 amount 로 fallback
+  const missingIds = memberIds.filter((id) => {
+    const cur = currentMap.get(id);
+    return cur == null || cur === 0;
+  });
+  const fallbackMap = new Map<number, number>();
+  if (missingIds.length > 0) {
+    const past = await prisma.monthlyDuesAmount.findMany({
+      where: {
+        category,
+        memberId: { in: missingIds },
+        year: { lt: year },
+        amount: { gt: 0 },
+      },
+      orderBy: [{ year: "desc" }],
+      select: { memberId: true, year: true, amount: true },
+    });
+    for (const a of past) {
+      if (!fallbackMap.has(a.memberId)) fallbackMap.set(a.memberId, a.amount);
+    }
+  }
+
   const withAmount = members.map((m) => ({
     ...m,
-    monthlyAmount: amountMap.get(m.id) ?? null,
+    monthlyAmount: currentMap.get(m.id) ?? fallbackMap.get(m.id) ?? null,
   }));
 
   return NextResponse.json({ members: withAmount });
