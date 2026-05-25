@@ -50,7 +50,9 @@ export default function MultiOfferingEntryPage() {
   const [savingAll, setSavingAll] = useState(false);
   // 회원이 마스킹 회원인지 (개인번호 권한 없음) → 성명 자동조회 비활성
   const [canSeeName, setCanSeeName] = useState(true);
-  const inputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
+  // 셀 참조: cellRefs[row][col] — col 0 = memberNo, 1~6 = 6개 종류 금액, 7 = 비고
+  const cellRefs = useRef<Array<Array<HTMLInputElement | null>>>([]);
+  const COLS_PER_ROW = 1 + TYPES.length + 1; // = 8
 
   // 권한 확인 (성명 조회)
   useEffect(() => {
@@ -85,7 +87,7 @@ export default function MultiOfferingEntryPage() {
     });
   };
 
-  /** 개인번호 입력 후 onBlur — 성명 자동 조회 */
+  /** 개인번호 입력 후 onBlur — 성명 자동 조회 + 마지막 행이면 새 빈 행 추가 */
   const lookupMember = async (idx: number) => {
     const r = rows[idx];
     const no = r.memberNo.trim();
@@ -98,13 +100,28 @@ export default function MultiOfferingEntryPage() {
         `/api/accounting/offering/lookup-member?memberNo=${encodeURIComponent(no)}&date=${date}`,
       );
       const data = await res.json();
+      let matched = false;
       if (res.ok && data.id) {
         update(idx, {
           memberId: data.id,
           memberName: data.name ?? "",
         });
+        matched = true;
       } else {
         update(idx, { memberId: null, memberName: "(미등록)" });
+      }
+      // 마지막 행에서 번호가 들어오면(매칭 여부 무관) 새 빈 행 자동 추가
+      setRows((prev) => {
+        if (idx !== prev.length - 1) return prev;
+        if (!no) return prev;
+        return [...prev, blankRow()];
+      });
+      // 매칭되면 첫 금액 칸으로 포커스 이동 (입력 흐름 자연스럽게)
+      if (matched) {
+        setTimeout(() => {
+          cellRefs.current[idx]?.[1]?.focus();
+          cellRefs.current[idx]?.[1]?.select();
+        }, 0);
       }
     } catch {
       update(idx, { memberId: null, memberName: "" });
@@ -162,10 +179,10 @@ export default function MultiOfferingEntryPage() {
         if (idx === n.length - 1) n.push(blankRow());
         return n;
       });
-      // 다음 행 첫 입력 칸 포커스
+      // 다음 행 첫 입력 칸(memberNo) 포커스
       setTimeout(() => {
-        const key = `memberNo-${idx + 1}`;
-        inputRefs.current.get(key)?.focus();
+        cellRefs.current[idx + 1]?.[0]?.focus();
+        cellRefs.current[idx + 1]?.[0]?.select();
       }, 0);
     } catch (e) {
       setRows((p) => {
@@ -200,6 +217,49 @@ export default function MultiOfferingEntryPage() {
     }
   };
 
+  // ============ 셀 참조 + 화살표 키 이동 ============
+  const setCellRef = (row: number, col: number) => (el: HTMLInputElement | null) => {
+    if (!cellRefs.current[row]) cellRefs.current[row] = [];
+    cellRefs.current[row][col] = el;
+  };
+  const focusCell = (row: number, col: number) => {
+    const el = cellRefs.current[row]?.[col];
+    if (el) {
+      el.focus();
+      el.select?.();
+    }
+  };
+  const onCellKey = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    row: number,
+    col: number,
+  ) => {
+    if (e.key === "ArrowDown" || e.key === "Enter") {
+      e.preventDefault();
+      if (row === rows.length - 1) {
+        setRows((p) => [...p, blankRow()]);
+        setTimeout(() => focusCell(row + 1, col), 0);
+      } else {
+        focusCell(row + 1, col);
+      }
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      focusCell(row - 1, col);
+    } else if (e.key === "ArrowLeft") {
+      const input = e.currentTarget;
+      if (input.selectionStart === 0) {
+        e.preventDefault();
+        focusCell(row, col - 1);
+      }
+    } else if (e.key === "ArrowRight") {
+      const input = e.currentTarget;
+      if (input.selectionStart === input.value.length) {
+        e.preventDefault();
+        focusCell(row, col + 1);
+      }
+    }
+  };
+
   const addRow = () => setRows((p) => [...p, blankRow()]);
   const removeRow = (idx: number) => {
     if (rows.length === 1) return;
@@ -225,6 +285,7 @@ export default function MultiOfferingEntryPage() {
         <p className="text-xs text-gray-500 mt-1">
           한 회원의 여러 종류 연보를 한 줄에 입력합니다. 0 이거나 빈 칸인 종류는
           저장되지 않고, 입력된 종류만 각각의 연보 항목으로 저장됩니다.
+          개인번호 입력 후 Tab 하면 다음 빈 행이 자동 추가되고, 키보드 ↑↓←→ 로 셀 이동.
         </p>
       </div>
 
@@ -299,9 +360,7 @@ export default function MultiOfferingEntryPage() {
                 >
                   <td className="px-2 py-1">
                     <input
-                      ref={(el) => {
-                        inputRefs.current.set(`memberNo-${idx}`, el);
-                      }}
+                      ref={setCellRef(idx, 0)}
                       type="text"
                       inputMode="numeric"
                       value={r.memberNo}
@@ -309,6 +368,7 @@ export default function MultiOfferingEntryPage() {
                         update(idx, { memberNo: e.target.value.replace(/[^\d]/g, "") })
                       }
                       onBlur={() => lookupMember(idx)}
+                      onKeyDown={(e) => onCellKey(e, idx, 0)}
                       placeholder="번호"
                       className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-right font-mono"
                     />
@@ -316,9 +376,10 @@ export default function MultiOfferingEntryPage() {
                   <td className="px-2 py-1 text-gray-700">
                     {r.memberName || <span className="text-gray-300">—</span>}
                   </td>
-                  {TYPES.map((t) => (
+                  {TYPES.map((t, tIdx) => (
                     <td key={t.key} className="px-2 py-1">
                       <input
+                        ref={setCellRef(idx, 1 + tIdx)}
                         type="text"
                         inputMode="numeric"
                         value={
@@ -327,6 +388,7 @@ export default function MultiOfferingEntryPage() {
                             : (parseInt(r.amounts[t.key], 10) || 0).toLocaleString()
                         }
                         onChange={(e) => updateAmount(idx, t.key, e.target.value)}
+                        onKeyDown={(e) => onCellKey(e, idx, 1 + tIdx)}
                         placeholder="0"
                         className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-right font-mono"
                       />
@@ -334,9 +396,11 @@ export default function MultiOfferingEntryPage() {
                   ))}
                   <td className="px-2 py-1">
                     <input
+                      ref={setCellRef(idx, COLS_PER_ROW - 1)}
                       type="text"
                       value={r.description}
                       onChange={(e) => update(idx, { description: e.target.value })}
+                      onKeyDown={(e) => onCellKey(e, idx, COLS_PER_ROW - 1)}
                       className="w-full rounded border border-gray-200 px-1.5 py-0.5"
                     />
                   </td>

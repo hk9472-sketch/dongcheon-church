@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface Member {
   id: number;
@@ -71,6 +71,7 @@ export default function DepositMatrix({ category }: Props) {
         paidMap.add(`${d.memberId}:${d.installment}`);
       }
 
+      // 초기엔 금액 비워두고, 체크할 때 monthlyAmount 자동 채움.
       const mat: Record<number, Record<number, Cell>> = {};
       for (const m of ms) {
         mat[m.id] = {};
@@ -79,7 +80,7 @@ export default function DepositMatrix({ category }: Props) {
           mat[m.id][mo] = {
             paid: isPaid,
             checked: false,
-            amount: m.monthlyAmount ? String(m.monthlyAmount) : "",
+            amount: "",
           };
         }
       }
@@ -103,6 +104,97 @@ export default function DepositMatrix({ category }: Props) {
         [month]: { ...prev[memberId][month], ...patch },
       },
     }));
+  };
+
+  /** 체크박스 토글 — 체크하면서 금액이 비어 있으면 월정액 자동 채움 */
+  const toggleCell = (member: Member, month: number, checked: boolean) => {
+    const cur = matrix[member.id]?.[month];
+    if (!cur || cur.paid) return;
+    const next: Partial<Cell> = { checked };
+    if (checked && !cur.amount && member.monthlyAmount) {
+      next.amount = String(member.monthlyAmount);
+    }
+    setCell(member.id, month, next);
+  };
+
+  // ============ 화살표 키 이동 ============
+  // 셀 좌표: rowIdx = filteredMembers index, colIdx = month-1
+  // 금액 input 에 ref 부착, 키 이벤트로 상하좌우 이동
+  const cellRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
+  const focusCell = (rowIdx: number, colIdx: number, memberList: Member[]) => {
+    if (rowIdx < 0 || rowIdx >= memberList.length) return;
+    if (colIdx < 0 || colIdx >= 12) return;
+    const m = memberList[rowIdx];
+    const mo = colIdx + 1;
+    // 입금 완료 셀은 input 이 없음 → 다음/이전 가능한 셀까지 건너뜀
+    const cell = matrix[m.id]?.[mo];
+    const key = `${m.id}:${mo}`;
+    const el = cellRefs.current.get(key);
+    if (el && cell && !cell.paid) {
+      el.focus();
+      el.select();
+    }
+  };
+  const onCellKey = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    rowIdx: number,
+    colIdx: number,
+    memberList: Member[],
+  ) => {
+    // 한 행에서 좌우 이동: caret 위치 무시하고 무조건 이동 (input 작아서 caret 의미 적음)
+    if (e.key === "ArrowDown" || e.key === "Enter") {
+      e.preventDefault();
+      // 다음 행에서 paid 가 아닌 셀까지 건너뜀
+      for (let r = rowIdx + 1; r < memberList.length; r++) {
+        const m = memberList[r];
+        const c = matrix[m.id]?.[colIdx + 1];
+        if (c && !c.paid) {
+          focusCell(r, colIdx, memberList);
+          return;
+        }
+      }
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      for (let r = rowIdx - 1; r >= 0; r--) {
+        const m = memberList[r];
+        const c = matrix[m.id]?.[colIdx + 1];
+        if (c && !c.paid) {
+          focusCell(r, colIdx, memberList);
+          return;
+        }
+      }
+    } else if (e.key === "ArrowLeft") {
+      // 좌측 셀 — caret 0 일 때만 이동
+      const input = e.currentTarget;
+      if (input.selectionStart === 0) {
+        e.preventDefault();
+        for (let c = colIdx - 1; c >= 0; c--) {
+          const cell = matrix[memberList[rowIdx].id]?.[c + 1];
+          if (cell && !cell.paid) {
+            focusCell(rowIdx, c, memberList);
+            return;
+          }
+        }
+      }
+    } else if (e.key === "ArrowRight") {
+      const input = e.currentTarget;
+      if (input.selectionStart === input.value.length) {
+        e.preventDefault();
+        for (let c = colIdx + 1; c < 12; c++) {
+          const cell = matrix[memberList[rowIdx].id]?.[c + 1];
+          if (cell && !cell.paid) {
+            focusCell(rowIdx, c, memberList);
+            return;
+          }
+        }
+      }
+    } else if (e.key === " ") {
+      // 스페이스로 체크 토글
+      e.preventDefault();
+      const m = memberList[rowIdx];
+      const cell = matrix[m.id]?.[colIdx + 1];
+      if (cell && !cell.paid) toggleCell(m, colIdx + 1, !cell.checked);
+    }
   };
 
   /** 회원 행 전체 체크/해제 (미입금 셀만) */
@@ -207,8 +299,8 @@ export default function DepositMatrix({ category }: Props) {
         <h1 className="text-xl font-bold text-gray-800">{category} 월정입금 (일괄)</h1>
         <p className="text-xs text-gray-500 mt-1">
           입금일자를 선택하면 해당 연도의 입금 상태를 표시합니다. <strong>◯</strong> 는 이미
-          입금된 월, 빈 셀은 체크박스로 입금 처리할 수 있습니다. 같은 회원의 같은 월에 이미
-          입금이 있으면 자동 건너뜀.
+          입금된 월, 빈 셀은 체크박스로 입금 처리할 수 있습니다. <strong>체크하면 월정액이
+          자동으로 채워지고</strong>, 키보드 ↑↓←→ 로 셀 이동, <kbd>Space</kbd> 로 체크 토글.
         </p>
       </div>
 
@@ -265,35 +357,37 @@ export default function DepositMatrix({ category }: Props) {
             <thead className="border-b bg-gray-50 text-[11px] text-gray-600 sticky top-0">
               <tr>
                 <th className="px-2 py-1 text-left font-medium w-12">번호</th>
-                <th className="px-2 py-1 text-left font-medium w-20">이름</th>
+                <th className="px-2 py-1 text-left font-medium w-24">
+                  이름 <span className="text-[10px] text-gray-400">/ 월정액</span>
+                </th>
                 {MONTHS.map((mo) => (
-                  <th key={mo} className="px-1 py-1 text-center font-medium w-16">
-                    <div>{mo}월</div>
-                    <div className="flex items-center justify-center gap-0.5">
+                  <th key={mo} className="px-1 py-1 text-center font-medium w-20">
+                    <div className="mb-1">{mo}월</div>
+                    <div className="flex items-center justify-center gap-1">
                       <button
                         type="button"
                         onClick={() => toggleCol(mo, true)}
-                        className="text-[9px] text-blue-600 hover:underline"
+                        className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded border border-blue-300 hover:bg-blue-200 font-semibold"
                         title="이 월 전체 체크"
                       >
-                        ☑
+                        전체
                       </button>
                       <button
                         type="button"
                         onClick={() => toggleCol(mo, false)}
-                        className="text-[9px] text-gray-500 hover:underline"
+                        className="px-1.5 py-0.5 text-[10px] bg-gray-100 text-gray-600 rounded border border-gray-300 hover:bg-gray-200"
                         title="이 월 전체 해제"
                       >
-                        ☐
+                        해제
                       </button>
                     </div>
                   </th>
                 ))}
-                <th className="px-1 py-1 text-center font-medium w-14">행</th>
+                <th className="px-1 py-1 text-center font-medium w-20">행</th>
               </tr>
             </thead>
             <tbody>
-              {filteredMembers.map((m) => {
+              {filteredMembers.map((m, rowIdx) => {
                 const row = matrix[m.id] || {};
                 const rowSelectedAmt = MONTHS.reduce((s, mo) => {
                   const c = row[mo];
@@ -305,8 +399,15 @@ export default function DepositMatrix({ category }: Props) {
                 return (
                   <tr key={m.id} className="border-b last:border-b-0 hover:bg-blue-50/30">
                     <td className="px-2 py-1 font-mono text-gray-500">{m.memberNo}</td>
-                    <td className="px-2 py-1 font-medium text-gray-800">{m.name}</td>
-                    {MONTHS.map((mo) => {
+                    <td className="px-2 py-1">
+                      <div className="font-medium text-gray-800">{m.name}</div>
+                      {m.monthlyAmount ? (
+                        <div className="text-[10px] text-gray-500 font-mono">
+                          {fmt(m.monthlyAmount)}
+                        </div>
+                      ) : null}
+                    </td>
+                    {MONTHS.map((mo, colIdx) => {
                       const c = row[mo];
                       if (!c) return <td key={mo} />;
                       if (c.paid) {
@@ -327,11 +428,14 @@ export default function DepositMatrix({ category }: Props) {
                               type="checkbox"
                               checked={c.checked}
                               onChange={(e) =>
-                                setCell(m.id, mo, { checked: e.target.checked })
+                                toggleCell(m, mo, e.target.checked)
                               }
                               className="w-3.5 h-3.5 rounded border-gray-300 text-fuchsia-600"
                             />
                             <input
+                              ref={(el) => {
+                                cellRefs.current.set(`${m.id}:${mo}`, el);
+                              }}
                               type="text"
                               inputMode="numeric"
                               value={
@@ -344,6 +448,7 @@ export default function DepositMatrix({ category }: Props) {
                                   amount: e.target.value.replace(/[^\d]/g, ""),
                                 })
                               }
+                              onKeyDown={(e) => onCellKey(e, rowIdx, colIdx, filteredMembers)}
                               placeholder="0"
                               className={`w-full rounded border border-gray-200 px-1 py-0.5 text-right font-mono text-[11px] ${
                                 c.checked ? "bg-yellow-50 border-yellow-300" : ""
@@ -354,26 +459,26 @@ export default function DepositMatrix({ category }: Props) {
                       );
                     })}
                     <td className="px-1 py-1 text-center whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-0.5">
+                      <div className="flex items-center justify-center gap-1">
                         <button
                           type="button"
                           onClick={() => toggleRow(m.id, true)}
-                          className="text-[9px] text-blue-600 hover:underline"
+                          className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded border border-blue-300 hover:bg-blue-200 font-semibold"
                           title="이 행 전체 체크"
                         >
-                          ☑
+                          전체
                         </button>
                         <button
                           type="button"
                           onClick={() => toggleRow(m.id, false)}
-                          className="text-[9px] text-gray-500 hover:underline"
+                          className="px-1.5 py-0.5 text-[10px] bg-gray-100 text-gray-600 rounded border border-gray-300 hover:bg-gray-200"
                           title="이 행 전체 해제"
                         >
-                          ☐
+                          해제
                         </button>
                       </div>
                       {rowSelectedAmt > 0 && (
-                        <div className="text-[10px] text-blue-700 font-mono mt-0.5">
+                        <div className="text-[10px] text-blue-700 font-mono mt-1">
                           {fmt(rowSelectedAmt)}
                         </div>
                       )}
