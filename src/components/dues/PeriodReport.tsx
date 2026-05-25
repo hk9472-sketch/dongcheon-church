@@ -2,12 +2,18 @@
 
 import { useEffect, useState, useCallback } from "react";
 
-interface Item {
+interface Deposit {
+  id: number;
+  date: string;
   memberId: number;
-  memberNo: number;
-  name: string;
-  byInstallment: Record<number, number>;
-  total: number;
+  amount: number;
+  installment: number;
+  description: string | null;
+  member: {
+    id: number;
+    memberNo: number;
+    name: string;
+  } | null;
 }
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
@@ -20,22 +26,23 @@ const yearStartStr = () => {
   const y = new Date().getFullYear();
   return `${y}-01-01`;
 };
+function formatDate(s: string): string {
+  return s.slice(0, 10);
+}
 
 interface Props {
   category: "전도회" | "건축";
 }
 
-const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
-
 export default function PeriodReport({ category }: Props) {
   const [dateFrom, setDateFrom] = useState(yearStartStr());
   const [dateTo, setDateTo] = useState(todayStr());
-  const [items, setItems] = useState<Item[]>([]);
-  const [installmentTotals, setInstallmentTotals] = useState<Record<number, number>>({});
-  const [grandTotal, setGrandTotal] = useState(0);
-  const [depositCount, setDepositCount] = useState(0);
+  const [items, setItems] = useState<Deposit[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 정렬 키 (사용자가 헤더 클릭으로 변경 가능)
+  const [sortKey, setSortKey] = useState<"memberNo" | "name" | "date" | "installment" | "amount">("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -43,17 +50,13 @@ export default function PeriodReport({ category }: Props) {
     try {
       const params = new URLSearchParams({
         category,
-        mode: "period",
         dateFrom,
         dateTo,
       });
-      const res = await fetch(`/api/accounting/dues/report?${params}`);
+      const res = await fetch(`/api/accounting/dues/deposits?${params}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "조회 실패");
       setItems(data.items || []);
-      setInstallmentTotals(data.installmentTotals || {});
-      setGrandTotal(data.grandTotal || 0);
-      setDepositCount(data.depositCount || 0);
     } catch (e) {
       setError(e instanceof Error ? e.message : "조회 실패");
     } finally {
@@ -65,12 +68,40 @@ export default function PeriodReport({ category }: Props) {
     load();
   }, [load]);
 
+  const toggleSort = (k: typeof sortKey) => {
+    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(k);
+      setSortDir("asc");
+    }
+  };
+
+  const sorted = [...items].sort((a, b) => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    switch (sortKey) {
+      case "memberNo":
+        return ((a.member?.memberNo ?? 0) - (b.member?.memberNo ?? 0)) * dir;
+      case "name":
+        return (a.member?.name || "").localeCompare(b.member?.name || "") * dir;
+      case "date":
+        return a.date.localeCompare(b.date) * dir;
+      case "installment":
+        return (a.installment - b.installment) * dir;
+      case "amount":
+        return (a.amount - b.amount) * dir;
+    }
+  });
+
+  const totalAmount = items.reduce((s, d) => s + d.amount, 0);
+  const sortArrow = (k: typeof sortKey) =>
+    sortKey === k ? (sortDir === "asc" ? " ▲" : " ▼") : "";
+
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold text-gray-800">{category} 기간별 입금 현황</h1>
         <p className="text-xs text-gray-500 mt-1">
-          기간 내 입금을 회원별·회차(1월~12월)별로 집계.
+          기간 내 입금을 건별로 나열 (번호 · 이름 · 일자 · 월 · 금액). 헤더를 클릭하면 정렬 기준 변경.
         </p>
       </div>
 
@@ -108,78 +139,87 @@ export default function PeriodReport({ category }: Props) {
           조회
         </button>
         <div className="ml-auto text-xs text-gray-600">
-          입금건수 <strong>{depositCount}</strong> · 합계{" "}
-          <strong className="text-blue-700">{fmt(grandTotal)}</strong>원
+          입금건수 <strong>{items.length}</strong> · 합계{" "}
+          <strong className="text-blue-700">{fmt(totalAmount)}</strong>원
         </div>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-        <table className="w-full text-xs">
-          <thead className="border-b bg-gray-50 text-gray-600 sticky top-0">
+        <table className="w-full text-sm">
+          <thead className="border-b bg-gray-50 text-xs text-gray-600 sticky top-0">
             <tr>
-              <th className="px-2 py-2 text-left font-medium w-16">번호</th>
-              <th className="px-2 py-2 text-left font-medium">이름</th>
-              {MONTHS.map((m) => (
-                <th key={m} className="px-2 py-2 text-right font-medium w-20">
-                  {m}월
-                </th>
-              ))}
-              <th className="px-2 py-2 text-right font-medium w-24 bg-blue-50">합계</th>
+              <th
+                className="px-2 py-2 text-left font-medium w-20 cursor-pointer hover:bg-gray-100"
+                onClick={() => toggleSort("memberNo")}
+              >
+                번호{sortArrow("memberNo")}
+              </th>
+              <th
+                className="px-2 py-2 text-left font-medium w-28 cursor-pointer hover:bg-gray-100"
+                onClick={() => toggleSort("name")}
+              >
+                이름{sortArrow("name")}
+              </th>
+              <th
+                className="px-2 py-2 text-left font-medium w-28 cursor-pointer hover:bg-gray-100"
+                onClick={() => toggleSort("date")}
+              >
+                일자{sortArrow("date")}
+              </th>
+              <th
+                className="px-2 py-2 text-center font-medium w-16 cursor-pointer hover:bg-gray-100"
+                onClick={() => toggleSort("installment")}
+              >
+                월{sortArrow("installment")}
+              </th>
+              <th
+                className="px-2 py-2 text-right font-medium w-28 cursor-pointer hover:bg-gray-100"
+                onClick={() => toggleSort("amount")}
+              >
+                금액{sortArrow("amount")}
+              </th>
+              <th className="px-2 py-2 text-left font-medium">비고</th>
             </tr>
           </thead>
           <tbody>
-            {items.length === 0 && !loading && (
+            {sorted.length === 0 && !loading && (
               <tr>
-                <td colSpan={15} className="px-3 py-6 text-center text-gray-400">
+                <td colSpan={6} className="px-3 py-6 text-center text-gray-400">
                   조회된 입금 없음
                 </td>
               </tr>
             )}
-            {items.map((it) => (
-              <tr key={it.memberId} className="border-b last:border-b-0 hover:bg-gray-50">
-                <td className="px-2 py-1.5 font-mono text-gray-500">{it.memberNo}</td>
-                <td className="px-2 py-1.5 text-gray-800">{it.name}</td>
-                {MONTHS.map((m) => {
-                  const v = it.byInstallment[m] ?? 0;
-                  return (
-                    <td
-                      key={m}
-                      className={`px-2 py-1.5 text-right font-mono ${
-                        v > 0 ? "text-gray-700" : "text-gray-300"
-                      }`}
-                    >
-                      {v > 0 ? fmt(v) : "-"}
-                    </td>
-                  );
-                })}
-                <td className="px-2 py-1.5 text-right font-mono font-semibold text-blue-700 bg-blue-50">
-                  {fmt(it.total)}
+            {sorted.map((d) => (
+              <tr key={d.id} className="border-b last:border-b-0 hover:bg-blue-50/30">
+                <td className="px-2 py-1.5 font-mono text-gray-500">
+                  {d.member?.memberNo ?? "-"}
+                </td>
+                <td className="px-2 py-1.5 text-gray-800 font-medium">
+                  {d.member?.name ?? "(미등록)"}
+                </td>
+                <td className="px-2 py-1.5 text-gray-600 font-mono">
+                  {formatDate(d.date)}
+                </td>
+                <td className="px-2 py-1.5 text-center text-gray-700">{d.installment}월</td>
+                <td className="px-2 py-1.5 text-right font-mono text-blue-700">
+                  {fmt(d.amount)}
+                </td>
+                <td className="px-2 py-1.5 text-xs text-gray-500">
+                  {d.description || ""}
                 </td>
               </tr>
             ))}
           </tbody>
-          {items.length > 0 && (
+          {sorted.length > 0 && (
             <tfoot>
               <tr className="border-t-2 bg-gray-100 font-semibold sticky bottom-0">
-                <td colSpan={2} className="px-2 py-2 text-right">
-                  회차별 합계
+                <td colSpan={4} className="px-2 py-2 text-right">
+                  합계 ({items.length}건)
                 </td>
-                {MONTHS.map((m) => {
-                  const v = installmentTotals[m] ?? 0;
-                  return (
-                    <td
-                      key={m}
-                      className={`px-2 py-2 text-right font-mono ${
-                        v > 0 ? "text-gray-800" : "text-gray-400"
-                      }`}
-                    >
-                      {v > 0 ? fmt(v) : "-"}
-                    </td>
-                  );
-                })}
-                <td className="px-2 py-2 text-right font-mono text-blue-800 bg-blue-100">
-                  {fmt(grandTotal)}
+                <td className="px-2 py-2 text-right font-mono text-blue-800 bg-blue-50">
+                  {fmt(totalAmount)}
                 </td>
+                <td></td>
               </tr>
             </tfoot>
           )}

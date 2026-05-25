@@ -7,6 +7,8 @@ interface DuesItem {
   memberId: number;
   memberNo: number;
   name: string;
+  /** 서버에 저장된 원본 이름 — 변경 감지용 */
+  originalName: string;
   amount: number; // 월정액
   // UI 상태
   status?: "saved" | "dirty" | "saving" | "error";
@@ -52,7 +54,11 @@ export default function DuesTable({ category }: Props) {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "조회 실패");
       setRows(
-        (data.items || []).map((i: DuesItem) => ({ ...i, status: "saved" })),
+        (data.items || []).map((i: DuesItem) => ({
+          ...i,
+          originalName: i.name,
+          status: "saved",
+        })),
       );
       cellRefs.current = [];
     } catch (e) {
@@ -116,6 +122,19 @@ export default function DuesTable({ category }: Props) {
       return next;
     });
     try {
+      // 1) 이름이 변경되었으면 회원 PUT 먼저
+      const nameChanged = r.name.trim() !== (r.originalName || "").trim();
+      if (nameChanged) {
+        const nameRes = await fetch(`/api/accounting/dues/members/${r.memberId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: r.name.trim() }),
+        });
+        const nameData = await nameRes.json();
+        if (!nameRes.ok) throw new Error(nameData?.error || "이름 수정 실패");
+      }
+
+      // 2) 월정액 upsert
       const res = await fetch("/api/accounting/dues/amounts", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -130,7 +149,12 @@ export default function DuesTable({ category }: Props) {
       if (!res.ok) throw new Error(data?.error || "저장 실패");
       setRows((prev) => {
         const next = [...prev];
-        next[idx] = { ...next[idx], status: "saved", message: "저장됨" };
+        next[idx] = {
+          ...next[idx],
+          originalName: r.name.trim(),
+          status: "saved",
+          message: nameChanged ? "이름·금액 저장됨" : "저장됨",
+        };
         return next;
       });
     } catch (e) {
@@ -144,6 +168,15 @@ export default function DuesTable({ category }: Props) {
         return next;
       });
     }
+  };
+
+  /** 이름 셀 변경 — dirty 상태로 표시 */
+  const updateName = (idx: number, value: string) => {
+    setRows((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], name: value, status: "dirty", message: undefined };
+      return next;
+    });
   };
 
   /** 변경된(dirty/error) 기존 row + 입력된 신규 row 를 한번에 처리 */
@@ -414,7 +447,18 @@ export default function DuesTable({ category }: Props) {
                 }`}
               >
                 <td className="px-3 py-2 text-gray-600 font-mono">{r.memberNo}</td>
-                <td className="px-3 py-2 text-gray-800">{r.name}</td>
+                <td className="px-3 py-2">
+                  <input
+                    type="text"
+                    value={r.name}
+                    onChange={(e) => updateName(idx, e.target.value)}
+                    className={`w-full rounded border px-2 py-1 text-sm ${
+                      r.name.trim() !== (r.originalName || "").trim()
+                        ? "border-orange-300 bg-orange-50"
+                        : "border-gray-200"
+                    }`}
+                  />
+                </td>
                 <td className="px-3 py-2">
                   <input
                     ref={setCellRef(idx, 0)}
