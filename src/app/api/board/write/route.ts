@@ -299,6 +299,11 @@ export async function POST(request: NextRequest) {
             sitelink2,
             categoryId,
             commentPolicy,
+            // 작성자 이름 갱신 — 로그인 회원이라도 입력한 이름이 있으면 그 이름으로 저장
+            // (신규/답글과 동일 정책). 빈 값이면 기존 authorName 유지.
+            ...(effectiveName && effectiveName.trim()
+              ? { authorName: effectiveName.trim() }
+              : {}),
             // 비번 갱신 — 회원이 새 비번 입력하면 password 갱신 (비밀글 unlock 또는 일반글 수정 비번).
             // 비번 빈 값이면 기존 password 유지 (필드 미포함).
             ...(isSessionValid && passwordRaw && passwordRaw.trim().length > 0
