@@ -261,6 +261,8 @@ export default function MultiOfferingEntryPage() {
           저장되지 않고, 입력된 종류만 각각의 연보 항목으로 저장됩니다.
           ↑↓ ← → 로 셀 이동. <strong>Enter</strong> 는 다음 줄의 개인번호 칸으로 점프 (새 행 자동 추가).
           [+ 줄 추가] 또는 [전체 저장] 으로 한꺼번에 입력·저장. 실패한 행만 다시 [저장] 가능.
+          <br />
+          ※ <strong className="text-green-700">저장 완료된 행(초록)</strong> 은 잠겨서 다시 수정·재저장할 수 없습니다. 잘못 입력한 건 [연보일괄수정] 메뉴에서 고쳐 주세요. (중복 저장 방지)
         </p>
       </div>
 
@@ -319,6 +321,15 @@ export default function MultiOfferingEntryPage() {
                 (s, t) => s + (parseInt(r.amounts[t.key] || "0", 10) || 0),
                 0,
               );
+              // 저장된 행은 잠금 — 입력 readOnly 처리해 중복 저장(다시 INSERT) 방지.
+              // 수정은 [연보일괄수정] 메뉴에서 (id 기반 PUT/DELETE).
+              const isLocked = r.status === "saved";
+              const lockedClass = isLocked
+                ? "w-full rounded border border-green-200 bg-green-50/60 px-1.5 py-0.5 text-right font-mono text-gray-600 cursor-not-allowed"
+                : "w-full rounded border border-gray-200 px-1.5 py-0.5 text-right font-mono";
+              const lockedClassDesc = isLocked
+                ? "w-full rounded border border-green-200 bg-green-50/60 px-1.5 py-0.5 text-gray-600 cursor-not-allowed"
+                : "w-full rounded border border-gray-200 px-1.5 py-0.5";
               return (
                 <tr
                   key={idx}
@@ -338,12 +349,13 @@ export default function MultiOfferingEntryPage() {
                       type="text"
                       inputMode="numeric"
                       value={r.memberNo}
+                      readOnly={isLocked}
                       onChange={(e) =>
                         update(idx, { memberNo: e.target.value.replace(/[^\d]/g, "") })
                       }
                       onKeyDown={(e) => onCellKey(e, idx, 0)}
                       placeholder="번호"
-                      className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-right font-mono"
+                      className={lockedClass}
                     />
                   </td>
                   {TYPES.map((t, tIdx) => (
@@ -357,10 +369,11 @@ export default function MultiOfferingEntryPage() {
                             ? ""
                             : (parseInt(r.amounts[t.key], 10) || 0).toLocaleString()
                         }
+                        readOnly={isLocked}
                         onChange={(e) => updateAmount(idx, t.key, e.target.value)}
                         onKeyDown={(e) => onCellKey(e, idx, 1 + tIdx)}
                         placeholder="0"
-                        className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-right font-mono"
+                        className={lockedClass}
                       />
                     </td>
                   ))}
@@ -369,9 +382,10 @@ export default function MultiOfferingEntryPage() {
                       ref={setCellRef(idx, COLS_PER_ROW - 1)}
                       type="text"
                       value={r.description}
+                      readOnly={isLocked}
                       onChange={(e) => update(idx, { description: e.target.value })}
                       onKeyDown={(e) => onCellKey(e, idx, COLS_PER_ROW - 1)}
-                      className="w-full rounded border border-gray-200 px-1.5 py-0.5"
+                      className={lockedClassDesc}
                     />
                   </td>
                   <td className="px-2 py-1 text-center whitespace-nowrap">
@@ -379,16 +393,18 @@ export default function MultiOfferingEntryPage() {
                       <button
                         type="button"
                         onClick={() => saveRow(idx)}
-                        disabled={r.status === "saving" || rowSum === 0}
+                        disabled={r.status === "saving" || rowSum === 0 || isLocked}
                         className="w-12 rounded bg-blue-600 px-2 py-0.5 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
+                        title={isLocked ? "이미 저장됨 — 수정은 [연보일괄수정] 에서" : ""}
                       >
-                        {r.status === "saving" ? "..." : "저장"}
+                        {r.status === "saving" ? "..." : isLocked ? "✓" : "저장"}
                       </button>
                       <button
                         type="button"
                         onClick={() => removeRow(idx)}
-                        disabled={rows.length === 1}
+                        disabled={rows.length === 1 || isLocked}
                         className="w-8 rounded bg-gray-300 px-1 py-0.5 text-xs text-white hover:bg-gray-400 disabled:opacity-30"
+                        title={isLocked ? "저장된 행은 화면에서 제거 불가" : ""}
                       >
                         ✕
                       </button>
