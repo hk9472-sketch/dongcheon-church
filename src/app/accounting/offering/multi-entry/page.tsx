@@ -18,7 +18,8 @@ type RowStatus = "dirty" | "saving" | "saved" | "error";
 
 interface Row {
   memberNo: string;
-  amounts: Record<string, string>; // TYPES.key → 입력 문자열
+  amounts: Record<string, string>;       // TYPES.key → 입력 문자열
+  savedIds: Record<string, number>;      // TYPES.key → OfferingEntry.id (저장 후 보관, 수정/삭제용)
   description: string;
   status: RowStatus;
   message?: string;
@@ -34,6 +35,7 @@ function blankRow(): Row {
   return {
     memberNo: "",
     amounts: Object.fromEntries(TYPES.map((t) => [t.key, ""])),
+    savedIds: {},
     description: "",
     status: "dirty",
   };
@@ -72,28 +74,32 @@ export default function MultiOfferingEntryPage() {
 
   const saveRow = async (idx: number) => {
     const r = rows[idx];
-    // 0 보다 큰 amount 가 있는 종류만 entry 로
-    // memberId 는 입력한 개인번호를 그대로 사용 (성명 조회 안 함, soft FK 라 미등록도 허용)
     const noTrim = r.memberNo.trim();
     const memberId = noTrim ? parseInt(noTrim, 10) : null;
-    const entries = TYPES.flatMap((t) => {
-      const n = parseInt(r.amounts[t.key] || "0", 10);
-      if (!Number.isFinite(n) || n <= 0) return [];
-      return [
-        {
-          date,
-          memberId: memberId && Number.isFinite(memberId) ? memberId : null,
-          offeringType: t.key,
-          amount: n,
-          description: r.description || null,
-        },
-      ];
-    });
+    const memberIdForBody =
+      memberId !== null && Number.isFinite(memberId) ? memberId : null;
 
-    if (entries.length === 0) {
+    // 종류별로 (id 있음/없음) × (금액 > 0 / = 0) 4 분기 분류
+    const toCreate: { offeringType: string; amount: number }[] = [];
+    const toUpdate: { id: number; offeringType: string; amount: number }[] = [];
+    const toDelete: { id: number; offeringType: string }[] = [];
+    for (const t of TYPES) {
+      const amt = parseInt(r.amounts[t.key] || "0", 10) || 0;
+      const existingId = r.savedIds[t.key];
+      if (existingId && amt > 0) {
+        toUpdate.push({ id: existingId, offeringType: t.key, amount: amt });
+      } else if (existingId && amt === 0) {
+        toDelete.push({ id: existingId, offeringType: t.key });
+      } else if (!existingId && amt > 0) {
+        toCreate.push({ offeringType: t.key, amount: amt });
+      }
+      // 그 외(!existingId && amt===0): no-op
+    }
+
+    if (toCreate.length === 0 && toUpdate.length === 0 && toDelete.length === 0) {
       setRows((p) => {
         const n = [...p];
-        n[idx] = { ...n[idx], status: "error", message: "금액 입력 없음" };
+        n[idx] = { ...n[idx], status: "error", message: "변경된 항목 없음" };
         return n;
       });
       return;
@@ -106,26 +112,84 @@ export default function MultiOfferingEntryPage() {
     });
 
     try {
-      const res = await fetch("/api/accounting/offering/entries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entries, date }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "저장 실패");
+      const newIds: Record<string, number> = { ...r.savedIds };
+
+      // 1) DELETE
+      for (const d of toDelete) {
+        const res = await fetch(`/api/accounting/offering/entries/${d.id}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.error || `${d.offeringType} 삭제 실패`);
+        }
+        delete newIds[d.offeringType];
+      }
+
+      // 2) UPDATE
+      for (const u of toUpdate) {
+        const res = await fetch(`/api/accounting/offering/entries/${u.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date,
+            memberId: memberIdForBody,
+            offeringType: u.offeringType,
+            amount: u.amount,
+            description: r.description || null,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.error || `${u.offeringType} 수정 실패`);
+        }
+      }
+
+      // 3) CREATE — 배치
+      if (toCreate.length > 0) {
+        const res = await fetch("/api/accounting/offering/entries", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date,
+            entries: toCreate.map((c) => ({
+              date,
+              memberId: memberIdForBody,
+              offeringType: c.offeringType,
+              amount: c.amount,
+              description: r.description || null,
+            })),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "저장 실패");
+        // 응답의 entries 배열에서 id 매핑
+        const createdArr: Array<{ id: number; offeringType: string }> =
+          data.entries || [];
+        for (const c of createdArr) {
+          if (c.id && c.offeringType) newIds[c.offeringType] = c.id;
+        }
+      }
+
+      const summary = [
+        toCreate.length > 0 ? `신규 ${toCreate.length}` : null,
+        toUpdate.length > 0 ? `수정 ${toUpdate.length}` : null,
+        toDelete.length > 0 ? `삭제 ${toDelete.length}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+
       setRows((p) => {
         const n = [...p];
         n[idx] = {
           ...n[idx],
+          savedIds: newIds,
           status: "saved",
-          message: `저장됨 (${entries.length}건)`,
+          message: summary || "저장됨",
         };
-        // 일괄 저장 중에는 자동 행 추가 안 함 (행 인덱스가 흔들려 다음 행 저장이 어긋남)
         if (!savingAllRef.current && idx === n.length - 1) n.push(blankRow());
         return n;
       });
-      // 일괄 저장 중에는 포커스 이동도 안 함 (다른 행 input 으로 옮겨가면서
-      // 사용자의 입력 흐름이 끊기는 현상 방지)
       if (!savingAllRef.current) {
         setTimeout(() => {
           cellRefs.current[idx + 1]?.[0]?.focus();
@@ -262,7 +326,7 @@ export default function MultiOfferingEntryPage() {
           ↑↓ ← → 로 셀 이동. <strong>Enter</strong> 는 다음 줄의 개인번호 칸으로 점프 (새 행 자동 추가).
           [+ 줄 추가] 또는 [전체 저장] 으로 한꺼번에 입력·저장. 실패한 행만 다시 [저장] 가능.
           <br />
-          ※ <strong className="text-green-700">저장 완료된 행(초록)</strong> 은 잠겨서 다시 수정·재저장할 수 없습니다. 잘못 입력한 건 [연보일괄수정] 메뉴에서 고쳐 주세요. (중복 저장 방지)
+          ※ <strong className="text-green-700">저장된 행(초록)</strong> 도 수정·삭제 가능합니다. 금액 변경 후 [저장] 누르면 그 종류만 수정, 0 으로 비우고 [저장] 누르면 그 종류만 삭제됩니다 (id 기반 PUT/DELETE).
         </p>
       </div>
 
@@ -321,15 +385,11 @@ export default function MultiOfferingEntryPage() {
                 (s, t) => s + (parseInt(r.amounts[t.key] || "0", 10) || 0),
                 0,
               );
-              // 저장된 행은 잠금 — 입력 readOnly 처리해 중복 저장(다시 INSERT) 방지.
-              // 수정은 [연보일괄수정] 메뉴에서 (id 기반 PUT/DELETE).
-              const isLocked = r.status === "saved";
-              const lockedClass = isLocked
-                ? "w-full rounded border border-green-200 bg-green-50/60 px-1.5 py-0.5 text-right font-mono text-gray-600 cursor-not-allowed"
-                : "w-full rounded border border-gray-200 px-1.5 py-0.5 text-right font-mono";
-              const lockedClassDesc = isLocked
-                ? "w-full rounded border border-green-200 bg-green-50/60 px-1.5 py-0.5 text-gray-600 cursor-not-allowed"
-                : "w-full rounded border border-gray-200 px-1.5 py-0.5";
+              const hasSavedIds = Object.keys(r.savedIds).length > 0;
+              // 입력은 항상 열려 있고, saved 상태에서 수정하면 status=dirty 로 자연 전환.
+              // 저장 시 종류별로 신규/수정/삭제 분기 처리 (saveRow).
+              const cellClass = "w-full rounded border border-gray-200 px-1.5 py-0.5 text-right font-mono";
+              const cellClassDesc = "w-full rounded border border-gray-200 px-1.5 py-0.5";
               return (
                 <tr
                   key={idx}
@@ -349,13 +409,12 @@ export default function MultiOfferingEntryPage() {
                       type="text"
                       inputMode="numeric"
                       value={r.memberNo}
-                      readOnly={isLocked}
                       onChange={(e) =>
                         update(idx, { memberNo: e.target.value.replace(/[^\d]/g, "") })
                       }
                       onKeyDown={(e) => onCellKey(e, idx, 0)}
                       placeholder="번호"
-                      className={lockedClass}
+                      className={cellClass}
                     />
                   </td>
                   {TYPES.map((t, tIdx) => (
@@ -369,11 +428,10 @@ export default function MultiOfferingEntryPage() {
                             ? ""
                             : (parseInt(r.amounts[t.key], 10) || 0).toLocaleString()
                         }
-                        readOnly={isLocked}
                         onChange={(e) => updateAmount(idx, t.key, e.target.value)}
                         onKeyDown={(e) => onCellKey(e, idx, 1 + tIdx)}
                         placeholder="0"
-                        className={lockedClass}
+                        className={cellClass}
                       />
                     </td>
                   ))}
@@ -382,10 +440,9 @@ export default function MultiOfferingEntryPage() {
                       ref={setCellRef(idx, COLS_PER_ROW - 1)}
                       type="text"
                       value={r.description}
-                      readOnly={isLocked}
                       onChange={(e) => update(idx, { description: e.target.value })}
                       onKeyDown={(e) => onCellKey(e, idx, COLS_PER_ROW - 1)}
-                      className={lockedClassDesc}
+                      className={cellClassDesc}
                     />
                   </td>
                   <td className="px-2 py-1 text-center whitespace-nowrap">
@@ -393,18 +450,18 @@ export default function MultiOfferingEntryPage() {
                       <button
                         type="button"
                         onClick={() => saveRow(idx)}
-                        disabled={r.status === "saving" || rowSum === 0 || isLocked}
+                        disabled={r.status === "saving" || (rowSum === 0 && !hasSavedIds)}
                         className="w-12 rounded bg-blue-600 px-2 py-0.5 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
-                        title={isLocked ? "이미 저장됨 — 수정은 [연보일괄수정] 에서" : ""}
+                        title={hasSavedIds ? "수정·삭제 가능" : "신규 저장"}
                       >
-                        {r.status === "saving" ? "..." : isLocked ? "✓" : "저장"}
+                        {r.status === "saving" ? "..." : "저장"}
                       </button>
                       <button
                         type="button"
                         onClick={() => removeRow(idx)}
-                        disabled={rows.length === 1 || isLocked}
+                        disabled={rows.length === 1 || hasSavedIds}
                         className="w-8 rounded bg-gray-300 px-1 py-0.5 text-xs text-white hover:bg-gray-400 disabled:opacity-30"
-                        title={isLocked ? "저장된 행은 화면에서 제거 불가" : ""}
+                        title={hasSavedIds ? "DB 에 저장된 행 — 금액을 0 으로 비우고 [저장] 누르면 해당 종류 삭제" : "화면에서 행 제거"}
                       >
                         ✕
                       </button>

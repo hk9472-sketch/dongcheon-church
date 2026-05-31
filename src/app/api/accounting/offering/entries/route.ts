@@ -134,24 +134,40 @@ export async function POST(req: NextRequest) {
 
   const createdBy = access.user?.name || String(access.userId ?? "");
 
-  const created = await prisma.offeringEntry.createMany({
-    data: entries.map(
+  // createMany 는 id 를 반환하지 않으므로(MySQL), 개별 create 를 트랜잭션으로 묶음.
+  // multi-entry 페이지가 응답 id 를 보관해 이후 PUT/DELETE 로 수정·삭제 가능하게 함.
+  const created = await prisma.$transaction(
+    entries.map(
       (e: {
         date: string;
         memberId: number | null;
         offeringType: string;
         amount: number;
         description?: string;
-      }) => ({
-        date: toDateOnly(e.date),
-        memberId: e.memberId,
-        offeringType: e.offeringType,
-        amount: e.amount,
-        description: e.description?.trim() || null,
-        createdBy,
-      })
+      }) =>
+        prisma.offeringEntry.create({
+          data: {
+            date: toDateOnly(e.date),
+            memberId: e.memberId,
+            offeringType: e.offeringType,
+            amount: e.amount,
+            description: e.description?.trim() || null,
+            createdBy,
+          },
+          select: {
+            id: true,
+            date: true,
+            memberId: true,
+            offeringType: true,
+            amount: true,
+            description: true,
+          },
+        }),
     ),
-  });
+  );
 
-  return NextResponse.json({ count: created.count }, { status: 201 });
+  return NextResponse.json(
+    { count: created.length, entries: created },
+    { status: 201 },
+  );
 }
