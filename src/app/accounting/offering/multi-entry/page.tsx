@@ -164,6 +164,20 @@ export default function MultiOfferingEntryPage() {
     } finally {
       savingAllRef.current = false;
       setSavingAll(false);
+      // 결과 요약 — 가장 최신 rows 상태를 확인해 알림
+      setRows((p) => {
+        const errCount = p.filter((r) => r.status === "error").length;
+        const savedCount = p.filter((r) => r.status === "saved").length;
+        if (errCount > 0) {
+          setError(
+            `전체 저장 완료 — 성공 ${savedCount}건, 실패 ${errCount}건. ` +
+              `빨간 행의 [저장] 을 다시 누르거나 [전체 저장] 으로 재시도하세요.`,
+          );
+        } else if (savedCount > 0) {
+          setError(null);
+        }
+        return p;
+      });
     }
   };
 
@@ -184,7 +198,17 @@ export default function MultiOfferingEntryPage() {
     row: number,
     col: number,
   ) => {
-    if (e.key === "ArrowDown" || e.key === "Enter") {
+    if (e.key === "Enter") {
+      // Enter: 다음 줄의 첫 칸(개인번호) 으로 이동 — 다음 행 입력 시작
+      e.preventDefault();
+      if (row === rows.length - 1) {
+        setRows((p) => [...p, blankRow()]);
+        setTimeout(() => focusCell(row + 1, 0), 0);
+      } else {
+        focusCell(row + 1, 0);
+      }
+    } else if (e.key === "ArrowDown") {
+      // ↓: 같은 컬럼 다음 행 (세로 이동)
       e.preventDefault();
       if (row === rows.length - 1) {
         setRows((p) => [...p, blankRow()]);
@@ -235,8 +259,8 @@ export default function MultiOfferingEntryPage() {
         <p className="text-xs text-gray-500 mt-1">
           한 회원의 여러 종류 연보를 한 줄에 입력합니다. 0 이거나 빈 칸인 종류는
           저장되지 않고, 입력된 종류만 각각의 연보 항목으로 저장됩니다.
-          키보드 ↑↓←→ 로 셀 이동, 마지막 행에서 ↓/Enter 누르면 새 빈 행 추가.
-          [+ 줄 추가] 또는 [전체 저장] 으로 한꺼번에 입력·저장 가능.
+          ↑↓ ← → 로 셀 이동. <strong>Enter</strong> 는 다음 줄의 개인번호 칸으로 점프 (새 행 자동 추가).
+          [+ 줄 추가] 또는 [전체 저장] 으로 한꺼번에 입력·저장. 실패한 행만 다시 [저장] 가능.
         </p>
       </div>
 
@@ -385,17 +409,17 @@ export default function MultiOfferingEntryPage() {
           </tbody>
           <tfoot>
             <tr className="border-t-2 bg-gray-100 font-semibold text-xs">
-              <td colSpan={2} className="px-2 py-2 text-right">
-                종류별 합계
-              </td>
+              {/* 개인번호 칸 아래 — '종류별 합계' 라벨 */}
+              <td className="px-2 py-2 text-center text-gray-600">종류별 합계</td>
               {TYPES.map((t) => (
                 <td key={t.key} className="px-2 py-2 text-right text-indigo-700 font-mono">
                   {totalsPerType[t.key] > 0 ? fmt(totalsPerType[t.key]) : ""}
                 </td>
               ))}
-              <td className="px-2 py-2 text-right">총계</td>
-              <td className="px-2 py-2 text-right text-indigo-800 font-mono">
-                {fmt(grandTotal)}
+              {/* 비고 + 작업 칸 합쳐서 총계 표시 */}
+              <td colSpan={2} className="px-2 py-2 text-right">
+                <span className="text-gray-600 mr-2">총계</span>
+                <span className="text-indigo-800 font-mono text-sm">{fmt(grandTotal)}</span>
               </td>
             </tr>
           </tfoot>
