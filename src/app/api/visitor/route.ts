@@ -156,11 +156,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { path, referer, userAgent, userId } = body as {
+    const { path, referer, userAgent, userId, sessionId } = body as {
       path?: string;
       referer?: string;
       userAgent?: string;
       userId?: number;
+      sessionId?: string;
     };
 
     // 봇/크롤러 필터링 (UA 기반)
@@ -217,6 +218,7 @@ export async function POST(request: NextRequest) {
           referer: referer || null,
           userAgent: userAgent || null,
           userId: userId || null,
+          sessionId: sessionId ? String(sessionId).slice(0, 64) : null,
         },
       });
     } else {
@@ -237,6 +239,7 @@ export async function POST(request: NextRequest) {
             referer: referer || null,
             userAgent: userAgent || null,
             userId: userId || null,
+            sessionId: sessionId ? String(sessionId).slice(0, 64) : null,
           },
         }),
       ]);

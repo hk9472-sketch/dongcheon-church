@@ -621,10 +621,43 @@ model VisitLog {
   userId    Int?                                 // 로그인 사용자 (nullable)
   createdAt DateTime @default(now())
 
+  // 체류시간 측정 — 클라가 20초마다 hb 를 보내면 dwellSec 누적.
+  // fly-by 컷오프(<60s) 로 통계에서 제외하는 데 사용.
+  sessionId String?  @db.VarChar(64)            // 클라 발급 (localStorage)
+  dwellSec  Int      @default(0)
+  lastHbAt  DateTime?
+
   @@index([createdAt])
   @@index([ip])
   @@index([createdAt, ip])
+  @@index([sessionId, path])
   @@map("visit_logs")
+}
+
+// ============================================================
+// ServiceInstance — "단위 예배 1회" 모델.
+// 자동 생성: 매일 KST 자정에 그날 요일의 정기 예배(SiteSetting.live_service_windows)
+//            로부터 lazy upsert. 또는 통계 조회 시 lazy upsert.
+// 부흥회/특별집회는 isRegular=false 로 수동 추가.
+// 통계는 항상 ServiceInstance.id 단위로 집계 → 단일 숫자 보장.
+// ============================================================
+model ServiceInstance {
+  id          Int      @id @default(autoincrement())
+  code        String   @db.VarChar(32)     // dawn / sun_adult_am / special_xxx
+  label       String   @db.VarChar(100)
+  serviceDate DateTime @db.Date            // KST 기준 날짜
+  startAt     DateTime                     // 절대 시각 (UTC 저장)
+  endAt       DateTime
+  isRegular   Boolean  @default(true)      // false = 부흥회/특별집회
+  closedAt    DateTime?                    // 통계 확정(잠금) 시각
+  notes       String?  @db.Text
+
+  attendances LiveAttendance[]
+
+  @@unique([code, serviceDate])
+  @@index([serviceDate])
+  @@index([startAt])
+  @@map("service_instances")
 }
 
 // ============================================================
@@ -844,7 +877,17 @@ model LiveAttendance {
   ip        String?  @db.VarChar(45)
   createdAt DateTime @default(now())
 
+  // 단위 예배 매핑 + 회원 식별 (1회/예배 제약, 다인원 가족은 별 row 로 허용).
+  userId            Int?
+  sessionId         String?          @db.VarChar(64)
+  serviceInstanceId Int?
+  serviceInstance   ServiceInstance? @relation(fields: [serviceInstanceId], references: [id], onDelete: SetNull)
+
+  // 같은 예배에 같은 회원 1회 (이름이 같아도 회원이 다르면 OK).
+  @@unique([serviceInstanceId, userId], name: "uniq_attendance_user")
   @@index([createdAt])
+  @@index([serviceInstanceId])
+  @@index([serviceInstanceId, ip])
   @@map("live_attendances")
 }
 

@@ -80,7 +80,7 @@ export default function LiveStatsPage() {
   const [current, setCurrent] = useState<{ label: string; inProgress: boolean; currentCount: number } | null>(null);
   const [youtube, setYoutube] = useState<{ enabled: boolean; concurrent: number; cumulative: number }>({ enabled: false, concurrent: 0, cumulative: 0 });
   // 탭 — windows / stats / log
-  const [tab, setTab] = useState<"windows" | "stats" | "log">("windows");
+  const [tab, setTab] = useState<"byService" | "windows" | "stats" | "log">("byService");
   // 기간 — 기본은 최근 14일
   const todayStr = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
   const fourteenAgoStr = new Date(Date.now() + 9 * 3600 * 1000 - 13 * 24 * 3600 * 1000)
@@ -285,6 +285,7 @@ export default function LiveStatsPage() {
       {/* 탭 네비게이션 */}
       <div className="flex border-b border-gray-200">
         {[
+          { key: "byService", label: "예배별 (신뢰도 분리)", icon: "🎯" },
           { key: "windows", label: "서비스 시간 설정", icon: "⏰" },
           { key: "stats", label: "기간 일자별 통계", icon: "📊" },
           { key: "log", label: "방문 로그", icon: "📋" },
@@ -292,7 +293,7 @@ export default function LiveStatsPage() {
           <button
             key={t.key}
             type="button"
-            onClick={() => setTab(t.key as "windows" | "stats" | "log")}
+            onClick={() => setTab(t.key as "windows" | "stats" | "log" | "byService")}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               tab === t.key
                 ? "border-blue-600 text-blue-700 bg-blue-50/50"
@@ -306,6 +307,8 @@ export default function LiveStatsPage() {
       </div>
 
       {/* === 탭 2: 기간 일자별 통계 === */}
+      {tab === "byService" && <ByServiceTab />}
+
       {tab === "stats" && (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
@@ -574,6 +577,196 @@ export default function LiveStatsPage() {
         )}
       </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// [예배별] 탭 — 단위 예배(ServiceInstance) 카드 + 3출처 분리 통계
+// ============================================================
+
+interface ServiceStat {
+  id: number;
+  code: string;
+  label: string;
+  startAt: string;
+  endAt: string;
+  isRegular: boolean;
+  closedAt: string | null;
+  selfReport: { count: number; method: string };
+  webDwell: { count: number; threshold: string; dedupWithSelfReport: boolean };
+  youtube: { peak: number; avg: number; cumulativeDelta: number };
+  estimate: { value: number; formula: string };
+}
+
+function todayKstStr(): string {
+  const d = new Date();
+  const kst = new Date(d.getTime() + 9 * 3600 * 1000);
+  return kst.toISOString().slice(0, 10);
+}
+
+function ByServiceTab() {
+  const [date, setDate] = useState<string>(todayKstStr());
+  const [services, setServices] = useState<ServiceStat[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/live/service-stats?date=${date}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "조회 실패");
+      setServices(data.services || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "조회 실패");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
+
+  const fmtTime = (iso: string) => {
+    const d = new Date(iso);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-gray-200 rounded-lg p-3 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">날짜</label>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="px-2 py-1 border border-gray-300 rounded text-sm"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+        >
+          새로고침
+        </button>
+        <p className="ml-auto text-[11px] text-gray-500 max-w-md leading-snug">
+          한 예배(ServiceInstance) 당 1장의 카드. 자기보고·웹체류·유튜브를 분리해 표시.
+          YouTube 수치는 보조 지표(★) 라 자기보고+웹체류와 별도로 봅니다.
+        </p>
+      </div>
+
+      {error && (
+        <div className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+      {loading && <div className="text-sm text-gray-400">불러오는 중...</div>}
+
+      {!loading && services.length === 0 && (
+        <div className="text-sm text-gray-400 py-8 text-center bg-white border border-dashed border-gray-200 rounded-lg">
+          이 날짜에 등록된 예배가 없습니다.
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        {services.map((s) => (
+          <div
+            key={s.id}
+            className="bg-white border border-gray-200 rounded-lg overflow-hidden"
+          >
+            <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">
+                  {s.label}
+                  {!s.isRegular && (
+                    <span className="ml-2 text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                      임시
+                    </span>
+                  )}
+                </h3>
+                <p className="text-[11px] text-gray-500 font-mono">
+                  {fmtTime(s.startAt)} – {fmtTime(s.endAt)}
+                </p>
+              </div>
+              {s.closedAt && (
+                <span className="text-[10px] text-gray-600 bg-gray-200 px-2 py-0.5 rounded">
+                  🔒 확정됨
+                </span>
+              )}
+            </div>
+            <div className="p-3 space-y-2 text-sm">
+              <Row
+                color="emerald"
+                stars="★★★"
+                label="자기보고"
+                value={s.selfReport.count}
+                sub={s.selfReport.method}
+              />
+              <Row
+                color="blue"
+                stars="★★"
+                label="웹 체류"
+                value={s.webDwell.count}
+                sub={`${s.webDwell.threshold} · 자기보고와 dedup`}
+              />
+              <Row
+                color="amber"
+                stars="★ 보조"
+                label="YouTube"
+                value={s.youtube.peak}
+                sub={`peak / 평균 ${s.youtube.avg} (산술합산 금지)`}
+              />
+              <div className="border-t border-gray-200 pt-2 flex items-baseline justify-between">
+                <div>
+                  <p className="text-[11px] text-gray-500">추정 참석 (selfReport ∪ webDwell)</p>
+                </div>
+                <p className="text-2xl font-bold text-indigo-700 font-mono">
+                  {s.estimate.value}
+                  <span className="text-sm text-gray-400 ml-1">명</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Row({
+  color,
+  stars,
+  label,
+  value,
+  sub,
+}: {
+  color: "emerald" | "blue" | "amber";
+  stars: string;
+  label: string;
+  value: number;
+  sub: string;
+}) {
+  const colorMap = {
+    emerald: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
+    blue: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-500" },
+    amber: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500" },
+  }[color];
+  return (
+    <div className={`flex items-baseline justify-between gap-2 ${colorMap.bg} px-2 py-1.5 rounded`}>
+      <div className="flex items-baseline gap-2 min-w-0">
+        <span className={`inline-block w-2 h-2 rounded-full ${colorMap.dot}`} />
+        <span className={`font-semibold ${colorMap.text}`}>{label}</span>
+        <span className="text-[10px] text-gray-500">{stars}</span>
+        <span className="text-[10px] text-gray-400 truncate">{sub}</span>
+      </div>
+      <span className="text-lg font-bold font-mono text-gray-800">{value}</span>
     </div>
   );
 }

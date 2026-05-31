@@ -3,32 +3,69 @@
 import { useState, useEffect } from "react";
 import CaptchaField from "@/components/CaptchaField";
 
+interface CurrentService {
+  instance: { id: number; code: string; label: string; startAt: string; endAt: string } | null;
+  phase?: "in_progress" | "grace";
+}
+
+const SESSION_KEY = "dc_session_visitor_id.v1";
+function getSessionId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return localStorage.getItem(SESSION_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
 export default function LiveAttendanceForm() {
   const [names, setNames] = useState<string[]>([""]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // 로그인 여부 확인 (로그인 사용자는 CAPTCHA 생략)
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const [captchaAnswer, setCaptchaAnswer] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
-  // CAPTCHA 를 매 제출 후 갱신하기 위한 키
   const [captchaKey, setCaptchaKey] = useState(0);
+
+  // 현재 예배(ServiceInstance) 정보 — 폼 노출 판단
+  const [currentService, setCurrentService] = useState<CurrentService | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/auth/me", { cache: "no-store" });
-        const data = await res.json();
-        if (!cancelled) setIsLoggedIn(!!data?.user);
+        const [meRes, svcRes] = await Promise.all([
+          fetch("/api/auth/me", { cache: "no-store" }),
+          fetch("/api/live/current-service", { cache: "no-store" }),
+        ]);
+        const meData = await meRes.json();
+        const svcData = (await svcRes.json()) as CurrentService;
+        if (!cancelled) {
+          setIsLoggedIn(!!meData?.user);
+          setCurrentService(svcData);
+        }
       } catch {
-        if (!cancelled) setIsLoggedIn(false);
+        if (!cancelled) {
+          setIsLoggedIn(false);
+          setCurrentService({ instance: null });
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // 1분마다 현재 예배 정보 재조회 — 예배 시작/끝 경계 자동 반영
+  useEffect(() => {
+    const t = setInterval(() => {
+      fetch("/api/live/current-service", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => setCurrentService(d))
+        .catch(() => {});
+    }, 60_000);
+    return () => clearInterval(t);
   }, []);
 
   function addRow() {
@@ -63,7 +100,10 @@ export default function LiveAttendanceForm() {
     setSubmitting(true);
     setMessage(null);
     try {
-      const payload: Record<string, unknown> = { names: valid };
+      const payload: Record<string, unknown> = {
+        names: valid,
+        sessionId: getSessionId() || undefined,
+      };
       if (isLoggedIn === false) {
         payload.captchaAnswer = captchaAnswer;
         payload.captchaToken = captchaToken;
@@ -115,10 +155,22 @@ export default function LiveAttendanceForm() {
   // 현지와 한국의 날짜+시간이 다르면 외국으로 판단
   const isAbroad = localDate !== kstDate || localTime !== kstTime;
 
+  const hasActiveService = !!currentService?.instance;
+  const serviceLabel = currentService?.instance?.label;
+  const phase = currentService?.phase;
+
   return (
     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-bold text-green-800">실시간 예배 참여</h3>
+        <h3 className="text-sm font-bold text-green-800">
+          실시간 예배 참여
+          {hasActiveService && (
+            <span className="ml-2 text-[11px] font-normal text-green-700">
+              ({serviceLabel}
+              {phase === "grace" ? " · 종료 후 30분" : " · 진행 중"})
+            </span>
+          )}
+        </h3>
         <div className="text-right">
           <div className="text-[11px] text-green-600 font-mono">{localDate} {localTime}</div>
           {isAbroad && (
@@ -126,6 +178,16 @@ export default function LiveAttendanceForm() {
           )}
         </div>
       </div>
+
+      {/* 예배 시간이 아니면 비활성 안내 — 폼 자체는 안 보임 */}
+      {!hasActiveService && currentService !== null && (
+        <div className="text-xs text-gray-500 bg-white/60 border border-gray-200 rounded p-3 text-center">
+          지금은 예배 시간이 아닙니다. 예배 진행 중에만 참여 등록이 가능합니다.
+        </div>
+      )}
+
+      {hasActiveService && (
+      <>
       <p className="text-xs text-green-600 mb-3">시청하시는 분의 이름이나 구역 및 인원수를 입력해 주세요.</p>
 
       <div className="space-y-2 mb-3">
@@ -193,6 +255,8 @@ export default function LiveAttendanceForm() {
         }`}>
           {message.text}
         </div>
+      )}
+      </>
       )}
     </div>
   );

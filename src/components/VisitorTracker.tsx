@@ -4,16 +4,31 @@ import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 
 /**
- * VisitorTracker - 방문자 추적 컴포넌트
+ * VisitorTracker - 방문자 추적 + 체류시간(heartbeat) 측정
  *
- * 페이지 이동 시 /api/visitor 로 POST 요청을 보내 방문 기록을 저장합니다.
- * - 같은 세션에서 동일 경로 새로고침 시 중복 전송하지 않음
- * - 서버 측에서도 같은 IP는 하루 1회만 카운트
- * - 페이지 진입 후 DWELL_MS 동안 머물러야 카운트 (히트앤런 봇 거름)
- *   3초 안에 떠나면 cleanup 에서 setTimeout 취소되어 POST 자체가 안 나감
- * 렌더링되는 UI 요소는 없습니다.
+ * - mount 후 3초 머무르면 /api/visitor POST (방문 기록)
+ * - 그 후 20초마다 /api/visitor/hb 호출하여 dwellSec 누적
+ * - 페이지 이동/탭 닫기 시 sendBeacon 으로 마지막 보정
+ *
+ * sessionId 는 브라우저 단위 (localStorage). userId 와 함께 단단한 dedup 키.
  */
-const DWELL_MS = 3000;
+const DWELL_MS = 3000;        // 첫 POST 까지 대기
+const HB_INTERVAL_MS = 20000; // heartbeat 간격
+const SESSION_KEY = "dc_session_visitor_id.v1";
+
+function getOrCreateSessionId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    let v = localStorage.getItem(SESSION_KEY);
+    if (!v) {
+      v = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem(SESSION_KEY, v);
+    }
+    return v;
+  } catch {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
 
 export default function VisitorTracker() {
   const pathname = usePathname();
@@ -64,10 +79,13 @@ export default function VisitorTracker() {
     }
     sentPaths.current.add(pathname);
 
+    const sessionId = getOrCreateSessionId();
+    let posted = false;
+    let hbTimer: ReturnType<typeof setInterval> | null = null;
+
     // 페이지 진입 후 DWELL_MS 동안 머문 경우에만 방문 기록 전송.
-    // 페이지 떠나면 (pathname 변경 → cleanup 실행) clearTimeout 으로 취소되어
-    // hit-and-run 봇은 카운트되지 않음. 첫 방문자라도 페이지 본 사람은 보존.
     const timer = setTimeout(() => {
+      posted = true;
       fetch("/api/visitor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -75,13 +93,40 @@ export default function VisitorTracker() {
           path: pathname,
           referer: document.referrer || null,
           userAgent: navigator.userAgent,
+          sessionId,
         }),
-      }).catch(() => {
-        // 방문자 추적 실패는 무시 (사용자 경험에 영향 없음)
-      });
+      }).catch(() => {});
+
+      // 20초마다 hb. 첫 사이클은 20초 후.
+      hbTimer = setInterval(() => {
+        fetch("/api/visitor/hb", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, path: pathname }),
+          keepalive: true,
+        }).catch(() => {});
+      }, HB_INTERVAL_MS);
     }, DWELL_MS);
 
-    return () => clearTimeout(timer);
+    // 페이지 이동/탭 닫기 시 final hb (sendBeacon)
+    const sendFinal = () => {
+      if (!posted) return;
+      try {
+        const data = JSON.stringify({ sessionId, path: pathname, final: true });
+        const blob = new Blob([data], { type: "application/json" });
+        navigator.sendBeacon?.("/api/visitor/hb", blob);
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener("pagehide", sendFinal);
+
+    return () => {
+      clearTimeout(timer);
+      if (hbTimer) clearInterval(hbTimer);
+      window.removeEventListener("pagehide", sendFinal);
+      sendFinal();
+    };
   }, [pathname]);
 
   return null;
