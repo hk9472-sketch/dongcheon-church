@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import HelpButton from "@/components/HelpButton";
 
 // 한 행에 여러 연보 종류 동시 입력. 빈 칸(0)은 저장 안 함.
@@ -18,8 +18,6 @@ type RowStatus = "dirty" | "saving" | "saved" | "error";
 
 interface Row {
   memberNo: string;
-  memberId: number | null;
-  memberName: string;
   amounts: Record<string, string>; // TYPES.key → 입력 문자열
   description: string;
   status: RowStatus;
@@ -35,8 +33,6 @@ function todayStr(): string {
 function blankRow(): Row {
   return {
     memberNo: "",
-    memberId: null,
-    memberName: "",
     amounts: Object.fromEntries(TYPES.map((t) => [t.key, ""])),
     description: "",
     status: "dirty",
@@ -48,24 +44,11 @@ export default function MultiOfferingEntryPage() {
   const [rows, setRows] = useState<Row[]>([blankRow()]);
   const [error, setError] = useState<string | null>(null);
   const [savingAll, setSavingAll] = useState(false);
-  // 회원이 마스킹 회원인지 (개인번호 권한 없음) → 성명 자동조회 비활성
-  const [canSeeName, setCanSeeName] = useState(true);
   // 셀 참조: cellRefs[row][col] — col 0 = memberNo, 1~6 = 6개 종류 금액, 7 = 비고
   const cellRefs = useRef<Array<Array<HTMLInputElement | null>>>([]);
   const COLS_PER_ROW = 1 + TYPES.length + 1; // = 8
-
-  // 권한 확인 (성명 조회)
-  useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((d) => {
-        const u = d.user;
-        if (!u) return;
-        const admin = u.isAdmin <= 2;
-        setCanSeeName(admin || !!u.accMemberEditAccess);
-      })
-      .catch(() => {});
-  }, []);
+  // saveAll 진행 중에는 자동 행 추가·포커스 이동을 막아 흐름이 깨지지 않게 함
+  const savingAllRef = useRef(false);
 
   const update = (idx: number, patch: Partial<Row>) => {
     setRows((prev) => {
@@ -87,57 +70,19 @@ export default function MultiOfferingEntryPage() {
     });
   };
 
-  /** 개인번호 입력 후 onBlur — 성명 자동 조회 + 마지막 행이면 새 빈 행 추가 */
-  const lookupMember = async (idx: number) => {
-    const r = rows[idx];
-    const no = r.memberNo.trim();
-    if (!no) {
-      update(idx, { memberId: null, memberName: "" });
-      return;
-    }
-    try {
-      const res = await fetch(
-        `/api/accounting/offering/lookup-member?memberNo=${encodeURIComponent(no)}&date=${date}`,
-      );
-      const data = await res.json();
-      let matched = false;
-      if (res.ok && data.id) {
-        update(idx, {
-          memberId: data.id,
-          memberName: data.name ?? "",
-        });
-        matched = true;
-      } else {
-        update(idx, { memberId: null, memberName: "(미등록)" });
-      }
-      // 마지막 행에서 번호가 들어오면(매칭 여부 무관) 새 빈 행 자동 추가
-      setRows((prev) => {
-        if (idx !== prev.length - 1) return prev;
-        if (!no) return prev;
-        return [...prev, blankRow()];
-      });
-      // 매칭되면 첫 금액 칸으로 포커스 이동 (입력 흐름 자연스럽게)
-      if (matched) {
-        setTimeout(() => {
-          cellRefs.current[idx]?.[1]?.focus();
-          cellRefs.current[idx]?.[1]?.select();
-        }, 0);
-      }
-    } catch {
-      update(idx, { memberId: null, memberName: "" });
-    }
-  };
-
   const saveRow = async (idx: number) => {
     const r = rows[idx];
     // 0 보다 큰 amount 가 있는 종류만 entry 로
+    // memberId 는 입력한 개인번호를 그대로 사용 (성명 조회 안 함, soft FK 라 미등록도 허용)
+    const noTrim = r.memberNo.trim();
+    const memberId = noTrim ? parseInt(noTrim, 10) : null;
     const entries = TYPES.flatMap((t) => {
       const n = parseInt(r.amounts[t.key] || "0", 10);
       if (!Number.isFinite(n) || n <= 0) return [];
       return [
         {
           date,
-          memberId: r.memberId,
+          memberId: memberId && Number.isFinite(memberId) ? memberId : null,
           offeringType: t.key,
           amount: n,
           description: r.description || null,
@@ -175,15 +120,18 @@ export default function MultiOfferingEntryPage() {
           status: "saved",
           message: `저장됨 (${entries.length}건)`,
         };
-        // 마지막 행 저장 시 새 빈 행 추가
-        if (idx === n.length - 1) n.push(blankRow());
+        // 일괄 저장 중에는 자동 행 추가 안 함 (행 인덱스가 흔들려 다음 행 저장이 어긋남)
+        if (!savingAllRef.current && idx === n.length - 1) n.push(blankRow());
         return n;
       });
-      // 다음 행 첫 입력 칸(memberNo) 포커스
-      setTimeout(() => {
-        cellRefs.current[idx + 1]?.[0]?.focus();
-        cellRefs.current[idx + 1]?.[0]?.select();
-      }, 0);
+      // 일괄 저장 중에는 포커스 이동도 안 함 (다른 행 input 으로 옮겨가면서
+      // 사용자의 입력 흐름이 끊기는 현상 방지)
+      if (!savingAllRef.current) {
+        setTimeout(() => {
+          cellRefs.current[idx + 1]?.[0]?.focus();
+          cellRefs.current[idx + 1]?.[0]?.select();
+        }, 0);
+      }
     } catch (e) {
       setRows((p) => {
         const n = [...p];
@@ -199,6 +147,7 @@ export default function MultiOfferingEntryPage() {
 
   const saveAll = async () => {
     setSavingAll(true);
+    savingAllRef.current = true;
     setError(null);
     try {
       const dirtyIdx = rows
@@ -206,13 +155,14 @@ export default function MultiOfferingEntryPage() {
         .filter(({ r }) => r.status === "dirty" || r.status === "error")
         .map(({ i }) => i);
       for (const idx of dirtyIdx) {
-        // 빈 행 건너뜀 (memberId 없고 금액도 없음)
+        // 빈 행 건너뜀 (금액도 없음)
         const r = rows[idx];
         const hasAmount = TYPES.some((t) => (parseInt(r.amounts[t.key] || "0", 10) || 0) > 0);
         if (!hasAmount) continue;
         await saveRow(idx);
       }
     } finally {
+      savingAllRef.current = false;
       setSavingAll(false);
     }
   };
@@ -285,7 +235,8 @@ export default function MultiOfferingEntryPage() {
         <p className="text-xs text-gray-500 mt-1">
           한 회원의 여러 종류 연보를 한 줄에 입력합니다. 0 이거나 빈 칸인 종류는
           저장되지 않고, 입력된 종류만 각각의 연보 항목으로 저장됩니다.
-          개인번호 입력 후 Tab 하면 다음 빈 행이 자동 추가되고, 키보드 ↑↓←→ 로 셀 이동.
+          키보드 ↑↓←→ 로 셀 이동, 마지막 행에서 ↓/Enter 누르면 새 빈 행 추가.
+          [+ 줄 추가] 또는 [전체 저장] 으로 한꺼번에 입력·저장 가능.
         </p>
       </div>
 
@@ -329,7 +280,6 @@ export default function MultiOfferingEntryPage() {
           <thead className="border-b bg-gray-50 text-xs text-gray-600">
             <tr>
               <th className="px-2 py-2 text-left font-medium w-20">개인번호</th>
-              <th className="px-2 py-2 text-left font-medium w-24">성명</th>
               {TYPES.map((t) => (
                 <th key={t.key} className="px-2 py-2 text-right font-medium w-24">
                   {t.label}
@@ -367,14 +317,10 @@ export default function MultiOfferingEntryPage() {
                       onChange={(e) =>
                         update(idx, { memberNo: e.target.value.replace(/[^\d]/g, "") })
                       }
-                      onBlur={() => lookupMember(idx)}
                       onKeyDown={(e) => onCellKey(e, idx, 0)}
                       placeholder="번호"
                       className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-right font-mono"
                     />
-                  </td>
-                  <td className="px-2 py-1 text-gray-700">
-                    {r.memberName || <span className="text-gray-300">—</span>}
                   </td>
                   {TYPES.map((t, tIdx) => (
                     <td key={t.key} className="px-2 py-1">
