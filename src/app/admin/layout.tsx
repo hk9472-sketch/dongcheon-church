@@ -34,7 +34,6 @@ const ADMIN_GROUPS: { key: string; label: string; items: Item[] }[] = [
     key: "monitor",
     label: "모니터링",
     items: [
-      { label: "실시간 통계", href: "/admin/live-stats", icon: "📡" },
       { label: "방문 로그", href: "/admin/visit-logs", icon: "📑" },
     ],
   },
