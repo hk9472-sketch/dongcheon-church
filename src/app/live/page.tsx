@@ -79,7 +79,7 @@ export default function LivePage() {
             href={youtubeUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2.5 px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 text-sm font-medium rounded shadow-sm transition-colors"
+            className="inline-flex items-center gap-2.5 px-3.5 py-2 bg-white border-2 border-gray-900 hover:bg-gray-50 text-gray-900 text-sm font-bold rounded-md transition-colors"
             aria-label="Watch on YouTube"
           >
             {/* 공식 YouTube 로고 SVG — 색상/비율 변경 금지 (#FF0000 + #FFFFFF) */}
