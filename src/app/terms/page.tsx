@@ -46,6 +46,7 @@ export default async function TermsPage() {
               <li><a href="#a7" className="hover:underline">제7조 (서비스의 제공 및 중단)</a></li>
               <li><a href="#a8" className="hover:underline">제8조 (게시물의 관리 및 저작권)</a></li>
               <li><a href="#a9" className="hover:underline">제9조 (책임의 제한)</a></li>
+              <li><a href="#a9b" className="hover:underline">제9-2조 (제3자 서비스의 이용 — YouTube 등)</a></li>
               <li><a href="#a10" className="hover:underline">제10조 (준거법 및 재판관할)</a></li>
               <li><a href="#a11" className="hover:underline">부칙</a></li>
             </ol>
@@ -257,6 +258,59 @@ export default async function TermsPage() {
                 대하여 보증하지 아니하며, 회원 간 또는 회원과 제3자 간에 서비스를
                 매개로 발생한 분쟁에 대하여 개입할 의무가 없고 이로 인한 손해를
                 배상할 책임이 없습니다.
+              </li>
+            </ol>
+          </section>
+
+          <section id="a9b" className="mb-8 scroll-mt-24">
+            <h2 className="text-xl font-bold text-gray-900 mb-3">
+              제9-2조 (제3자 서비스의 이용 — YouTube 등)
+            </h2>
+            <ol className="list-decimal list-inside text-sm text-gray-700 space-y-2 pl-2">
+              <li>
+                교회는 실시간 예배 송출 및 다시보기 기능을 제공하기 위하여
+                <strong> YouTube 의 영상 임베드</strong> 및{" "}
+                <strong>YouTube API Services</strong> 를 이용합니다.
+              </li>
+              <li>
+                회원 및 이용자가 본 사이트의 실시간 예배 / 다시보기 기능을
+                이용하는 것은 <strong>YouTube 서비스약관(YouTube Terms of
+                Service) 에 동의하는 것</strong>으로 간주됩니다 —{" "}
+                <a
+                  href="https://www.youtube.com/t/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-700 underline break-all"
+                >
+                  https://www.youtube.com/t/terms
+                </a>
+              </li>
+              <li>
+                YouTube 영상의 재생 가능 여부, 화질, 광고, 자막 등은 YouTube 의
+                정책에 따라 결정되며, 교회는 이로 인한 서비스 장애나 콘텐츠
+                변경에 대해 책임을 지지 않습니다.
+              </li>
+              <li>
+                교회가 YouTube API 를 통해 수집·이용하는 데이터의 범위·처리·삭제
+                절차 및 권한 취소 방법은 본 사이트의{" "}
+                <a href="/privacy#s8b" className="text-blue-700 underline">
+                  개인정보처리방침 제8-2조
+                </a>{" "}
+                를 참조하십시오. Google 의 개인정보 처리에 관한 일반 정책은{" "}
+                <a
+                  href="https://policies.google.com/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-700 underline break-all"
+                >
+                  https://policies.google.com/privacy
+                </a>
+                에서 확인할 수 있습니다.
+              </li>
+              <li>
+                교회는 이용자의 Google 계정 정보·OAuth 토큰을 수집하지 않으며,
+                서버측 API 키로 공개 영상의 메타데이터(영상 ID, 동시 시청자
+                수)만 호출합니다.
               </li>
             </ol>
           </section>

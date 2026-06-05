@@ -66,22 +66,30 @@ export default function LivePage() {
         )}
       </div>
 
-      {/* 유튜브 바로가기 버튼 */}
+      {/* YouTube 채널 바로가기 버튼 — YouTube Branding guidelines 준수를 위해
+          로고 path 대신 일반 외부 링크 아이콘 사용, "Watch on YouTube" 표기. */}
       {youtubeUrl && (
         <div className="flex flex-col sm:flex-row items-center gap-3">
           <a
             href={youtubeUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded shadow hover:shadow-md transition-all"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded shadow-sm transition-colors"
           >
-            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0C.488 3.45.029 5.804 0 12c.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0C23.512 20.55 23.971 18.196 24 12c-.029-6.185-.484-8.549-4.385-8.816zM9 16V8l8 4-8 4z" />
+            <span>Watch on YouTube</span>
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
             </svg>
-            유튜브
           </a>
           <p className="text-xs text-gray-400">
-            실시간 방송이 보이지 않으면 유튜브 채널에서 직접 확인해 주세요.
+            실시간 방송이 보이지 않으면 YouTube 채널에서 직접 확인해 주세요.
           </p>
         </div>
       )}

@@ -50,6 +50,7 @@ export default async function PrivacyPolicyPage() {
               <li><a href="#s6" className="hover:underline">정보주체의 권리와 행사 방법</a></li>
               <li><a href="#s7" className="hover:underline">개인정보의 안전성 확보 조치</a></li>
               <li><a href="#s8" className="hover:underline">쿠키의 운영</a></li>
+              <li><a href="#s8b" className="hover:underline">YouTube API Services 의 이용</a></li>
               <li><a href="#s9" className="hover:underline">개인정보 보호책임자</a></li>
               <li><a href="#s10" className="hover:underline">개정 이력</a></li>
             </ol>
@@ -186,6 +187,14 @@ export default async function PrivacyPolicyPage() {
                     <td className="px-3 py-2 border-b border-gray-100 text-gray-700">Google LLC (Gmail SMTP)</td>
                     <td className="px-3 py-2 border-b border-gray-100 text-gray-700">회원가입 인증메일, 비밀번호 재설정 메일 등 자동 발송</td>
                   </tr>
+                  <tr>
+                    <td className="px-3 py-2 border-b border-gray-100 text-gray-700">Google LLC (YouTube API Services)</td>
+                    <td className="px-3 py-2 border-b border-gray-100 text-gray-700">
+                      실시간 예배 방송의 공개 영상 정보(영상 ID, 동시 시청자 수) 조회 및 임베드 재생.
+                      교회 서버에 등록된 API 키로 호출하며, 이용자의 Google 계정 정보·OAuth 토큰은
+                      수집·저장하지 않습니다.
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -250,6 +259,103 @@ export default async function PrivacyPolicyPage() {
               있으나, 이 경우 로그인이 필요한 일부 서비스의 이용이 제한될 수
               있습니다.
             </p>
+          </section>
+
+          <section id="s8b" className="mb-8 scroll-mt-24">
+            <h2 className="text-xl font-bold text-gray-900 mb-3">
+              8-2. YouTube API Services 의 이용
+            </h2>
+            <p className="text-sm text-gray-700 leading-relaxed mb-3">
+              교회는 <strong>실시간 예배 방송</strong> 및 <strong>다시보기</strong>
+              기능 제공을 위하여{" "}
+              <strong>YouTube API Services</strong>(YouTube Data API v3) 를 이용합니다.
+              본 서비스를 이용하시는 분은 다음 사항에 동의하시는 것으로 간주합니다.
+            </p>
+
+            <h3 className="font-semibold text-gray-800 mb-1">가. 호출하는 데이터</h3>
+            <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 pl-2 mb-3">
+              <li>교회 채널의 <strong>공개 라이브 영상 ID</strong> (channels.list / search.list)</li>
+              <li>해당 영상의 <strong>liveStreamingDetails.concurrentViewers</strong> (동시 시청자 수)</li>
+              <li>이용자 개인의 시청 이력·계정 정보는 호출하지 않습니다.</li>
+            </ul>
+
+            <h3 className="font-semibold text-gray-800 mb-1">나. 처리·저장·공유</h3>
+            <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 pl-2 mb-3">
+              <li>
+                서버측 API key 로만 호출하며 <strong>이용자의 Google 계정 / OAuth
+                토큰은 수집·저장하지 않습니다</strong>.
+              </li>
+              <li>
+                예배 시간 동안 5초 간격으로 동시 시청자 수를 조회하여{" "}
+                <strong>집계 수치(피크·누적)만 익명으로 교회 서버 DB 에 보관</strong>
+                합니다 (개인 식별 정보 없음).
+              </li>
+              <li>이 집계 수치는 교회 내부 통계 외 <strong>제3자에게 제공·판매되지 않습니다</strong>.</li>
+            </ul>
+
+            <h3 className="font-semibold text-gray-800 mb-1">다. 저장 데이터의 갱신·삭제</h3>
+            <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 pl-2 mb-3">
+              <li>
+                실시간 통계는 <strong>예배 진행 중 5초 간격으로 갱신</strong>, 예배 종료
+                후에는 일자별 집계만 보관합니다.
+              </li>
+              <li>
+                통계 수치는 통신비밀보호법에 따라 <strong>최대 3개월</strong> 보관 후
+                자동 파기됩니다.
+              </li>
+              <li>
+                채널/영상 ID 매핑 캐시는 <strong>10분 후 자동 만료</strong>됩니다.
+              </li>
+            </ul>
+
+            <h3 className="font-semibold text-gray-800 mb-1">라. 이용자의 권리 및 권한 취소</h3>
+            <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 pl-2 mb-3">
+              <li>
+                본 사이트는 이용자의 Google 계정에 접근하지 않으므로 별도의 권한
+                취소 절차는 필요하지 않습니다.
+              </li>
+              <li>
+                일반적인 Google/YouTube 권한 관리는 Google 계정 페이지에서 가능합니다 —{" "}
+                <a
+                  href="https://myaccount.google.com/connections?filters=3,4&hl=ko"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-700 underline break-all"
+                >
+                  https://myaccount.google.com/connections?filters=3,4
+                </a>
+              </li>
+              <li>
+                교회 서버에 저장된 익명 집계 수치의 삭제를 요청하시려면 본 처리방침
+                제9조의 보호책임자 연락처로 문의해 주십시오.
+              </li>
+            </ul>
+
+            <h3 className="font-semibold text-gray-800 mb-1">마. 관련 약관·정책 링크</h3>
+            <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 pl-2">
+              <li>
+                YouTube Terms of Service —{" "}
+                <a
+                  href="https://www.youtube.com/t/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-700 underline break-all"
+                >
+                  https://www.youtube.com/t/terms
+                </a>
+              </li>
+              <li>
+                Google Privacy Policy —{" "}
+                <a
+                  href="https://policies.google.com/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-700 underline break-all"
+                >
+                  https://policies.google.com/privacy
+                </a>
+              </li>
+            </ul>
           </section>
 
           <section id="s9" className="mb-8 scroll-mt-24">
