@@ -66,27 +66,38 @@ export default function LivePage() {
         )}
       </div>
 
-      {/* YouTube 채널 바로가기 버튼 — YouTube Branding guidelines 준수를 위해
-          로고 path 대신 일반 외부 링크 아이콘 사용, "Watch on YouTube" 표기. */}
+      {/* YouTube 채널 바로가기 — "Watch on YouTube" 공식 패턴.
+          Branding guidelines 준수:
+           · 흰 배경 위 YouTube Red(#FF0000) 정확한 비율 (28x20)
+           · 흰색 play 삼각형, 색상·비율·회전 변형 없음
+           · clear space = 로고 박스 높이의 1/2 이상 (좌우 padding 12px, 로고 20px → 충분)
+           · 정해진 phrasing "Watch on YouTube"
+          ref: https://www.youtube.com/howyoutubeworks/resources/brand-resources/ */}
       {youtubeUrl && (
         <div className="flex flex-col sm:flex-row items-center gap-3">
           <a
             href={youtubeUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded shadow-sm transition-colors"
+            className="inline-flex items-center gap-2.5 px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 text-sm font-medium rounded shadow-sm transition-colors"
+            aria-label="Watch on YouTube"
           >
-            <span>Watch on YouTube</span>
+            {/* 공식 YouTube 로고 SVG — 색상/비율 변경 금지 (#FF0000 + #FFFFFF) */}
             <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
+              width="28"
+              height="20"
+              viewBox="0 0 28 20"
+              xmlns="http://www.w3.org/2000/svg"
+              role="img"
               aria-hidden="true"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              <path
+                fill="#FF0000"
+                d="M27.4 3.1c-.3-1.2-1.3-2.2-2.5-2.5C22.6 0 14 0 14 0S5.4 0 3.1.6C1.9.9.9 1.9.6 3.1 0 5.4 0 10 0 10s0 4.6.6 6.9c.3 1.2 1.3 2.2 2.5 2.5C5.4 20 14 20 14 20s8.6 0 10.9-.6c1.2-.3 2.2-1.3 2.5-2.5.6-2.3.6-6.9.6-6.9s0-4.6-.6-6.9z"
+              />
+              <polygon fill="#FFFFFF" points="11.2,14.3 18.3,10 11.2,5.7" />
             </svg>
+            <span>Watch on YouTube</span>
           </a>
           <p className="text-xs text-gray-400">
             실시간 방송이 보이지 않으면 YouTube 채널에서 직접 확인해 주세요.
