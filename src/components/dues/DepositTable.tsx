@@ -356,6 +356,95 @@ export default function DepositTable({ category }: Props) {
     }
   };
 
+  /**
+   * 신규 입금 일괄 저장 — 단일 트랜잭션.
+   * id=0 (신규) 행들을 같은 날짜 그룹으로 묶어 POST /deposits/bulk 호출.
+   * 한 건이라도 실패하면 전체 롤백.
+   *
+   * 기존 행 (id>0) 수정은 본 함수 범위가 아니라 기존 [저장] 버튼으로 한 행씩.
+   * (deposits/bulk 가 신규 입금 한정이라 — 수정은 행 단위 PUT 안전성으로 처리)
+   */
+  const saveAllNew = async () => {
+    setError(null);
+    // 신규 행만 모음 (id=0 + amount>0 + memberId 인식됨)
+    const candidates = rows
+      .map((r, idx) => ({ r, idx }))
+      .filter(({ r }) => {
+        if (r.id !== 0) return false;
+        const amt = parseInt(r.amount.replace(/[^\d]/g, ""), 10);
+        if (!Number.isFinite(amt) || amt <= 0) return false;
+        if (!r.memberId) return false;
+        const inst = parseInt(r.installment, 10);
+        return Number.isFinite(inst) && inst >= 1 && inst <= 12;
+      });
+    if (candidates.length === 0) {
+      setError("저장할 신규 행이 없습니다 (회원·금액·회차 확인).");
+      return;
+    }
+    const dates = new Set(candidates.map(({ r }) => r.date));
+    if (dates.size > 1) {
+      setError(
+        "신규 행에 여러 날짜가 섞여 있습니다. 같은 날짜끼리 모아 저장하거나 각각 [저장] 누르세요.",
+      );
+      return;
+    }
+    const commonDate = candidates[0].r.date;
+
+    // saving 상태 표시
+    setRows((p) => {
+      const n = [...p];
+      candidates.forEach(({ idx }) => {
+        n[idx] = { ...n[idx], status: "saving", message: undefined };
+      });
+      return n;
+    });
+
+    try {
+      const res = await fetch("/api/accounting/dues/deposits/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category,
+          date: commonDate,
+          items: candidates.map(({ r }) => ({
+            memberId: r.memberId,
+            installment: parseInt(r.installment, 10),
+            amount: parseInt(r.amount.replace(/[^\d]/g, ""), 10),
+            description: r.description || null,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "저장 실패 (전체 롤백됨)");
+
+      // 모든 후보를 saved 로
+      setRows((p) => {
+        const n = [...p];
+        candidates.forEach(({ idx }) => {
+          n[idx] = { ...n[idx], status: "saved", message: "일괄 저장됨" };
+        });
+        return n;
+      });
+      // 다시 load 해서 id 매핑 및 최신 상태 반영
+      load();
+    } catch (e) {
+      // 실패 — 입력 그대로 dirty 로
+      setRows((p) => {
+        const n = [...p];
+        candidates.forEach(({ idx }) => {
+          if (n[idx].status === "saving") {
+            n[idx] = { ...n[idx], status: "dirty", message: undefined };
+          }
+        });
+        return n;
+      });
+      setError(
+        (e instanceof Error ? e.message : "저장 실패") +
+          " — 입력 내용은 그대로 보존됩니다. 다시 [일괄 저장] 누르세요.",
+      );
+    }
+  };
+
   const deleteRow = async (idx: number) => {
     const r = rows[idx];
     if (r.id === 0) {
@@ -733,6 +822,28 @@ export default function DepositTable({ category }: Props) {
             </tfoot>
           )}
         </table>
+      </div>
+
+      {/* 하단 [일괄 저장] — 신규 입력 행을 단일 트랜잭션으로 */}
+      <div className="bg-white rounded-lg border border-gray-200 p-3 flex flex-wrap items-center gap-3 sticky bottom-2 shadow-md">
+        <span className="text-xs text-gray-500">
+          신규 입력 줄(같은 날짜)은 [일괄 저장] 으로 단일 트랜잭션 처리.
+          중간 실패 시 전체 롤백되어 입력 내용 보존됨.
+        </span>
+        <button
+          type="button"
+          onClick={() => setRows((p) => [...p, blankRow()])}
+          className="ml-auto rounded border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50"
+        >
+          + 줄 추가
+        </button>
+        <button
+          type="button"
+          onClick={saveAllNew}
+          className="rounded bg-blue-600 px-4 py-1.5 text-sm text-white font-semibold hover:bg-blue-700"
+        >
+          💾 일괄 저장
+        </button>
       </div>
     </div>
   );

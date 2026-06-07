@@ -298,11 +298,148 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
     }
   };
 
+  /**
+   * 변경분 일괄저장 — 단일 트랜잭션.
+   * 모든 dirty 행의 (신규/수정) 를 한 번의 POST /entries/bulk 로 보냄.
+   * 한 건이라도 실패하면 전체 롤백 → 부분 저장 사고 방지.
+   */
   const saveAllDirty = async () => {
-    for (let i = 0; i < rows.length; i++) {
-      if (rows[i].status === "dirty") {
-        await saveRow(i);
+    setError(null);
+    const createPlan: { rowIdx: number; entry: {
+      date: string; memberId: number | null; offeringType: string;
+      amount: number; description: string | null;
+    } }[] = [];
+    const updatePlan: { rowIdx: number; entry: {
+      id: number; date: string; memberId: number | null; offeringType: string;
+      amount: number; description: string | null;
+    } }[] = [];
+
+    rows.forEach((r, idx) => {
+      if (r.status !== "dirty") return;
+      const amt = parseInt(r.amount.replace(/[^\d-]/g, ""), 10);
+      if (!Number.isFinite(amt) || amt <= 0) {
+        // 유효성 실패 row 표시 (트랜잭션 보내지 않음)
+        setRows((prev) => {
+          const n = [...prev];
+          n[idx] = { ...n[idx], status: "error", message: "금액 > 0" };
+          return n;
+        });
+        return;
       }
+      const mid = r.memberId.trim() === "" ? null : parseInt(r.memberId, 10);
+      const memberId = mid !== null && Number.isFinite(mid) ? mid : null;
+      if (r.id === 0) {
+        createPlan.push({
+          rowIdx: idx,
+          entry: {
+            date: r.date,
+            memberId,
+            offeringType: r.offeringType,
+            amount: amt,
+            description: r.description || null,
+          },
+        });
+      } else {
+        updatePlan.push({
+          rowIdx: idx,
+          entry: {
+            id: r.id,
+            date: r.date,
+            memberId,
+            offeringType: r.offeringType,
+            amount: amt,
+            description: r.description || null,
+          },
+        });
+      }
+    });
+
+    if (createPlan.length + updatePlan.length === 0) {
+      setError("저장할 변경 사항이 없습니다.");
+      return;
+    }
+
+    // saving 상태 표시
+    setRows((prev) => {
+      const n = [...prev];
+      [...createPlan, ...updatePlan].forEach(({ rowIdx }) => {
+        if (n[rowIdx]) n[rowIdx] = { ...n[rowIdx], status: "saving", message: undefined };
+      });
+      return n;
+    });
+
+    try {
+      // creates 는 모두 같은 날짜인 게 아니라 행마다 다를 수 있어 — bulk API 가
+      // body.date 는 신규 공통 일자로 요구하므로, 행별 date 를 entry.date 로 두고
+      // body.date 는 첫 신규의 date 로 둠 (서버는 entry.date 가 우선 적용되지 않으니
+      // 그대로 body.date 사용 — 행별 다른 일자는 별도 호출 또는 bulk API 보강 필요).
+      // 임시 해결: 신규 행마다 date 가 다르면 그룹화해 호출 (단일 트랜잭션 보장 위해).
+      // 일반적으로 BulkEditor 는 기준일자 사용이라 같은 날짜인 경우가 대부분.
+      const datesInCreate = new Set(createPlan.map((c) => c.entry.date));
+      if (datesInCreate.size > 1) {
+        throw new Error(
+          "신규 행에 여러 날짜가 섞여 있습니다. 기준일자별로 나눠 저장하세요.",
+        );
+      }
+
+      const commonDate = createPlan[0]?.entry.date || rows[0]?.date;
+      const res = await fetch("/api/accounting/offering/entries/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: commonDate,
+          creates: createPlan.map(({ entry }) => ({
+            memberId: entry.memberId,
+            offeringType: entry.offeringType,
+            amount: entry.amount,
+            description: entry.description,
+          })),
+          updates: updatePlan.map(({ entry }) => entry),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "저장 실패 (전체 롤백됨)");
+
+      // 응답 매핑
+      setRows((prev) => {
+        const n = [...prev];
+        const created: Array<{ id: number; offeringType: string }> = data.creates || [];
+        createPlan.forEach((cp, i) => {
+          if (n[cp.rowIdx] && created[i]) {
+            n[cp.rowIdx] = {
+              ...n[cp.rowIdx],
+              id: created[i].id,
+              status: "saved",
+              message: "저장됨",
+            };
+          }
+        });
+        updatePlan.forEach((up) => {
+          if (n[up.rowIdx]) {
+            n[up.rowIdx] = { ...n[up.rowIdx], status: "saved", message: "저장됨" };
+          }
+        });
+        // 마지막 행이 saved 면 새 빈 행 추가
+        if (n[n.length - 1]?.status === "saved") {
+          n.push(blankRow(fixedType, defaultDateRef.current));
+        }
+        return n;
+      });
+    } catch (e) {
+      // 실패 — 모든 saving 을 dirty 로 되돌림 (입력 데이터 보존)
+      setRows((prev) => {
+        const n = [...prev];
+        [...createPlan, ...updatePlan].forEach(({ rowIdx }) => {
+          if (n[rowIdx] && n[rowIdx].status === "saving") {
+            n[rowIdx] = { ...n[rowIdx], status: "dirty", message: undefined };
+          }
+        });
+        return n;
+      });
+      setError(
+        (e instanceof Error ? e.message : "저장 실패") +
+          " — 입력 내용은 그대로 보존됩니다. 다시 [변경분 일괄저장] 누르세요.",
+      );
     }
   };
 

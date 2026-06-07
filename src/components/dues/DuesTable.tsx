@@ -179,24 +179,60 @@ export default function DuesTable({ category }: Props) {
     });
   };
 
-  /** 변경된(dirty/error) 기존 row + 입력된 신규 row 를 한번에 처리 */
+  /**
+   * 변경된(dirty/error) 기존 row + 입력된 신규 row 를 단일 트랜잭션으로 일괄 저장.
+   * 한 건이라도 실패하면 전체 롤백 → 부분 저장 사고 방지.
+   */
   const saveAll = async () => {
     setError(null);
-    // 1) dirty/error 인 기존 행
-    const dirtyIdx = rows
-      .map((r, i) => ({ r, i }))
-      .filter(({ r }) => r.status === "dirty" || r.status === "error")
-      .map(({ i }) => i);
-    for (const i of dirtyIdx) {
-      await saveAmount(i);
+    const dirtyAmounts = rows
+      .filter((r) => r.status === "dirty" || r.status === "error")
+      .map((r) => ({ memberId: r.memberId, amount: r.amount }));
+    const newMembers = newRows
+      .filter((nr) => nr.inputName.trim() !== "")
+      .map((nr) => ({
+        memberNo: nr.inputNo.trim() === "" ? undefined : parseInt(nr.inputNo, 10),
+        name: nr.inputName.trim(),
+        amount: parseInt(nr.inputAmount.replace(/[^\d]/g, ""), 10) || 0,
+      }));
+
+    if (dirtyAmounts.length + newMembers.length === 0) {
+      setError("저장할 변경 사항이 없습니다.");
+      return;
     }
-    // 2) 이름 입력된 신규 행 (마지막 빈 행은 자동 skip)
-    const newToSave = newRows
-      .map((nr, i) => ({ nr, i }))
-      .filter(({ nr }) => nr.inputName.trim() !== "");
-    // 인덱스가 변하지 않도록 역순으로 처리
-    for (const { i } of [...newToSave].reverse()) {
-      await saveNewRow(i);
+
+    try {
+      const res = await fetch("/api/accounting/dues/amounts/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category,
+          year,
+          amounts: dirtyAmounts,
+          newMembers,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "저장 실패 (전체 롤백됨)");
+
+      // 성공 — 모든 dirty 를 saved 로 + 신규 행 클리어
+      setRows((prev) =>
+        prev.map((r) =>
+          r.status === "dirty" || r.status === "error"
+            ? { ...r, status: "saved", message: "일괄 저장됨" }
+            : r,
+        ),
+      );
+      // 신규 행은 클리어 후 빈 행 1개
+      setNewRows([{ inputNo: "", inputName: "", inputAmount: "" }]);
+      // 다시 load 해서 새 회원 + 이름 갱신 반영
+      load();
+    } catch (e) {
+      setError(
+        (e instanceof Error ? e.message : "저장 실패") +
+          " — 입력 내용은 그대로 보존됩니다. 다시 [일괄 저장] 누르세요.",
+      );
+      // 입력 데이터 보존 (status 변경 없음)
     }
   };
 
