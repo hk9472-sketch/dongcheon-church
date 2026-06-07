@@ -327,20 +327,25 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-2 sm:space-y-2.5">
-      {/* 데스크톱: 3열 × N행 그리드 */}
+      {/* 데스크톱: [3열 위젯 그리드] + [현재접속자 도크 사이드바] 가로 배치 */}
       <div
-        className="hidden lg:grid grid-cols-3 auto-rows-min"
+        className="hidden lg:flex lg:items-start"
         style={{ gap: "var(--skin-widget-gap, 8px)" }}
       >
-        {/* 현재접속자 위젯 '고정' 모드 도크 — 우상단(3열,1행) 셀.
-            ActivePresenceWidget 가 docked 상태일 때 portal 로 여기 렌더 → 위젯들과 함께 스크롤.
-            비어있으면(=팝업 모드/비로그인) display:none 이라 그리드 흐름에 영향 없음. */}
-        <div id="dc-presence-dock" className="empty:hidden lg:col-start-3 lg:row-start-1" />
-        {layout.flatMap((row, rIdx) =>
-          row.map((cell, cIdx) => (
-            <WidgetSlot key={`${rIdx}-${cIdx}`} tabs={cellToTabs(cell)} />
-          )),
-        )}
+        <div
+          className="grid grid-cols-3 auto-rows-min flex-1 min-w-0"
+          style={{ gap: "var(--skin-widget-gap, 8px)" }}
+        >
+          {layout.flatMap((row, rIdx) =>
+            row.map((cell, cIdx) => (
+              <WidgetSlot key={`${rIdx}-${cIdx}`} tabs={cellToTabs(cell)} />
+            )),
+          )}
+        </div>
+        {/* 현재접속자 위젯 '고정' 도크 — 위젯 영역의 칸을 차지하지 않고 우측에 사이드바로 붙음.
+            ActivePresenceWidget 가 docked 일 때 portal 로 여기 렌더 → 페이지와 함께 스크롤.
+            비어있으면(팝업 모드/비로그인) empty:hidden 으로 사라져 그리드가 전체 폭 사용. */}
+        <div id="dc-presence-dock" className="w-60 shrink-0 empty:hidden" />
       </div>
 
       {/* 모바일/태블릿: 공지 최상단 + 1~2열 */}
