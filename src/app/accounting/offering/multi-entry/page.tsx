@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import HelpButton from "@/components/HelpButton";
 
 // 한 행에 여러 연보 종류 동시 입력. 빈 칸(0)은 저장 안 함.
@@ -51,6 +51,64 @@ export default function MultiOfferingEntryPage() {
   const COLS_PER_ROW = 1 + TYPES.length + 1; // = 8
   // saveAll 진행 중에는 자동 행 추가·포커스 이동을 막아 흐름이 깨지지 않게 함
   const savingAllRef = useRef(false);
+  // 페이지 리프레시 보호 — rows 를 localStorage 에 자동 저장
+  const STORAGE_KEY = "multiEntry.draft.v1";
+  const restoredRef = useRef(false);
+
+  // 1) mount 시 localStorage 에서 복구
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const data = JSON.parse(raw) as { date?: string; rows?: Row[] } | null;
+        if (data?.date) setDate(data.date);
+        if (Array.isArray(data?.rows) && data.rows.length > 0) {
+          setRows(data.rows);
+        }
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      restoredRef.current = true;
+    }
+  }, []);
+
+  // 2) rows 또는 date 변경 시 localStorage 에 저장 (디바운스 500ms)
+  useEffect(() => {
+    if (!restoredRef.current) return;
+    const t = setTimeout(() => {
+      try {
+        // 모든 행이 비어있거나 saved 만 있으면 draft 비우기
+        const hasDraft = rows.some(
+          (r) =>
+            r.status === "dirty" ||
+            r.status === "error" ||
+            r.memberNo.trim() !== "" ||
+            TYPES.some((t) => (parseInt(r.amounts[t.key] || "0", 10) || 0) > 0),
+        );
+        if (hasDraft) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({ date, rows }));
+        } else {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      } catch {
+        /* ignore */
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [rows, date]);
+
+  // 3) dirty 데이터 있을 때 페이지 이탈 경고
+  useEffect(() => {
+    const hasDirty = rows.some((r) => r.status === "dirty" || r.status === "error");
+    if (!hasDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [rows]);
 
   const update = (idx: number, patch: Partial<Row>) => {
     setRows((prev) => {
@@ -209,39 +267,138 @@ export default function MultiOfferingEntryPage() {
     }
   };
 
+  /**
+   * 전체 저장 — 데이터셋 단위 단일 트랜잭션.
+   * 모든 dirty/error 행의 (신규/수정/삭제) 를 한 번의 POST /bulk 호출로 보냄.
+   * 서버는 prisma.$transaction 안에서 처리 → 한 건이라도 실패하면 전체 롤백.
+   * 즉 \"중간 실패로 부분 저장된 상태\" 가 생기지 않음.
+   */
   const saveAll = async () => {
     setSavingAll(true);
     savingAllRef.current = true;
     setError(null);
     try {
-      const dirtyIdx = rows
-        .map((r, i) => ({ r, i }))
-        .filter(({ r }) => r.status === "dirty" || r.status === "error")
-        .map(({ i }) => i);
-      for (const idx of dirtyIdx) {
-        // 빈 행 건너뜀 (금액도 없음)
-        const r = rows[idx];
-        const hasAmount = TYPES.some((t) => (parseInt(r.amounts[t.key] || "0", 10) || 0) > 0);
-        if (!hasAmount) continue;
-        await saveRow(idx);
+      const createPlan: {
+        rowIdx: number;
+        memberId: number | null;
+        offeringType: string;
+        amount: number;
+        description: string | null;
+      }[] = [];
+      const updatePlan: {
+        rowIdx: number;
+        id: number;
+        memberId: number | null;
+        offeringType: string;
+        amount: number;
+        description: string | null;
+      }[] = [];
+      const deletePlan: { rowIdx: number; offeringType: string; id: number }[] = [];
+
+      rows.forEach((r, idx) => {
+        if (r.status !== "dirty" && r.status !== "error") return;
+        const noTrim = r.memberNo.trim();
+        const memId = noTrim ? parseInt(noTrim, 10) : null;
+        const memberId =
+          memId !== null && Number.isFinite(memId) ? memId : null;
+        for (const t of TYPES) {
+          const amt = parseInt(r.amounts[t.key] || "0", 10) || 0;
+          const existingId = r.savedIds[t.key];
+          if (existingId && amt > 0) {
+            updatePlan.push({
+              rowIdx: idx,
+              id: existingId,
+              memberId,
+              offeringType: t.key,
+              amount: amt,
+              description: r.description || null,
+            });
+          } else if (existingId && amt === 0) {
+            deletePlan.push({ rowIdx: idx, offeringType: t.key, id: existingId });
+          } else if (!existingId && amt > 0) {
+            createPlan.push({
+              rowIdx: idx,
+              memberId,
+              offeringType: t.key,
+              amount: amt,
+              description: r.description || null,
+            });
+          }
+        }
+      });
+
+      if (createPlan.length + updatePlan.length + deletePlan.length === 0) {
+        setError("저장할 변경 사항이 없습니다.");
+        return;
       }
+
+      const res = await fetch("/api/accounting/offering/entries/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date,
+          creates: createPlan.map(({ rowIdx: _r, ...rest }) => {
+            void _r;
+            return rest;
+          }),
+          updates: updatePlan.map(({ rowIdx: _r, ...rest }) => {
+            void _r;
+            return rest;
+          }),
+          deletes: deletePlan.map((d) => d.id),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "저장 실패 (전체 롤백됨)");
+      }
+
+      // 성공: rows 갱신
+      setRows((p) => {
+        const next = p.map((r) => ({ ...r, savedIds: { ...r.savedIds } }));
+        const created: Array<{ id: number; offeringType: string }> = data.creates || [];
+        createPlan.forEach((cp, i) => {
+          const row = next[cp.rowIdx];
+          if (row && created[i]) {
+            row.savedIds[created[i].offeringType] = created[i].id;
+          }
+        });
+        deletePlan.forEach((dp) => {
+          const row = next[dp.rowIdx];
+          if (row) delete row.savedIds[dp.offeringType];
+        });
+        const touched = new Set<number>([
+          ...createPlan.map((c) => c.rowIdx),
+          ...updatePlan.map((u) => u.rowIdx),
+          ...deletePlan.map((d) => d.rowIdx),
+        ]);
+        touched.forEach((idx) => {
+          const row = next[idx];
+          if (row) {
+            row.status = "saved";
+            row.message = "일괄 저장됨";
+          }
+        });
+        if (next[next.length - 1]?.status === "saved") next.push(blankRow());
+        return next;
+      });
+
+      setError(null);
+      // localStorage draft 정리
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+    } catch (e) {
+      setError(
+        (e instanceof Error ? e.message : "저장 실패") +
+          " — 모든 데이터는 그대로 보존됩니다. 다시 [전체 저장] 누르세요.",
+      );
+      // rows status 변경 없음 → 사용자가 입력한 데이터 그대로 dirty 유지
     } finally {
       savingAllRef.current = false;
       setSavingAll(false);
-      // 결과 요약 — 가장 최신 rows 상태를 확인해 알림
-      setRows((p) => {
-        const errCount = p.filter((r) => r.status === "error").length;
-        const savedCount = p.filter((r) => r.status === "saved").length;
-        if (errCount > 0) {
-          setError(
-            `전체 저장 완료 — 성공 ${savedCount}건, 실패 ${errCount}건. ` +
-              `빨간 행의 [저장] 을 다시 누르거나 [전체 저장] 으로 재시도하세요.`,
-          );
-        } else if (savedCount > 0) {
-          setError(null);
-        }
-        return p;
-      });
     }
   };
 
@@ -262,7 +419,25 @@ export default function MultiOfferingEntryPage() {
     row: number,
     col: number,
   ) => {
-    if (e.key === "Enter") {
+    // Enter 보강 — 태블릿 외부키보드 / 가상키보드 / IME 결합 환경 모두 지원.
+    // · 숫자 칸(col 0~6)은 IME 못 켜지므로 composition 체크 X (한국어 모드여도 무조건 Enter)
+    // · 비고 칸(마지막 col)만 IME 변환 중에는 건너뜀 — 첫 Enter 는 한글 conversion 완료에 양보.
+    const isDescriptionCol = col === COLS_PER_ROW - 1;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const composing = isDescriptionCol && (e.nativeEvent as any)?.isComposing === true;
+    const isEnter =
+      !composing &&
+      (e.key === "Enter" ||
+        e.key === "NumpadEnter" ||
+        e.code === "Enter" ||
+        e.code === "NumpadEnter" ||
+        // 안드로이드 가상키보드는 Go / Next / Done / Search / Send 로 옴
+        e.key === "Go" ||
+        e.key === "Next" ||
+        e.key === "Done" ||
+        e.key === "Send" ||
+        e.keyCode === 13);
+    if (isEnter) {
       // Enter: 다음 줄의 첫 칸(개인번호) 으로 이동 — 다음 행 입력 시작
       e.preventDefault();
       if (row === rows.length - 1) {
@@ -408,6 +583,7 @@ export default function MultiOfferingEntryPage() {
                       ref={setCellRef(idx, 0)}
                       type="text"
                       inputMode="numeric"
+                      enterKeyHint="next"
                       value={r.memberNo}
                       onChange={(e) =>
                         update(idx, { memberNo: e.target.value.replace(/[^\d]/g, "") })
@@ -423,6 +599,7 @@ export default function MultiOfferingEntryPage() {
                         ref={setCellRef(idx, 1 + tIdx)}
                         type="text"
                         inputMode="numeric"
+                        enterKeyHint="next"
                         value={
                           r.amounts[t.key] === ""
                             ? ""
@@ -439,6 +616,7 @@ export default function MultiOfferingEntryPage() {
                     <input
                       ref={setCellRef(idx, COLS_PER_ROW - 1)}
                       type="text"
+                      enterKeyHint="next"
                       value={r.description}
                       onChange={(e) => update(idx, { description: e.target.value })}
                       onKeyDown={(e) => onCellKey(e, idx, COLS_PER_ROW - 1)}
@@ -497,6 +675,29 @@ export default function MultiOfferingEntryPage() {
             </tr>
           </tfoot>
         </table>
+      </div>
+
+      {/* 하단 [전체 저장] — 매번 위로 스크롤하지 않아도 되도록 */}
+      <div className="bg-white rounded-lg border border-gray-200 p-3 flex flex-wrap items-center gap-3 sticky bottom-2 shadow-md">
+        <span className="text-xs text-gray-500">
+          입력 내용은 브라우저에 자동 저장되어 페이지 새로고침 후에도 유지됩니다.
+          [전체 저장] 은 단일 트랜잭션 — 중간 실패 시 전체 롤백, 부분 저장 사고 없음.
+        </span>
+        <button
+          type="button"
+          onClick={addRow}
+          className="ml-auto rounded border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50"
+        >
+          + 줄 추가
+        </button>
+        <button
+          type="button"
+          onClick={saveAll}
+          disabled={savingAll}
+          className="rounded bg-indigo-600 px-4 py-1.5 text-sm text-white font-semibold hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {savingAll ? "저장 중..." : "💾 전체 저장"}
+        </button>
       </div>
     </div>
   );
