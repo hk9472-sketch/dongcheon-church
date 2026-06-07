@@ -394,6 +394,27 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
       SET peakConcurrent = GREATEST(peakConcurrent, ${concurrent})
       WHERE serviceDate = ${serviceDateForStat} AND hourKst = ${kstHour}
     `;
+
+    // 분 단위(KST minute) 표본 — 시계열 차트용
+    const kstDate = new Date(now + 9 * 3600 * 1000);
+    const minuteKst = kstDate.getUTCHours() * 60 + kstDate.getUTCMinutes();
+    await prisma.liveYoutubeMinuteStat.upsert({
+      where: {
+        serviceCode_serviceDate_minuteKst: {
+          serviceCode: svc.code,
+          serviceDate: serviceDateForStat,
+          minuteKst,
+        },
+      },
+      create: {
+        serviceCode: svc.code,
+        serviceDate: serviceDateForStat,
+        minuteKst,
+        concurrent,
+      },
+      // 같은 분 내 마지막 값으로 갱신 (5초 폴링이 12회 들어옴)
+      update: { concurrent },
+    });
   } catch {
     // 통계 저장 실패는 메인 폴링 결과에 영향 X
   }

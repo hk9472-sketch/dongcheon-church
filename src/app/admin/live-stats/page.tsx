@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import TimeSeriesChart from "@/components/live/TimeSeriesChart";
 
 const SERVICE_LABELS: Record<string, string> = {
   dawn: "새벽기도",
@@ -610,6 +611,8 @@ function ByServiceTab() {
   const [services, setServices] = useState<ServiceStat[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 시계열 펼침: serviceInstanceId
+  const [openId, setOpenId] = useState<number | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -714,24 +717,37 @@ function ByServiceTab() {
                 stars="★★"
                 label="웹 체류"
                 value={s.webDwell.count}
-                sub={`${s.webDwell.threshold} · 자기보고와 dedup`}
+                sub={`${s.webDwell.threshold} · 자기보고와 중복 제거`}
               />
               <Row
                 color="amber"
                 stars="★ 보조"
                 label="YouTube"
                 value={s.youtube.peak}
-                sub={`peak / 평균 ${s.youtube.avg} (산술합산 금지)`}
+                sub={`최대 동시 / 평균 ${s.youtube.avg} (단순 합산 금지)`}
               />
               <div className="border-t border-gray-200 pt-2 flex items-baseline justify-between">
                 <div>
-                  <p className="text-[11px] text-gray-500">추정 참석 (selfReport ∪ webDwell)</p>
+                  <p className="text-[11px] text-gray-500">추정 참석 (자기보고 ∪ 웹 체류)</p>
                 </div>
                 <p className="text-2xl font-bold text-indigo-700 font-mono">
                   {s.estimate.value}
                   <span className="text-sm text-gray-400 ml-1">명</span>
                 </p>
               </div>
+              {/* 시계열 차트 토글 */}
+              <button
+                type="button"
+                onClick={() => setOpenId(openId === s.id ? null : s.id)}
+                className="w-full mt-2 py-1 text-[11px] border border-gray-200 rounded text-gray-600 hover:bg-gray-50"
+              >
+                {openId === s.id ? "▲ 시계열 차트 닫기" : "▼ 시계열 차트 보기"}
+              </button>
+              {openId === s.id && (
+                <div className="mt-2">
+                  <TimeSeriesChart serviceInstanceId={s.id} />
+                </div>
+              )}
             </div>
           </div>
         ))}

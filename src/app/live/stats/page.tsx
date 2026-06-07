@@ -3,6 +3,15 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import LiveServiceTracker from "@/components/LiveServiceTracker";
+import TimeSeriesChart from "@/components/live/TimeSeriesChart";
+
+interface ServiceInstancePick {
+  id: number;
+  code: string;
+  label: string;
+  startAt: string;
+  endAt: string;
+}
 
 const SERVICE_LABELS: Record<string, string> = {
   dawn: "새벽기도",
@@ -80,6 +89,10 @@ export default function PublicLiveStatsPage() {
   const fourteenAgoStr = new Date(Date.now() + 9 * 3600 * 1000 - 13 * 24 * 3600 * 1000).toISOString().slice(0, 10);
   const [statFrom, setStatFrom] = useState(fourteenAgoStr);
   const [statTo, setStatTo] = useState(todayStr);
+  // 시계열 차트용 — 날짜 + 그 날짜의 ServiceInstance 목록 + 선택된 id
+  const [chartDate, setChartDate] = useState(todayStr);
+  const [chartServices, setChartServices] = useState<ServiceInstancePick[]>([]);
+  const [chartServiceId, setChartServiceId] = useState<number | null>(null);
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
@@ -90,6 +103,39 @@ export default function PublicLiveStatsPage() {
       .then((d) => setData(d))
       .catch(() => {});
   }, [statFrom, statTo]);
+
+  // 차트 날짜 변경 시 그 날의 ServiceInstance 목록 조회
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/live/instances?date=${chartDate}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        const services: ServiceInstancePick[] = (d.services || []).map(
+          (s: { id: number; code: string; label: string; startAt: string; endAt: string }) => ({
+            id: s.id,
+            code: s.code,
+            label: s.label,
+            startAt: s.startAt,
+            endAt: s.endAt,
+          }),
+        );
+        setChartServices(services);
+        // 기본 선택: 첫 항목 (없으면 null)
+        setChartServiceId((cur) =>
+          services.find((s) => s.id === cur)?.id ?? services[0]?.id ?? null,
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setChartServices([]);
+          setChartServiceId(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chartDate]);
 
   useEffect(() => {
     // 진입 즉시 본인 카운트 등록 → 응답 후 첫 stats fetch (본인이 0이 아닌 1로 보이도록)
@@ -374,6 +420,60 @@ export default function PublicLiveStatsPage() {
           <li><strong>기타</strong>: 예배 시간(서비스 윈도우) 외에 페이지에 들어온 접속 — 분류 안 되는 트래픽.</li>
           <li>카운트는 페이지에 3초 이상 머문 IP 기준 (서비스 시간 동안 동일 IP 1회).</li>
         </ul>
+      </div>
+
+      {/* 예배별 시계열 차트 (1분 단위 — 웹 누적 / YouTube 동시) */}
+      <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
+        <div className="flex items-end flex-wrap gap-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">차트 날짜</label>
+            <input
+              type="date"
+              value={chartDate}
+              onChange={(e) => setChartDate(e.target.value)}
+              className="px-2 py-1 text-sm border border-gray-300 rounded"
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs text-gray-500 mb-1">예배 선택</div>
+            <div className="flex flex-wrap gap-1.5">
+              {chartServices.length === 0 ? (
+                <span className="text-xs text-gray-400 py-1">
+                  이 날짜에 등록된 예배 없음
+                </span>
+              ) : (
+                chartServices.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setChartServiceId(s.id)}
+                    className={`px-2.5 py-1 text-xs rounded border ${
+                      chartServiceId === s.id
+                        ? "bg-blue-600 border-blue-700 text-white font-semibold"
+                        : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    {s.label}
+                    <span className="ml-1 text-[10px] opacity-70 font-mono">
+                      {new Date(s.startAt).getHours().toString().padStart(2, "0")}:
+                      {new Date(s.startAt).getMinutes().toString().padStart(2, "0")}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {chartServiceId !== null && (
+          <TimeSeriesChart
+            key={chartServiceId}
+            serviceInstanceId={chartServiceId}
+            title={
+              chartServices.find((s) => s.id === chartServiceId)?.label
+            }
+          />
+        )}
       </div>
     </div>
   );
