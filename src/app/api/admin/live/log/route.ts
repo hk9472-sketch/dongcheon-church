@@ -1,26 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import prisma from "@/lib/db";
 import { Prisma } from "@prisma/client";
-
-async function requireAdmin() {
-  const c = await cookies();
-  const token = c.get("dc_session")?.value;
-  if (!token) return null;
-  const s = await prisma.session.findUnique({ where: { sessionToken: token } });
-  if (!s || s.expires <= new Date()) return null;
-  const u = await prisma.user.findUnique({ where: { id: s.userId } });
-  if (!u || u.isAdmin > 2) return null;
-  return u;
-}
+import { requireAdminOrCouncil } from "@/lib/adminCouncilAuth";
 
 /**
  * GET /api/admin/live/log?from=YYYY-MM-DD&to=YYYY-MM-DD&service=&page=1
- * 관리자 — 실시간 예배 방문 로그 기간별 조회 + 일자×서비스 unique IP 요약.
+ * 관리자 또는 권찰회 — 실시간 예배 방문 로그 기간별 조회 + 일자×서비스 unique IP 요약.
  */
 export async function GET(req: NextRequest) {
-  const admin = await requireAdmin();
-  if (!admin) return NextResponse.json({ error: "권한 없음" }, { status: 403 });
+  const u = await requireAdminOrCouncil();
+  if (!u) return NextResponse.json({ error: "권한 없음" }, { status: 403 });
 
   const sp = req.nextUrl.searchParams;
   const from = sp.get("from");

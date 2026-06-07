@@ -1,18 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import prisma from "@/lib/db";
 import { listInstancesByDate, DWELL_MIN_SEC } from "@/lib/serviceInstance";
-
-async function requireAdmin() {
-  const c = await cookies();
-  const token = c.get("dc_session")?.value;
-  if (!token) return null;
-  const s = await prisma.session.findUnique({ where: { sessionToken: token } });
-  if (!s || s.expires <= new Date()) return null;
-  const u = await prisma.user.findUnique({ where: { id: s.userId } });
-  if (!u || u.isAdmin > 2) return null;
-  return u;
-}
+import { requireAdminOrCouncil } from "@/lib/adminCouncilAuth";
 
 /**
  * GET /api/admin/live/service-stats?date=YYYY-MM-DD
@@ -28,8 +17,8 @@ async function requireAdmin() {
  * - YouTube (youtube): LiveYoutubeServiceStat 의 peak + cumulative 차이로 평균 추정
  */
 export async function GET(req: NextRequest) {
-  const admin = await requireAdmin();
-  if (!admin) return NextResponse.json({ error: "권한 없음" }, { status: 403 });
+  const u = await requireAdminOrCouncil();
+  if (!u) return NextResponse.json({ error: "권한 없음" }, { status: 403 });
 
   const sp = req.nextUrl.searchParams;
   const dateStr = sp.get("date");

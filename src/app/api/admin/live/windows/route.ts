@@ -7,7 +7,9 @@ import {
   DEFAULT_WINDOWS,
   type ServiceWindow,
 } from "@/lib/liveService";
+import { requireAdminOrCouncil } from "@/lib/adminCouncilAuth";
 
+// 변경(POST) 은 관리자 전용 — 별도로 유지.
 async function requireAdmin() {
   const c = await cookies();
   const token = c.get("dc_session")?.value;
@@ -19,10 +21,11 @@ async function requireAdmin() {
   return u;
 }
 
-/** GET /api/admin/live/windows — 현재 설정된 서비스 시간 윈도우 + 기본값 비교 */
+/** GET /api/admin/live/windows — 현재 설정된 서비스 시간 윈도우 + 기본값 비교
+ *  관리자 + 권찰회 접근 권한자 모두 조회 가능. */
 export async function GET() {
-  const admin = await requireAdmin();
-  if (!admin) return NextResponse.json({ error: "권한 없음" }, { status: 403 });
+  const u = await requireAdminOrCouncil();
+  if (!u) return NextResponse.json({ error: "권한 없음" }, { status: 403 });
 
   const windows = await loadWindows();
   return NextResponse.json({ windows, defaults: DEFAULT_WINDOWS });
