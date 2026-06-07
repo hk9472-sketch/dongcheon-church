@@ -59,14 +59,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "집계 행은 구역당 1개만 허용됩니다." }, { status: 400 });
   }
 
-  // 기존 데이터 삭제 후 새로 저장 (해당 구역+날짜 전체)
-  await prisma.$transaction([
-    prisma.councilAttendance.deleteMany({
-      where: { groupId, date },
-    }),
-    ...rows.map((row) =>
-      prisma.councilAttendance.create({
-        data: {
+  // 기존 데이터 삭제 후 일괄 createMany — N+1 쿼리(개별 create) → 2 쿼리(delete + createMany)
+  await prisma.$transaction(async (tx) => {
+    await tx.councilAttendance.deleteMany({ where: { groupId, date } });
+    if (rows.length > 0) {
+      await tx.councilAttendance.createMany({
+        data: rows.map((row) => ({
           groupId,
           date,
           memberName: row.memberName || null,
@@ -81,10 +79,10 @@ export async function POST(request: NextRequest) {
           rt4: row.rt4 ?? 0,
           rt5: row.rt5 ?? 0,
           note: row.note || null,
-        },
-      })
-    ),
-  ]);
+        })),
+      });
+    }
+  });
 
   return NextResponse.json({ success: true });
 }

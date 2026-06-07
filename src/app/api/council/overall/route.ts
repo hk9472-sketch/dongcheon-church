@@ -210,26 +210,26 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 구역별성적 저장
+    // 구역별성적 저장 — N개 구역 upsert 루프 → deleteMany + createMany 1 round-trip 2회로
     if (Array.isArray(districtData)) {
-      for (const d of districtData) {
-        await tx.councilDistrictSummary.upsert({
-          where: { date_groupId: { date: dateVal, groupId: d.groupId } },
-          update: {
-            adultSam: d.adultSam ?? 0, adultOh: d.adultOh ?? 0,
-            adultJupre: d.adultJupre ?? 0, adultJuhu: d.adultJuhu ?? 0,
-            midSam: d.midSam ?? 0, midOh: d.midOh ?? 0,
-            midJupre: d.midJupre ?? 0, midJuhu: d.midJuhu ?? 0,
-            bibleMale: d.bibleMale ?? 0, bibleFemale: d.bibleFemale ?? 0, prayer: d.prayer ?? 0,
-          },
-          create: {
-            date: dateVal, groupId: d.groupId,
-            adultSam: d.adultSam ?? 0, adultOh: d.adultOh ?? 0,
-            adultJupre: d.adultJupre ?? 0, adultJuhu: d.adultJuhu ?? 0,
-            midSam: d.midSam ?? 0, midOh: d.midOh ?? 0,
-            midJupre: d.midJupre ?? 0, midJuhu: d.midJuhu ?? 0,
-            bibleMale: d.bibleMale ?? 0, bibleFemale: d.bibleFemale ?? 0, prayer: d.prayer ?? 0,
-          },
+      await tx.councilDistrictSummary.deleteMany({ where: { date: dateVal } });
+      if (districtData.length > 0) {
+        await tx.councilDistrictSummary.createMany({
+          data: districtData.map((d: Record<string, unknown>) => ({
+            date: dateVal,
+            groupId: (d.groupId as number),
+            adultSam: (d.adultSam as number) ?? 0,
+            adultOh: (d.adultOh as number) ?? 0,
+            adultJupre: (d.adultJupre as number) ?? 0,
+            adultJuhu: (d.adultJuhu as number) ?? 0,
+            midSam: (d.midSam as number) ?? 0,
+            midOh: (d.midOh as number) ?? 0,
+            midJupre: (d.midJupre as number) ?? 0,
+            midJuhu: (d.midJuhu as number) ?? 0,
+            bibleMale: (d.bibleMale as number) ?? 0,
+            bibleFemale: (d.bibleFemale as number) ?? 0,
+            prayer: (d.prayer as number) ?? 0,
+          })),
         });
       }
     }
