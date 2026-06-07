@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * /live 페이지의 임베드 YouTube 플레이어.
@@ -46,14 +46,25 @@ export default function LiveYoutubePlayer({ embedUrl }: Props) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const playingRef = useRef(false);
   const hbTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [src, setSrc] = useState("");
 
-  // src 에 enablejsapi=1 + origin 부여
-  const src = embedUrl
-    ? embedUrl + (embedUrl.includes("?") ? "&" : "?") + "enablejsapi=1"
-    : "";
+  // origin 은 클라이언트에서만 알 수 있으므로 mount 후 src 구성 (SSR hydration mismatch 방지).
+  //  · enablejsapi=1 + origin → IFrame Player API 가 onStateChange 를 바인딩. 이게 없으면
+  //    PLAYING 이벤트가 안 와서 hb 가 한 번도 안 나감 (임베드 통계 0 의 직접 원인).
+  //  · mute=1                → 브라우저 자동재생 정책상 음소거여야 PLAYING 상태까지 도달.
+  //  · playsinline=1         → 모바일에서 전체화면 강제 전환 방지.
+  useEffect(() => {
+    if (!embedUrl) {
+      setSrc("");
+      return;
+    }
+    const sep = embedUrl.includes("?") ? "&" : "?";
+    const origin = encodeURIComponent(window.location.origin);
+    setSrc(`${embedUrl}${sep}enablejsapi=1&mute=1&playsinline=1&origin=${origin}`);
+  }, [embedUrl]);
 
   useEffect(() => {
-    if (!embedUrl) return;
+    if (!src) return;
     const sessionId = getOrCreateSessionId();
 
     function sendHb(playing: boolean) {
@@ -138,11 +149,12 @@ export default function LiveYoutubePlayer({ embedUrl }: Props) {
       stopHb();
       window.removeEventListener("pagehide", final);
     };
-  }, [embedUrl]);
+  }, [src]);
 
   if (!src) return null;
   return (
     <iframe
+      id="dc-live-yt"
       ref={iframeRef}
       className="absolute inset-0 w-full h-full"
       src={src}

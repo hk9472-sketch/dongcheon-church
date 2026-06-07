@@ -341,13 +341,26 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
   }
   await saveState({ date: today, concurrent, cumulative, polledAt: now, videoId });
 
-  // 서비스별 일자별 통계
-  // - cumulativeStart: 서비스 첫 폴링 직전 daily cum (이미 다른 서비스에서 누적된 값)
-  // - cumulativeEnd: 매 폴링마다 갱신 (= 현재 daily cum)
-  // - 서비스 누적 시청 = cumulativeEnd - cumulativeStart (해당 서비스 동안 새로 들어온 사람 + 첫 폴링 시점 신규)
-  // - peakConcurrent: 서비스 동안 동시 시청자 최대
+  // 서비스별 일자별 통계 — ★ 예배마다 완전히 독립된 카운터.
+  //   (글로벌 daily cumulative 는 더 이상 사용하지 않음. 두 예배가 같은 라이브 영상을
+  //    공유하거나 연속 송출이면 이전 글로벌 누적이 다음 예배로 이어지던 버그를 제거.)
+  // - cumulativeStart: 항상 0 (서비스 시작 = 0 에서 출발)
+  // - cumulativeEnd:   해당 서비스 동안 동시접속이 '올라간 만큼'의 누적 = 그 예배에 새로 들어온 인원 근사치
+  // - delta:           이 예배의 직전 표본(minute_stats) 대비 증가분. 같은 예배 폴링끼리만 비교 → 다른 예배와 절대 안 섞임
+  // - peakConcurrent:  서비스 동안 동시 시청자 최대
   try {
     const serviceDateForStat = new Date(today + "T00:00:00.000Z");
+
+    // 이 예배의 직전 표본 concurrent (분단위 최신값) — minute_stats 는 아래에서 갱신되므로
+    // 지금 읽으면 '이전 폴링' 값. 첫 폴링이면 null → delta=0 (cumEnd 는 create 의 concurrent 로 시작).
+    const lastSample = await prisma.liveYoutubeMinuteStat.findFirst({
+      where: { serviceCode: svc.code, serviceDate: serviceDateForStat },
+      orderBy: { minuteKst: "desc" },
+      select: { concurrent: true },
+    });
+    const prevConcurrentThisService = lastSample?.concurrent ?? concurrent;
+    const serviceDelta = Math.max(0, concurrent - prevConcurrentThisService);
+
     await prisma.liveYoutubeServiceStat.upsert({
       where: {
         serviceCode_serviceDate: {
@@ -359,19 +372,17 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
         serviceCode: svc.code,
         serviceDate: serviceDateForStat,
         peakConcurrent: concurrent,
-        cumulativeStart: cumulativeBeforeThisPoll,
-        cumulativeEnd: cumulative,
+        cumulativeStart: 0,
+        cumulativeEnd: concurrent,
         videoId,
       },
-      update: {
-        cumulativeEnd: cumulative,
-        videoId,
-      },
+      // cumulativeEnd 증가 + peak 는 아래 raw 에서 처리 (Prisma inline 증감/MAX 미지원)
+      update: { videoId },
     });
-    // peak 는 MAX 처리 — Prisma inline MAX 미지원 → raw
     await prisma.$executeRaw`
       UPDATE live_youtube_service_stats
-      SET peakConcurrent = GREATEST(peakConcurrent, ${concurrent})
+      SET cumulativeEnd = cumulativeEnd + ${serviceDelta},
+          peakConcurrent = GREATEST(peakConcurrent, ${concurrent})
       WHERE serviceCode = ${svc.code} AND serviceDate = ${serviceDateForStat}
     `;
 

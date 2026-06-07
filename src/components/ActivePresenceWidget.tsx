@@ -21,7 +21,10 @@ interface Position { left: number; top: number; }
 const POLL_MS = 5000;
 const COLLAPSE_KEY = "dc_active_widget_collapsed";
 const POSITION_KEY = "dc_active_widget_pos";
+const DOCK_KEY = "dc_active_widget_docked";
 const WIDGET_WIDTH = 240;
+const DOCK_TOP = 72;   // 우상단 고정 시 top(px) — 사이트 헤더 바로 아래
+const DOCK_RIGHT = 12; // 우상단 고정 시 right(px)
 
 function clampPosition(p: Position): Position {
   if (typeof window === "undefined") return p;
@@ -60,6 +63,15 @@ export default function ActivePresenceWidget() {
     if (typeof window === "undefined") return true;
     try {
       return localStorage.getItem(COLLAPSE_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  });
+  // 표시 모드: docked(우상단 고정) ↔ floating(드래그 가능한 팝업). 기본 = 고정.
+  const [docked, setDocked] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      return localStorage.getItem(DOCK_KEY) !== "0";
     } catch {
       return true;
     }
@@ -159,11 +171,26 @@ export default function ActivePresenceWidget() {
   };
 
   const onDragStart = (e: React.MouseEvent<HTMLElement>) => {
+    if (docked) return; // 고정 모드에선 드래그 비활성
     dragRef.current = {
       offsetX: e.clientX - positionRef.current.left,
       offsetY: e.clientY - positionRef.current.top,
     };
     e.preventDefault();
+  };
+
+  // 고정 ↔ 팝업 토글. 고정→팝업 전환 시 현재 고정 위치에서 시작해 화면 점프 방지.
+  const toggleDock = () => {
+    setDocked((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(DOCK_KEY, next ? "1" : "0"); } catch {}
+      if (!next) {
+        setPosition(
+          clampPosition({ left: window.innerWidth - WIDGET_WIDTH - DOCK_RIGHT, top: DOCK_TOP }),
+        );
+      }
+      return next;
+    });
   };
 
   const counts = data?.counts ?? { total: 0, member: 0, guest: 0 };
@@ -189,7 +216,9 @@ export default function ActivePresenceWidget() {
     window.dispatchEvent(new CustomEvent("dc:chat-bulk-open"));
   };
 
-  const baseStyle = { left: position.left, top: position.top };
+  const baseStyle: React.CSSProperties = docked
+    ? { right: DOCK_RIGHT, top: DOCK_TOP }
+    : { left: position.left, top: position.top };
 
   // 완전 종료 상태 — 위젯 렌더링 자체 안 함. 푸터 "현재" 클릭으로만 재활성.
   if (collapsed) return null;
@@ -202,22 +231,33 @@ export default function ActivePresenceWidget() {
       {/* 헤더 — 드래그 핸들 */}
       <div
         onMouseDown={onDragStart}
-        className="flex items-center justify-between px-3 py-2 bg-indigo-600 text-white rounded-t-lg cursor-move"
-        title="드래그로 이동"
+        className={`flex items-center justify-between px-3 py-2 bg-indigo-600 text-white rounded-t-lg ${docked ? "cursor-default" : "cursor-move"}`}
+        title={docked ? "우상단 고정됨 — 📌 로 팝업 전환" : "드래그로 이동"}
       >
         <div className="text-xs font-bold flex items-center gap-1.5">
           <span>👥</span>
           <span>현재 접속 {counts.total}명</span>
         </div>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); closeWidget(); }}
-          onMouseDown={(e) => e.stopPropagation()}
-          className="w-5 h-5 flex items-center justify-center rounded hover:bg-indigo-700 text-xs cursor-pointer"
-          title="닫기 — 푸터 '현재' 클릭으로 다시 열기"
-        >
-          ✕
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); toggleDock(); }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="w-5 h-5 flex items-center justify-center rounded hover:bg-indigo-700 text-xs cursor-pointer"
+            title={docked ? "팝업(드래그)으로 전환" : "우상단에 고정"}
+          >
+            {docked ? "📌" : "📍"}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); closeWidget(); }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="w-5 h-5 flex items-center justify-center rounded hover:bg-indigo-700 text-xs cursor-pointer"
+            title="닫기 — 푸터 '현재' 클릭으로 다시 열기"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <div className="overflow-y-auto flex-1 text-xs">
