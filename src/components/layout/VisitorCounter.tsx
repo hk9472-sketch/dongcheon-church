@@ -11,6 +11,23 @@ interface Stats {
   yesterday: number;
 }
 
+// VisitorTracker 와 동일한 키 — 같은 브라우저는 IP 가 바뀌어도 같은 sessionId.
+// 방문 POST 에 실어 서버가 고유 방문자 dedup 키로 사용 (COALESCE(sessionId, userId, ip)).
+const SESSION_KEY = "dc_session_visitor_id.v1";
+function getOrCreateSessionId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    let v = localStorage.getItem(SESSION_KEY);
+    if (!v) {
+      v = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem(SESSION_KEY, v);
+    }
+    return v;
+  } catch {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
 function todayKstYmd(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
@@ -42,6 +59,7 @@ export default function VisitorCounter() {
           path: pathname,
           referer: document.referrer || null,
           userAgent: navigator.userAgent,
+          sessionId: getOrCreateSessionId(),
         }),
       })
         .then((r) => r.json())

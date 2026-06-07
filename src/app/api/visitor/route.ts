@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import { countActive } from "@/lib/activePresence";
+import { getCurrentUser } from "@/lib/auth";
 
 // ============================================================
 // 봇/크롤러 User-Agent 필터
@@ -78,38 +79,54 @@ async function getVisitorStatsCached(): Promise<VisitorStats> {
 // 방문자 통계 조회 헬퍼
 // ============================================================
 async function getVisitorStats(): Promise<VisitorStats> {
-  const { today, todayStart, yesterday } = getKoreanDates();
+  const { todayStart } = getKoreanDates();
 
   // KST 기준 시간 범위
   const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
   const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
 
+  // 고유 방문자 = 같은 사람이 IP 가 바뀌어도(WiFi↔LTE, 통신사 NAT, 기기 변경) 1 로 집계.
+  // 식별 우선순위: userId(로그인 — 기기 무관 동일인) > sessionId(브라우저 localStorage,
+  // IP 변경에도 유지) > ip(둘 다 없는 익명 폴백).
+  //
+  // 단순 COALESCE(...) DISTINCT 는 부분 커버리지 구간에서 부풀려진다(같은 사람이 sessionId
+  // 행 + sessionId 없는 행을 둘 다 가지면 세션키 + ip키 2중 카운트). 그래서 2단 합산:
+  //   ① identity_keys: userId/sessionId 가 있는 행들의 고유 신원 수
+  //   ② ip_only      : 그 윈도우에서 단 한 번도 userId/sessionId 가 안 붙은 ip 만 (이미 ①에
+  //                    세션/유저로 대표된 ip 는 NOT EXISTS 로 제외 → 유령 ip 키 방지)
+  const distinctVisitors = (from: Date, to: Date) =>
+    prisma.$queryRaw<{ c: bigint }[]>`
+      SELECT
+        ( SELECT COUNT(DISTINCT COALESCE(CONCAT('u:', userId), NULLIF(sessionId, '')))
+          FROM visit_logs
+          WHERE createdAt >= ${from} AND createdAt < ${to}
+            AND (userId IS NOT NULL OR NULLIF(sessionId, '') IS NOT NULL) )
+        +
+        ( SELECT COUNT(DISTINCT v.ip)
+          FROM visit_logs v
+          WHERE v.createdAt >= ${from} AND v.createdAt < ${to}
+            AND v.userId IS NULL AND NULLIF(v.sessionId, '') IS NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM visit_logs w
+              WHERE w.ip = v.ip
+                AND w.createdAt >= ${from} AND w.createdAt < ${to}
+                AND (w.userId IS NOT NULL OR NULLIF(w.sessionId, '') IS NOT NULL) ) )
+        AS c`;
+
   // 병렬로 모든 데이터 조회
-  const [totalAgg, todayIps, yesterdayIps, baseSetting] =
-    await Promise.all([
-      // 전체 일별 카운트 합계
-      prisma.visitorCount.aggregate({
-        _sum: { count: true },
-      }),
-      // 오늘 고유 IP 수 (visit_logs에서 직접 계산 — KST 자정 기준)
-      prisma.visitLog.groupBy({
-        by: ["ip"],
-        where: { createdAt: { gte: todayStart, lt: todayEnd } },
-      }),
-      // 어제 고유 IP 수 (visit_logs에서 직접 계산 — KST 자정 기준)
-      prisma.visitLog.groupBy({
-        by: ["ip"],
-        where: { createdAt: { gte: yesterdayStart, lt: todayStart } },
-      }),
-      // 기본 누적 카운트 (제로보드 이전 데이터 등)
-      prisma.siteSetting.findUnique({
-        where: { key: "visitor_base_count" },
-      }),
-    ]);
+  const [totalAgg, todayRows, yesterdayRows, baseSetting] = await Promise.all([
+    // 전체 일별 카운트 합계
+    prisma.visitorCount.aggregate({ _sum: { count: true } }),
+    // 오늘 고유 방문자 (KST 자정 기준, sessionId/userId dedup)
+    distinctVisitors(todayStart, todayEnd),
+    // 어제 고유 방문자
+    distinctVisitors(yesterdayStart, todayStart),
+    // 기본 누적 카운트 (제로보드 이전 데이터 등)
+    prisma.siteSetting.findUnique({ where: { key: "visitor_base_count" } }),
+  ]);
 
   // 현재 접속자 — heartbeat 기반(60초 윈도우, activePresence Map).
   // 위젯과 일관된 "지금 화면 보고 있는 사람" 의미.
-  // 이전엔 visit_logs 의 15분 윈도우라 닫고 나간 사람도 포함됐음.
   const online = countActive().total;
 
   const baseCount = baseSetting ? parseInt(baseSetting.value, 10) || 0 : 0;
@@ -118,8 +135,8 @@ async function getVisitorStats(): Promise<VisitorStats> {
   return {
     online,
     total: dailyTotal + baseCount,
-    today: todayIps.length,
-    yesterday: yesterdayIps.length,
+    today: Number(todayRows[0]?.c ?? 0),
+    yesterday: Number(yesterdayRows[0]?.c ?? 0),
   };
 }
 
@@ -156,13 +173,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { path, referer, userAgent, userId, sessionId } = body as {
+    const { path, referer, userAgent, sessionId } = body as {
       path?: string;
       referer?: string;
       userAgent?: string;
-      userId?: number;
       sessionId?: string;
     };
+
+    // userId 는 클라이언트 입력을 믿지 않고 세션 쿠키에서 서버가 직접 해석 (위변조 방지 +
+    // 로그인 회원 방문엔 항상 채워져 고유 방문자 dedup 키로 사용 가능).
+    const currentUser = await getCurrentUser();
+    const resolvedUserId = currentUser?.id ?? null;
 
     // 봇/크롤러 필터링 (UA 기반)
     if (isBot(userAgent)) {
@@ -217,7 +238,7 @@ export async function POST(request: NextRequest) {
           path: path || "/",
           referer: referer || null,
           userAgent: userAgent || null,
-          userId: userId || null,
+          userId: resolvedUserId,
           sessionId: sessionId ? String(sessionId).slice(0, 64) : null,
         },
       });
@@ -238,7 +259,7 @@ export async function POST(request: NextRequest) {
             path: path || "/",
             referer: referer || null,
             userAgent: userAgent || null,
-            userId: userId || null,
+            userId: resolvedUserId,
             sessionId: sessionId ? String(sessionId).slice(0, 64) : null,
           },
         }),
