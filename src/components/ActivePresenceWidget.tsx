@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { usePathname } from "next/navigation";
 
 interface ActiveItem {
   sessionId: string;
@@ -81,6 +83,11 @@ export default function ActivePresenceWidget() {
   positionRef.current = position;
   const dragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
 
+  // 홈 우상단 도크 슬롯(#dc-presence-dock). 홈에서만 존재 → 라우트 변경 시 재탐색.
+  // 고정 모드일 때 이 슬롯이 있으면 위젯을 그 안에 in-flow 로 끼워 넣어 페이지와 함께 스크롤시킨다.
+  const pathname = usePathname();
+  const [dockEl, setDockEl] = useState<HTMLElement | null>(null);
+
   // 첫 mount 시 viewport 기준 초기 위치 + 권한 확인
   useEffect(() => {
     setPosition(getInitialPosition());
@@ -159,6 +166,18 @@ export default function ActivePresenceWidget() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // 홈 도크 슬롯 재탐색. 슬롯은 데스크톱 그리드(hidden lg:grid) 안에 있으므로
+  // lg(≥1024px) 에서만 도킹하고, 모바일/비홈에선 null → 팝업(fixed) 으로 떨어진다.
+  // 라우트 변경 + 브레이크포인트 교차 시 재평가.
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const find = () =>
+      setDockEl(mq.matches ? document.getElementById("dc-presence-dock") : null);
+    find();
+    mq.addEventListener("change", find);
+    return () => mq.removeEventListener("change", find);
+  }, [pathname]);
+
   if (isLoggedIn !== true) return null;
 
   // ✕ 클릭 = 완전 종료 (collapsed=true → return null).
@@ -216,18 +235,11 @@ export default function ActivePresenceWidget() {
     window.dispatchEvent(new CustomEvent("dc:chat-bulk-open"));
   };
 
-  const baseStyle: React.CSSProperties = docked
-    ? { right: DOCK_RIGHT, top: DOCK_TOP }
-    : { left: position.left, top: position.top };
-
   // 완전 종료 상태 — 위젯 렌더링 자체 안 함. 푸터 "현재" 클릭으로만 재활성.
   if (collapsed) return null;
 
-  return (
-    <div
-      className="fixed z-40 w-60 max-h-[70vh] flex flex-col bg-white border border-gray-300 rounded-lg shadow-lg select-none"
-      style={baseStyle}
-    >
+  const inner = (
+    <>
       {/* 헤더 — 드래그 핸들 */}
       <div
         onMouseDown={onDragStart}
@@ -325,6 +337,22 @@ export default function ActivePresenceWidget() {
         )}
         <div className="text-[10px] text-gray-400">5초 갱신 · 60초 무응답 제외 · 클릭으로 1:1 대화</div>
       </div>
+    </>
+  );
+
+  // 고정(docked) + 홈 도크 슬롯 존재 → 위젯 영역에 in-flow 로 끼워 페이지와 함께 스크롤.
+  // 그 외(팝업이거나 슬롯 없는 페이지) → fixed 오버레이로 화면 같은 위치에 고정.
+  const cardCls =
+    "max-h-[70vh] flex flex-col bg-white border border-gray-300 rounded-lg shadow-lg select-none";
+  if (docked && dockEl) {
+    return createPortal(<div className={`w-full ${cardCls}`}>{inner}</div>, dockEl);
+  }
+  return (
+    <div
+      className={`fixed z-40 w-60 ${cardCls}`}
+      style={docked ? { right: DOCK_RIGHT, top: DOCK_TOP } : { left: position.left, top: position.top }}
+    >
+      {inner}
     </div>
   );
 }

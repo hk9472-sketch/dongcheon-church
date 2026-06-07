@@ -332,6 +332,10 @@ export default async function HomePage() {
         className="hidden lg:grid grid-cols-3 auto-rows-min"
         style={{ gap: "var(--skin-widget-gap, 8px)" }}
       >
+        {/* 현재접속자 위젯 '고정' 모드 도크 — 우상단(3열,1행) 셀.
+            ActivePresenceWidget 가 docked 상태일 때 portal 로 여기 렌더 → 위젯들과 함께 스크롤.
+            비어있으면(=팝업 모드/비로그인) display:none 이라 그리드 흐름에 영향 없음. */}
+        <div id="dc-presence-dock" className="empty:hidden lg:col-start-3 lg:row-start-1" />
         {layout.flatMap((row, rIdx) =>
           row.map((cell, cIdx) => (
             <WidgetSlot key={`${rIdx}-${cIdx}`} tabs={cellToTabs(cell)} />
