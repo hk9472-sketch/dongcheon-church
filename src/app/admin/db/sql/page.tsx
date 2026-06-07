@@ -83,9 +83,9 @@ export default function SqlManagementPage() {
   const [editingRow, setEditingRow] = useState<number | null>(null);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
 
-  // SQL 탭
+  // SQL 탭 — 한 번에 여러 쿼리 실행 → 결과를 배열로 누적
   const [sqlQuery, setSqlQuery] = useState("");
-  const [sqlResult, setSqlResult] = useState<SqlResult | null>(null);
+  const [sqlResults, setSqlResults] = useState<{ query: string; result: SqlResult }[]>([]);
   const [sqlLoading, setSqlLoading] = useState(false);
   const [sqlHistory, setSqlHistory] = useState<string[]>([]);
   const sqlRef = useRef<HTMLTextAreaElement>(null);
@@ -182,50 +182,74 @@ export default function SqlManagementPage() {
   }, [selectedTable, loadStructure, loadData, dataLimit]);
 
   // ============================================================
-  // SQL 쿼리 실행
+  // 쿼리 분할 — ; 으로 구분. 단순 split (문자열 내부 ; 는 깨질 수 있어 운영자가 신경).
+  // 빈 줄 / 주석만 있는 줄은 무시.
   // ============================================================
-  const executeQuery = async (query?: string) => {
-    const q = (query || sqlQuery).trim();
-    if (!q) return;
+  const splitQueries = (text: string): string[] => {
+    return text
+      .split(/;\s*(?:\n|$)/)
+      .map((q) => q.replace(/^\s*--.*$/gm, "").trim())
+      .filter((q) => q.length > 0);
+  };
 
-    // 파괴적 쿼리 확인
-    if (/^\s*(DROP|TRUNCATE|DELETE)\s/i.test(q)) {
-      if (!confirm(`이 쿼리는 데이터를 변경/삭제합니다. 실행하시겠습니까?\n\n${q}`)) return;
+  // ============================================================
+  // SQL 쿼리 실행 — 한 번에 여러 쿼리 순차 실행, 결과는 카드로 누적
+  // ============================================================
+  const executeQuery = async (queryOverride?: string) => {
+    const raw = (queryOverride || sqlQuery).trim();
+    if (!raw) return;
+    const queries = splitQueries(raw);
+    if (queries.length === 0) return;
+
+    // 파괴적 쿼리 확인 — 묶음 안에 1개라도 있으면 한 번만 confirm
+    const destructive = queries.filter((q) => /^\s*(DROP|TRUNCATE|DELETE|UPDATE|ALTER)\s/i.test(q));
+    if (destructive.length > 0) {
+      if (!confirm(
+        `${destructive.length}개의 데이터/구조 변경 쿼리가 포함되어 있습니다. ` +
+        `전체 ${queries.length}개를 순차 실행합니다.\n\n` +
+        destructive.map((q) => "• " + (q.length > 80 ? q.slice(0, 80) + "..." : q)).join("\n"),
+      )) return;
     }
 
     setSqlLoading(true);
-    setSqlResult(null);
-    try {
-      const res = await fetch("/api/admin/db/sql", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q }),
-      });
-      const data = await res.json();
-      if (data.error) {
-        setSqlResult({ type: "select", executionTime: 0, error: data.error });
-      } else {
-        setSqlResult(data);
-        if (data.type === "execute") {
-          showMsg(`쿼리 실행 완료: ${data.affectedRows}행 영향 (${data.executionTime}ms)`, "success");
-          // 구조/데이터 변경 시 새로고침
-          if (selectedTable) {
-            loadStructure(selectedTable);
-            loadData(selectedTable, dataPage, dataLimit);
-          }
-          loadTables();
-        }
+    setSqlResults([]);
+
+    let hasExecuteResult = false;
+    for (const q of queries) {
+      try {
+        const res = await fetch("/api/admin/db/sql", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: q }),
+        });
+        const data = await res.json();
+        const result: SqlResult = data.error
+          ? { type: "select", executionTime: 0, error: data.error }
+          : data;
+        setSqlResults((prev) => [...prev, { query: q, result }]);
+        if (!data.error && data.type === "execute") hasExecuteResult = true;
+        // 히스토리 — 각 쿼리 개별로
+        setSqlHistory((prev) => {
+          const next = [q, ...prev.filter((h) => h !== q)];
+          return next.slice(0, 20);
+        });
+      } catch (e) {
+        setSqlResults((prev) => [...prev, {
+          query: q,
+          result: { type: "select", executionTime: 0, error: String(e) },
+        }]);
       }
-      // 히스토리 추가
-      setSqlHistory((prev) => {
-        const next = [q, ...prev.filter((h) => h !== q)];
-        return next.slice(0, 20);
-      });
-    } catch (e) {
-      setSqlResult({ type: "select", executionTime: 0, error: String(e) });
-    } finally {
-      setSqlLoading(false);
     }
+
+    if (hasExecuteResult) {
+      // 구조/데이터 변경 가능성 — 한 번만 새로고침
+      if (selectedTable && selectedTable !== "_sql_only") {
+        loadStructure(selectedTable);
+        loadData(selectedTable, dataPage, dataLimit);
+      }
+      loadTables();
+    }
+    setSqlLoading(false);
   };
 
   // ============================================================
@@ -1007,7 +1031,7 @@ export default function SqlManagementPage() {
                       </button>
                     </div>
 
-                    {/* 쿼리 입력 */}
+                    {/* 쿼리 입력 — 여러 줄, 세미콜론(;) 으로 구분해 일괄 실행 */}
                     <div>
                       <textarea
                         ref={sqlRef}
@@ -1019,10 +1043,23 @@ export default function SqlManagementPage() {
                             executeQuery();
                           }
                         }}
-                        rows={6}
+                        rows={10}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                        placeholder="SQL 쿼리를 입력하세요... (Ctrl+Enter로 실행)"
+                        placeholder={[
+                          "여러 쿼리를 세미콜론(;) + 줄바꿈으로 구분해 한 번에 실행할 수 있습니다.",
+                          "예:",
+                          "  SELECT COUNT(*) FROM users;",
+                          "  SELECT COUNT(*) FROM posts;",
+                          "  SHOW TABLES;",
+                          "",
+                          "(Ctrl+Enter 로 실행)",
+                        ].join("\n")}
                       />
+                      <p className="mt-1 text-[11px] text-gray-500">
+                        ※ <strong>세미콜론(;) + 줄바꿈</strong> 으로 쿼리를 구분합니다.
+                        결과는 아래에 쿼리별로 카드 분리되어 표시됩니다.
+                        쿼리는 순차 실행됩니다 (한 쿼리 실패해도 다음 쿼리 계속 실행).
+                      </p>
                     </div>
 
                     {/* 실행 + 히스토리 */}
@@ -1036,11 +1073,19 @@ export default function SqlManagementPage() {
                           {sqlLoading ? "실행 중..." : "실행 (Ctrl+Enter)"}
                         </button>
                         <button
-                          onClick={() => { setSqlQuery(""); setSqlResult(null); }}
+                          onClick={() => { setSqlQuery(""); setSqlResults([]); }}
                           className="px-3 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
                         >
                           초기화
                         </button>
+                        {sqlResults.length > 0 && (
+                          <button
+                            onClick={() => setSqlResults([])}
+                            className="px-3 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+                          >
+                            결과만 지우기
+                          </button>
+                        )}
                       </div>
                       {sqlHistory.length > 0 && (
                         <select
@@ -1056,65 +1101,115 @@ export default function SqlManagementPage() {
                       )}
                     </div>
 
-                    {/* 결과 */}
-                    {sqlResult && (
-                      <div className="border border-gray-200 rounded-lg overflow-hidden">
-                        <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                    {/* 결과 — 각 쿼리마다 카드 분리 */}
+                    {sqlResults.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
                           <span className="text-xs font-bold text-gray-600">
-                            {sqlResult.error ? "오류" : sqlResult.type === "select" ? `결과: ${sqlResult.rowCount}행` : `실행 완료: ${sqlResult.affectedRows}행 영향`}
+                            결과 {sqlResults.length}건
+                            {sqlResults.some((r) => r.result.error) && (
+                              <span className="ml-2 text-red-600">
+                                (실패 {sqlResults.filter((r) => r.result.error).length})
+                              </span>
+                            )}
                           </span>
-                          <div className="flex items-center gap-2">
-                            {!sqlResult.error && sqlResult.type === "select" && sqlResult.rows && sqlResult.rows.length > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => downloadSqlResultCsv(sqlResult, selectedTable || "query")}
-                                className="px-2 py-0.5 text-[11px] bg-emerald-600 text-white rounded hover:bg-emerald-700 inline-flex items-center gap-1"
-                                title="결과를 엑셀(.csv) 파일로 다운로드"
-                              >
-                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                </svg>
-                                엑셀 다운로드
-                              </button>
-                            )}
-                            {!sqlResult.error && (
-                              <span className="text-xs text-gray-400">{sqlResult.executionTime}ms</span>
-                            )}
-                          </div>
                         </div>
+                        {sqlResults.map((entry, idx) => {
+                          const r = entry.result;
+                          return (
+                            <div
+                              key={idx}
+                              className={`border rounded-lg overflow-hidden ${
+                                r.error ? "border-red-200" : "border-gray-200"
+                              }`}
+                            >
+                              {/* 쿼리 헤더 */}
+                              <div className="px-3 py-2 bg-gray-100 border-b border-gray-200 flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-[10px] text-gray-400 font-mono mb-0.5">
+                                    #{idx + 1}
+                                  </div>
+                                  <pre className="text-xs font-mono text-gray-700 whitespace-pre-wrap break-all max-h-20 overflow-y-auto">
+                                    {entry.query}
+                                  </pre>
+                                </div>
+                                <div className="shrink-0 flex flex-col items-end gap-1">
+                                  <span
+                                    className={`text-xs font-bold ${
+                                      r.error ? "text-red-700" : "text-gray-600"
+                                    }`}
+                                  >
+                                    {r.error
+                                      ? "❌ 오류"
+                                      : r.type === "select"
+                                      ? `📋 ${r.rowCount}행`
+                                      : `✅ ${r.affectedRows}행 영향`}
+                                  </span>
+                                  {!r.error && (
+                                    <span className="text-[10px] text-gray-400">{r.executionTime}ms</span>
+                                  )}
+                                  {!r.error &&
+                                    r.type === "select" &&
+                                    r.rows &&
+                                    r.rows.length > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => downloadSqlResultCsv(r, `query_${idx + 1}`)}
+                                        className="px-1.5 py-0.5 text-[10px] bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                                        title="CSV 다운로드"
+                                      >
+                                        📥 CSV
+                                      </button>
+                                    )}
+                                </div>
+                              </div>
 
-                        {sqlResult.error ? (
-                          <div className="p-3 text-sm text-red-600 bg-red-50">{sqlResult.error}</div>
-                        ) : sqlResult.type === "select" && sqlResult.rows ? (
-                          <div className="overflow-x-auto max-h-96 overflow-y-auto">
-                            <table className="w-full text-xs">
-                              <thead className="sticky top-0">
-                                <tr className="bg-gray-100 border-b border-gray-200 text-gray-600">
-                                  <th className="py-1.5 px-2 text-center font-medium text-gray-400 w-8">#</th>
-                                  {sqlResult.columns?.map((col) => (
-                                    <th key={col} className="py-1.5 px-2 text-left font-medium font-mono whitespace-nowrap">{col}</th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-50">
-                                {sqlResult.rows.map((row, i) => (
-                                  <tr key={i} className="hover:bg-gray-50">
-                                    <td className="py-1 px-2 text-center text-gray-300">{i + 1}</td>
-                                    {sqlResult.columns?.map((col) => (
-                                      <td key={col} className="py-1 px-2 font-mono max-w-[300px] truncate" title={row[col] !== null ? String(row[col]) : "NULL"}>
-                                        {renderCell(row[col])}
-                                      </td>
-                                    ))}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : (
-                          <div className="p-3 text-sm text-green-700 bg-green-50">
-                            쿼리가 성공적으로 실행되었습니다. ({sqlResult.affectedRows}행 영향, {sqlResult.executionTime}ms)
-                          </div>
-                        )}
+                              {/* 결과 본문 */}
+                              {r.error ? (
+                                <div className="p-3 text-sm text-red-600 bg-red-50">{r.error}</div>
+                              ) : r.type === "select" && r.rows ? (
+                                r.rows.length === 0 ? (
+                                  <div className="p-3 text-xs text-gray-400 italic">결과 없음</div>
+                                ) : (
+                                  <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                                    <table className="w-full text-xs">
+                                      <thead className="sticky top-0">
+                                        <tr className="bg-gray-100 border-b border-gray-200 text-gray-600">
+                                          <th className="py-1.5 px-2 text-center font-medium text-gray-400 w-8">#</th>
+                                          {r.columns?.map((col) => (
+                                            <th key={col} className="py-1.5 px-2 text-left font-medium font-mono whitespace-nowrap">
+                                              {col}
+                                            </th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-50">
+                                        {r.rows.map((row, i) => (
+                                          <tr key={i} className="hover:bg-gray-50">
+                                            <td className="py-1 px-2 text-center text-gray-300">{i + 1}</td>
+                                            {r.columns?.map((col) => (
+                                              <td
+                                                key={col}
+                                                className="py-1 px-2 font-mono max-w-[300px] truncate"
+                                                title={row[col] !== null ? String(row[col]) : "NULL"}
+                                              >
+                                                {renderCell(row[col])}
+                                              </td>
+                                            ))}
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )
+                              ) : (
+                                <div className="p-3 text-sm text-green-700 bg-green-50">
+                                  쿼리가 성공적으로 실행되었습니다. ({r.affectedRows}행 영향, {r.executionTime}ms)
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
