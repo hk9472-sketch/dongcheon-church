@@ -3,6 +3,7 @@ import LiveAttendanceForm from "./LiveAttendanceForm";
 import LiveViewerCount from "./LiveViewerCount";
 import LiveAttendanceList from "./LiveAttendanceList";
 import LiveServiceTracker from "@/components/LiveServiceTracker";
+import LiveYoutubePlayer from "./LiveYoutubePlayer";
 import { parseYouTubeLiveUrl } from "@/lib/youtubeEmbed";
 
 export default function LivePage() {
@@ -42,13 +43,7 @@ export default function LivePage() {
       <div className="bg-black rounded-lg overflow-hidden shadow-lg">
         {embedUrl ? (
           <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
-            <iframe
-              className="absolute inset-0 w-full h-full"
-              src={embedUrl}
-              title="동천교회 실시간 예배"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-            />
+            <LiveYoutubePlayer embedUrl={embedUrl} />
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-64 text-gray-400 px-4 text-center">

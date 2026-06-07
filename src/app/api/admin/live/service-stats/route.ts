@@ -66,30 +66,54 @@ export async function GET(req: NextRequest) {
         if (a.userId) selfUserIds.add(a.userId);
       }
 
-      // 웹 체류 — /live, /live-worship 경로 visit_log 중 dwell ≥ 1분 + 시간 일치
-      const dwellRows = await prisma.visitLog.findMany({
+      // 웹 진입 — dwell 조건 없이 모든 /live, /live-worship visit (참고용, ★)
+      //  · 이미 끝난 예배도 visit_log 만으로 사후 카운트 가능
+      //  · dwellSec 누적 전에 떠난 사용자도 포함
+      const allVisits = await prisma.visitLog.findMany({
         where: {
           path: { in: ["/live", "/live-worship"] },
           createdAt: { gte: inst.startAt, lt: inst.endAt },
-          dwellSec: { gte: DWELL_MIN_SEC },
         },
         select: {
           userId: true,
           sessionId: true,
           ip: true,
           userAgent: true,
+          dwellSec: true,
         },
       });
+
+      const entryKeys = new Set<string>();
       const dwellKeys = new Set<string>();
-      for (const v of dwellRows) {
+      for (const v of allVisits) {
         if (v.userId && selfUserIds.has(v.userId)) continue;
         if (v.sessionId && selfSessionIds.has(v.sessionId)) continue;
-        // 키: userId > sessionId > (ip + ua)
-        if (v.userId) dwellKeys.add(`u:${v.userId}`);
-        else if (v.sessionId) dwellKeys.add(`s:${v.sessionId}`);
-        else dwellKeys.add(`ipa:${v.ip}:${(v.userAgent || "").slice(0, 32)}`);
+        const key = v.userId
+          ? `u:${v.userId}`
+          : v.sessionId
+          ? `s:${v.sessionId}`
+          : `ipa:${v.ip}:${(v.userAgent || "").slice(0, 32)}`;
+        entryKeys.add(key);
+        if (v.dwellSec >= DWELL_MIN_SEC) dwellKeys.add(key);
       }
+      const webEntry = entryKeys.size;
       const webDwell = dwellKeys.size;
+
+      // YouTube 임베드 — 우리 사이트에서 PLAYING 상태였던 unique sessionId
+      const dateOnly = new Date(`${dateStr}T00:00:00Z`);
+      const embedSamples = await prisma.liveYoutubeEmbedSample.findMany({
+        where: {
+          serviceDate: dateOnly,
+          minuteKst: { gte: kstMinOf(inst.startAt), lt: kstMinOf(inst.endAt) },
+        },
+        select: { sessionId: true },
+      });
+      const embedSessionSet = new Set<string>();
+      for (const s of embedSamples) {
+        if (selfSessionIds.has(s.sessionId)) continue;
+        embedSessionSet.add(s.sessionId);
+      }
+      const embedUnique = embedSessionSet.size;
 
       // YouTube — peak + 평균(=cumulativeEnd - cumulativeStart 가 시간 평균 대용)
       const yt = ytMap.get(inst.code);
@@ -113,6 +137,16 @@ export async function GET(req: NextRequest) {
           count: selfReport,
           method: "LiveAttendance distinct (가족 포함)",
         },
+        webEntry: {
+          count: webEntry,
+          method: "/live·/live-worship 진입 distinct (사후 카운트 가능)",
+          dedupWithSelfReport: true,
+        },
+        embedPlay: {
+          count: embedUnique,
+          method: "임베드 PLAYING distinct sessionId",
+          dedupWithSelfReport: true,
+        },
         webDwell: {
           count: webDwell,
           threshold: "1분 이상 체류",
@@ -132,4 +166,10 @@ export async function GET(req: NextRequest) {
   );
 
   return NextResponse.json({ date: dateStr, services });
+}
+
+/** Date → KST 자정 기준 분 (0~1439) */
+function kstMinOf(d: Date): number {
+  const kst = new Date(d.getTime() + 9 * 3600 * 1000);
+  return kst.getUTCHours() * 60 + kst.getUTCMinutes();
 }

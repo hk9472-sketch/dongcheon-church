@@ -44,11 +44,12 @@ export async function GET(req: NextRequest) {
   const startKstMin = kstMinOf(inst.startAt);
   const endKstMin = kstMinOf(inst.endAt);
   const slots: {
-    minute: number; // KST 자정 기준 분 (0~1439)
-    label: string; // "HH:MM"
+    minute: number;
+    label: string;
     web: number;
     webDelta: number;
     youtube: number | null;
+    embed: number; // 임베드 PLAYING 상태였던 unique sessionId 수
   }[] = [];
   for (let m = startKstMin; m < endKstMin; m++) {
     slots.push({
@@ -57,6 +58,7 @@ export async function GET(req: NextRequest) {
       web: 0,
       webDelta: 0,
       youtube: null,
+      embed: 0,
     });
   }
 
@@ -89,6 +91,27 @@ export async function GET(req: NextRequest) {
   for (const s of slots) {
     const v = ytMap.get(s.minute);
     if (typeof v === "number") s.youtube = v;
+  }
+
+  // embed — LiveYoutubeEmbedSample 의 분당 distinct sessionId 수
+  const embedRows = await prisma.liveYoutubeEmbedSample.findMany({
+    where: {
+      serviceDate: inst.serviceDate,
+      minuteKst: { gte: startKstMin, lt: endKstMin },
+    },
+    select: { minuteKst: true, sessionId: true },
+  });
+  const embedByMin = new Map<number, Set<string>>();
+  for (const r of embedRows) {
+    let set = embedByMin.get(r.minuteKst);
+    if (!set) {
+      set = new Set();
+      embedByMin.set(r.minuteKst, set);
+    }
+    set.add(r.sessionId);
+  }
+  for (const s of slots) {
+    s.embed = embedByMin.get(s.minute)?.size ?? 0;
   }
 
   return NextResponse.json({

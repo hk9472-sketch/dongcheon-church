@@ -18,6 +18,7 @@ interface Point {
   web: number;
   webDelta: number;
   youtube: number | null;
+  embed?: number;
 }
 
 interface Props {
@@ -158,7 +159,7 @@ export default function TimeSeriesChart({ serviceInstanceId, title }: Props) {
       <div className="p-2 border-t border-gray-100">
         <div className="text-[11px] text-gray-600 mb-1 pl-2">
           <span className="inline-block w-2 h-2 bg-red-500 rounded-full mr-1.5" />
-          YouTube 동시 시청자 (분당 마지막 표본)
+          YouTube 동시 시청자 (분당 마지막 표본 · 외부 포함)
         </div>
         <ResponsiveContainer width="100%" height={140}>
           <LineChart data={points} margin={{ top: 6, right: 12, bottom: 4, left: 0 }}>
@@ -182,6 +183,39 @@ export default function TimeSeriesChart({ serviceInstanceId, title }: Props) {
               strokeWidth={2}
               dot={{ r: 2 }}
               connectNulls
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* 임베드 재생 차트 — 우리 사이트 임베드 플레이어에서 PLAYING 상태 */}
+      <div className="p-2 border-t border-gray-100">
+        <div className="text-[11px] text-gray-600 mb-1 pl-2">
+          <span className="inline-block w-2 h-2 bg-violet-500 rounded-full mr-1.5" />
+          임베드 재생 (우리 사이트 플레이어 PLAYING · sessionId dedup)
+        </div>
+        <ResponsiveContainer width="100%" height={120}>
+          <LineChart data={points} margin={{ top: 6, right: 12, bottom: 4, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 10 }}
+              interval={tickInterval}
+            />
+            <YAxis allowDecimals={false} tick={{ fontSize: 10 }} width={28} />
+            <Tooltip
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              formatter={(value: any) => [`${value}명`, "재생"]}
+              labelFormatter={(label) => `${label} (KST)`}
+              contentStyle={{ fontSize: "11px" }}
+            />
+            <Line
+              type="monotone"
+              dataKey="embed"
+              stroke="#8b5cf6"
+              strokeWidth={2}
+              dot={{ r: 2 }}
               isAnimationActive={false}
             />
           </LineChart>

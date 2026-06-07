@@ -518,6 +518,24 @@ model LiveYoutubeHourStat {
 // pollYoutubeViewers 가 서비스 윈도우 안에서 폴링할 때마다 upsert.
 // 한 (serviceCode, serviceDate) 당 1행: 윈도우 동안의 peak concurrent + cumulative 시작/끝.
 // ============================================================
+// 우리 사이트 임베드 YouTube 플레이어에서 PLAYING 상태였던 분 단위 표본.
+// 같은 (sessionId, serviceDate, minuteKst) 1 row → 자연스러운 dedup.
+// 집계:
+//   · unique = distinct sessionId 수 (그 서비스 시간 안)
+//   · concurrent(분 단위) = 같은 분의 row count
+model LiveYoutubeEmbedSample {
+  sessionId   String   @db.VarChar(64)
+  serviceDate DateTime @db.Date
+  minuteKst   Int      // 0~1439 (KST)
+  serviceCode String?  @db.VarChar(32)
+  updatedAt   DateTime @updatedAt
+
+  @@id([sessionId, serviceDate, minuteKst])
+  @@index([serviceDate, serviceCode])
+  @@index([serviceDate, minuteKst])
+  @@map("live_youtube_embed_samples")
+}
+
 // YouTube 동시 시청자 분 단위 표본 — 실시간 차트 + 사후 분석용.
 // (serviceCode, serviceDate, minuteKst) 키로 upsert. 같은 분 안에서는 가장 마지막 값.
 model LiveYoutubeMinuteStat {

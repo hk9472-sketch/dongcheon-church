@@ -595,6 +595,8 @@ interface ServiceStat {
   isRegular: boolean;
   closedAt: string | null;
   selfReport: { count: number; method: string };
+  webEntry?: { count: number; method: string; dedupWithSelfReport: boolean };
+  embedPlay?: { count: number; method: string; dedupWithSelfReport: boolean };
   webDwell: { count: number; threshold: string; dedupWithSelfReport: boolean };
   youtube: { peak: number; avg: number; cumulativeDelta: number };
   estimate: { value: number; formula: string };
@@ -727,12 +729,30 @@ function ByServiceTab() {
                 value={s.webDwell.count}
                 sub={`${s.webDwell.threshold} · 자기보고와 중복 제거`}
               />
+              {s.webEntry && (
+                <Row
+                  color="slate"
+                  stars="★ 참고"
+                  label="웹 진입"
+                  value={s.webEntry.count}
+                  sub="체류 시간 무관 · 진입만 카운트 (사후 산출용)"
+                />
+              )}
+              {s.embedPlay && (
+                <Row
+                  color="violet"
+                  stars="★★ 참고"
+                  label="임베드 재생"
+                  value={s.embedPlay.count}
+                  sub="우리 사이트 임베드 PLAYING · sessionId dedup"
+                />
+              )}
               <Row
                 color="amber"
                 stars="★ 보조"
                 label="YouTube"
                 value={s.youtube.peak}
-                sub={`최대 동시 / 평균 ${s.youtube.avg} (단순 합산 금지)`}
+                sub={`최대 동시 / 평균 ${s.youtube.avg} (외부 포함, 단순 합산 금지)`}
               />
               <div className="border-t border-gray-200 pt-2 flex items-baseline justify-between">
                 <div>
@@ -771,7 +791,7 @@ function Row({
   value,
   sub,
 }: {
-  color: "emerald" | "blue" | "amber";
+  color: "emerald" | "blue" | "amber" | "slate" | "violet";
   stars: string;
   label: string;
   value: number;
@@ -781,6 +801,8 @@ function Row({
     emerald: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
     blue: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-500" },
     amber: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500" },
+    slate: { bg: "bg-slate-50", text: "text-slate-700", dot: "bg-slate-400" },
+    violet: { bg: "bg-violet-50", text: "text-violet-700", dot: "bg-violet-500" },
   }[color];
   return (
     <div className={`flex items-baseline justify-between gap-2 ${colorMap.bg} px-2 py-1.5 rounded`}>
