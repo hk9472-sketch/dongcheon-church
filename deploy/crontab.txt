@@ -1,0 +1,36 @@
+# ============================================================
+# 동천교회 서버 crontab — 단일 진실(SSOT)
+#
+# 이 파일이 서버 cron 의 "전체"다. 손으로 `crontab -e` 하지 말고
+# 항상 이 파일을 고친 뒤 통째로 적용한다:
+#
+#     crontab /home/hk9472/pkistdc/deploy/crontab.txt
+#     crontab -l            # 적용 확인
+#
+# 새 정기작업이 생기면 반드시 여기 추가하고 git commit → 그래야 복구 시 재현됨.
+# 경로는 이 서버(user=hk9472, app=~/pkistdc) 기준 하드코딩.
+# ============================================================
+
+# 모든 항목을 한국 시간(KST) 기준으로 해석 (시스템 TZ 가 UTC 여도 무관)
+CRON_TZ=Asia/Seoul
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# ── 실시간 예배 YouTube 시청자 폴링 (매분) ──────────────────
+# 예배 윈도우 밖이면 외부 API 0건이라 연중 매분 호출해도 quota 안전.
+# 방문자가 /live 를 안 열어도 모든 예배가 기록되게 하는 핵심.
+* * * * * bash /home/hk9472/pkistdc/scripts/poll-live-youtube.sh >> /home/hk9472/backups/poll-yt.log 2>&1
+
+# ── 일일 백업 (매일 03:00 KST) ──────────────────────────────
+# DB(매일) + data/(월요일) + 암호화된 .env(매일) + 보존정리 + (설정 시)오프사이트
+0 3 * * * bash /home/hk9472/pkistdc/deploy/backup.sh >> /home/hk9472/backups/cron.log 2>&1
+
+# ── (선택) 오프사이트 복사 — GCS/다른 호스트로. backup.sh 안에서
+#     DC_OFFSITE_GCS 가 설정돼 있으면 백업 직후 자동 수행하므로 보통 불필요.
+#     별도 분리하고 싶을 때만 주석 해제하고 대상 채우기.
+# 0 4 * * 0 gsutil -m rsync -r /home/hk9472/backups gs://pkistdc-backups/ >> /home/hk9472/backups/offsite.log 2>&1
+
+# ── (선택) SSL 인증서 갱신 백스톱 (매주 월 04:30) ───────────
+#     certbot 은 보통 자체 systemd timer 로 자동 갱신하므로 기본 비활성.
+#     systemd timer 가 없는 환경에서만 주석 해제.
+# 30 4 * * 1 sudo /usr/local/bin/dc-cert-renew >> /home/hk9472/backups/cert-renew.log 2>&1
