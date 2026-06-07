@@ -51,30 +51,40 @@ export const DEFAULT_WINDOWS: ServiceWindow[] = [
 
 const SETTING_KEY = "live_service_windows";
 
-/** DB에서 윈도우 설정 로드 — 없거나 파싱 실패 시 DEFAULT_WINDOWS */
+/** DB에서 윈도우 설정 로드.
+ *  사용자 저장값이 우선이지만, DEFAULT_WINDOWS 에 정의된 정기 예배 코드 중
+ *  누락된 것은 자동으로 보완. 운영자가 admin/live-stats 의 windows 탭에서
+ *  실수로 일부 윈도우를 빠뜨려 저장해도, 그 예배(예: 장년반 오전) 의
+ *  ServiceInstance / 통계 분류가 멈추는 일을 막음.
+ */
 export async function loadWindows(): Promise<ServiceWindow[]> {
   try {
     const row = await prisma.siteSetting.findUnique({ where: { key: SETTING_KEY } });
-    if (!row?.value) return DEFAULT_WINDOWS;
-    const parsed = JSON.parse(row.value);
-    if (!Array.isArray(parsed)) return DEFAULT_WINDOWS;
-    // 검증 — 필수 필드 누락 시 폴백
     const valid: ServiceWindow[] = [];
-    for (const w of parsed) {
-      if (
-        typeof w?.code === "string" &&
-        typeof w?.label === "string" &&
-        Array.isArray(w?.days) &&
-        w.days.every((d: unknown) => typeof d === "number" && d >= 0 && d <= 6) &&
-        typeof w?.startMin === "number" &&
-        typeof w?.endMin === "number" &&
-        w.startMin >= 0 && w.startMin < 1440 &&
-        w.endMin > w.startMin && w.endMin <= 1440
-      ) {
-        valid.push(w as ServiceWindow);
+    if (row?.value) {
+      const parsed = JSON.parse(row.value);
+      if (Array.isArray(parsed)) {
+        for (const w of parsed) {
+          if (
+            typeof w?.code === "string" &&
+            typeof w?.label === "string" &&
+            Array.isArray(w?.days) &&
+            w.days.every((d: unknown) => typeof d === "number" && d >= 0 && d <= 6) &&
+            typeof w?.startMin === "number" &&
+            typeof w?.endMin === "number" &&
+            w.startMin >= 0 && w.startMin < 1440 &&
+            w.endMin > w.startMin && w.endMin <= 1440
+          ) {
+            valid.push(w as ServiceWindow);
+          }
+        }
       }
     }
-    return valid.length > 0 ? valid : DEFAULT_WINDOWS;
+    // 누락된 정기 예배 코드는 DEFAULT 로 자동 보완
+    for (const d of DEFAULT_WINDOWS) {
+      if (!valid.find((w) => w.code === d.code)) valid.push(d);
+    }
+    return valid;
   } catch {
     return DEFAULT_WINDOWS;
   }

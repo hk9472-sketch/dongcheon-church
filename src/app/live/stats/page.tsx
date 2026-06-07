@@ -93,6 +93,8 @@ export default function PublicLiveStatsPage() {
   const [chartDate, setChartDate] = useState(todayStr);
   const [chartServices, setChartServices] = useState<ServiceInstancePick[]>([]);
   const [chartServiceId, setChartServiceId] = useState<number | null>(null);
+  // 매트릭스 셀 클릭 시: 날짜 변경 + 그 날짜의 instances 로드 후 매칭할 code 보관.
+  const [pendingCode, setPendingCode] = useState<string | null>(null);
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
@@ -121,6 +123,15 @@ export default function PublicLiveStatsPage() {
           }),
         );
         setChartServices(services);
+        // 매트릭스 셀에서 클릭으로 진입한 경우 pendingCode 매칭 우선
+        if (pendingCode) {
+          const found = services.find((s) => s.code === pendingCode);
+          if (found) {
+            setChartServiceId(found.id);
+            setPendingCode(null);
+            return;
+          }
+        }
         // 기본 선택: 첫 항목 (없으면 null)
         setChartServiceId((cur) =>
           services.find((s) => s.id === cur)?.id ?? services[0]?.id ?? null,
@@ -295,6 +306,63 @@ export default function PublicLiveStatsPage() {
         </div>
       </div>
 
+      {/* 예배별 시계열 차트 (1분 단위 — 웹 누적 / YouTube 동시) */}
+      <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
+        <div className="flex items-end flex-wrap gap-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">차트 날짜</label>
+            <input
+              type="date"
+              value={chartDate}
+              onChange={(e) => setChartDate(e.target.value)}
+              className="px-2 py-1 text-sm border border-gray-300 rounded"
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs text-gray-500 mb-1">예배 선택</div>
+            <div className="flex flex-wrap gap-1.5">
+              {chartServices.length === 0 ? (
+                <span className="text-xs text-gray-400 py-1">
+                  이 날짜에 등록된 예배 없음
+                </span>
+              ) : (
+                chartServices.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setChartServiceId(s.id)}
+                    className={`px-2.5 py-1 text-xs rounded border ${
+                      chartServiceId === s.id
+                        ? "bg-blue-600 border-blue-700 text-white font-semibold"
+                        : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    {s.label}
+                    <span className="ml-1 text-[10px] opacity-70 font-mono">
+                      {new Date(s.startAt).getHours().toString().padStart(2, "0")}:
+                      {new Date(s.startAt).getMinutes().toString().padStart(2, "0")}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+        <p className="text-[11px] text-gray-500">
+          💡 아래 <strong>일자별 통계</strong> 표의 숫자(웹/유튜브) 셀을 클릭하면 그 일자·예배의 차트가 바로 위에 표시됩니다.
+        </p>
+
+        {chartServiceId !== null && (
+          <TimeSeriesChart
+            key={chartServiceId}
+            serviceInstanceId={chartServiceId}
+            title={
+              chartServices.find((s) => s.id === chartServiceId)?.label
+            }
+          />
+        )}
+      </div>
+
       {/* 일자별 매트릭스 */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
@@ -351,7 +419,15 @@ export default function PublicLiveStatsPage() {
                     <div className="text-[9px] text-gray-400 font-normal mt-0.5">웹 / 유튜브</div>
                   </td>
                   {orderedCodes.map((k) => (
-                    <td key={k} className="px-2 py-1.5 text-right text-gray-700 font-mono">
+                    <td
+                      key={k}
+                      onClick={() => {
+                        setChartDate(d.date);
+                        setPendingCode(k);
+                      }}
+                      className="px-2 py-1.5 text-right text-gray-700 font-mono cursor-pointer hover:bg-blue-50"
+                      title="클릭 → 위 차트에 이 예배의 시계열 표시"
+                    >
                       {d.perService[k] || ""}
                     </td>
                   ))}
@@ -364,7 +440,15 @@ export default function PublicLiveStatsPage() {
                 </tr>,
                 <tr key={`${d.date}-yt`} className="border-b border-gray-200 hover:bg-red-50/30">
                   {orderedCodes.map((k) => (
-                    <td key={k} className="px-2 py-1 text-right text-red-600 font-mono text-[11px]" title="동시최대 / 누적합류">
+                    <td
+                      key={k}
+                      onClick={() => {
+                        setChartDate(d.date);
+                        setPendingCode(k);
+                      }}
+                      className="px-2 py-1 text-right text-red-600 font-mono text-[11px] cursor-pointer hover:bg-blue-50"
+                      title="동시최대 / 누적합류 — 클릭 → 위 차트에 이 예배의 시계열 표시"
+                    >
                       {fmtYt(d.youtubePerService?.[k])}
                     </td>
                   ))}
@@ -420,60 +504,6 @@ export default function PublicLiveStatsPage() {
           <li><strong>기타</strong>: 예배 시간(서비스 윈도우) 외에 페이지에 들어온 접속 — 분류 안 되는 트래픽.</li>
           <li>카운트는 페이지에 3초 이상 머문 IP 기준 (서비스 시간 동안 동일 IP 1회).</li>
         </ul>
-      </div>
-
-      {/* 예배별 시계열 차트 (1분 단위 — 웹 누적 / YouTube 동시) */}
-      <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
-        <div className="flex items-end flex-wrap gap-3">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">차트 날짜</label>
-            <input
-              type="date"
-              value={chartDate}
-              onChange={(e) => setChartDate(e.target.value)}
-              className="px-2 py-1 text-sm border border-gray-300 rounded"
-            />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-xs text-gray-500 mb-1">예배 선택</div>
-            <div className="flex flex-wrap gap-1.5">
-              {chartServices.length === 0 ? (
-                <span className="text-xs text-gray-400 py-1">
-                  이 날짜에 등록된 예배 없음
-                </span>
-              ) : (
-                chartServices.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => setChartServiceId(s.id)}
-                    className={`px-2.5 py-1 text-xs rounded border ${
-                      chartServiceId === s.id
-                        ? "bg-blue-600 border-blue-700 text-white font-semibold"
-                        : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
-                    }`}
-                  >
-                    {s.label}
-                    <span className="ml-1 text-[10px] opacity-70 font-mono">
-                      {new Date(s.startAt).getHours().toString().padStart(2, "0")}:
-                      {new Date(s.startAt).getMinutes().toString().padStart(2, "0")}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-
-        {chartServiceId !== null && (
-          <TimeSeriesChart
-            key={chartServiceId}
-            serviceInstanceId={chartServiceId}
-            title={
-              chartServices.find((s) => s.id === chartServiceId)?.label
-            }
-          />
-        )}
       </div>
     </div>
   );

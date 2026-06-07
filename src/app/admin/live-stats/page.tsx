@@ -611,8 +611,16 @@ function ByServiceTab() {
   const [services, setServices] = useState<ServiceStat[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // 시계열 펼침: serviceInstanceId
-  const [openId, setOpenId] = useState<number | null>(null);
+  // 시계열 펼침 — 여러 카드 동시에 열어둘 수 있게 Set
+  const [openIds, setOpenIds] = useState<Set<number>>(new Set());
+  const toggleOpen = (id: number) => {
+    setOpenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const load = async () => {
     setLoading(true);
@@ -735,15 +743,15 @@ function ByServiceTab() {
                   <span className="text-sm text-gray-400 ml-1">명</span>
                 </p>
               </div>
-              {/* 시계열 차트 토글 */}
+              {/* 시계열 차트 토글 — 여러 카드 동시 펼침 가능 */}
               <button
                 type="button"
-                onClick={() => setOpenId(openId === s.id ? null : s.id)}
+                onClick={() => toggleOpen(s.id)}
                 className="w-full mt-2 py-1 text-[11px] border border-gray-200 rounded text-gray-600 hover:bg-gray-50"
               >
-                {openId === s.id ? "▲ 시계열 차트 닫기" : "▼ 시계열 차트 보기"}
+                {openIds.has(s.id) ? "▲ 시계열 차트 닫기" : "▼ 시계열 차트 보기"}
               </button>
-              {openId === s.id && (
+              {openIds.has(s.id) && (
                 <div className="mt-2">
                   <TimeSeriesChart serviceInstanceId={s.id} />
                 </div>
