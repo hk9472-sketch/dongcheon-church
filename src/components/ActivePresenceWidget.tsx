@@ -166,11 +166,11 @@ export default function ActivePresenceWidget() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // 홈 도크 슬롯 재탐색. 슬롯은 데스크톱 그리드(hidden lg:grid) 안에 있으므로
-  // lg(≥1024px) 에서만 도킹하고, 모바일/비홈에선 null → 팝업(fixed) 으로 떨어진다.
-  // 라우트 변경 + 브레이크포인트 교차 시 재평가.
+  // 홈 도크 슬롯 재탐색. 도크는 본문 바깥 우측 여백(gutter)에 띄우므로, 그 폭이 확보되는
+  // 충분히 넓은 화면(≥1920px)에서만 도킹한다. 그보다 좁으면 gutter 가 부족해 화면을 벗어나므로
+  // null → 팝업(fixed) 으로 폴백. 라우트 변경 + 브레이크포인트 교차 시 재평가.
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1024px)");
+    const mq = window.matchMedia("(min-width: 1920px)");
     const find = () =>
       setDockEl(mq.matches ? document.getElementById("dc-presence-dock") : null);
     find();
