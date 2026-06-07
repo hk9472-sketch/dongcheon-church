@@ -221,17 +221,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ skipped: true, reason: "duplicate" });
     }
 
-    // 오늘 이 IP로 이미 방문 기록이 있는지 확인 (KST 자정 기준)
+    // 오늘 이미 카운트된 "동일인" 인지 확인 → 누적 카운트 중복 방지 (세션/로그인 기반).
+    // distinct 방문자 집계와 동일한 기준: userId(로그인) 또는 sessionId(브라우저) 가 있으면
+    // 그 신원으로, 둘 다 없을 때만 ip 로. 그래서 IP 가 바뀌어도 같은 사람은 하루 1 만 증가.
+    const sid = sessionId ? String(sessionId).slice(0, 64) : null;
+    const identityOr: Array<{ userId: number } | { sessionId: string } | { ip: string }> = [];
+    if (resolvedUserId !== null) identityOr.push({ userId: resolvedUserId });
+    if (sid) identityOr.push({ sessionId: sid });
+    if (identityOr.length === 0) identityOr.push({ ip });
+
     const existingVisit = await prisma.visitLog.findFirst({
       where: {
-        ip,
         createdAt: { gte: todayStart, lt: tomorrowStart },
+        OR: identityOr,
       },
       select: { id: true },
     });
 
     if (existingVisit) {
-      // 이미 오늘 카운트된 IP → 로그만 추가 (카운트 증가 안 함)
+      // 이미 오늘 카운트된 동일인 → 로그만 추가 (카운트 증가 안 함)
       await prisma.visitLog.create({
         data: {
           ip: ip || "unknown",
@@ -239,11 +247,11 @@ export async function POST(request: NextRequest) {
           referer: referer || null,
           userAgent: userAgent || null,
           userId: resolvedUserId,
-          sessionId: sessionId ? String(sessionId).slice(0, 64) : null,
+          sessionId: sid,
         },
       });
     } else {
-      // 오늘 첫 방문 IP → 카운트 증가 + 로그 생성.
+      // 오늘 첫 방문 동일인 → 카운트 증가 + 로그 생성.
       // Prisma upsert 는 내부적으로 SELECT + INSERT/UPDATE 라 동시 요청이 몰리면 P2002
       // (유니크 제약 위반) 가 발생한다. MySQL 의 INSERT ... ON DUPLICATE KEY UPDATE 로
       // 원자적 처리하여 경합 상황에서도 오류 없이 카운트 1 증가.
@@ -260,7 +268,7 @@ export async function POST(request: NextRequest) {
             referer: referer || null,
             userAgent: userAgent || null,
             userId: resolvedUserId,
-            sessionId: sessionId ? String(sessionId).slice(0, 64) : null,
+            sessionId: sid,
           },
         }),
       ]);
