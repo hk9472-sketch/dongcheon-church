@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import DailyVisitsChart from "./DailyVisitsChart";
 
 interface VisitLog {
   id: number;
@@ -107,6 +108,9 @@ function AdminVisitLogsContent() {
         <h1 className="text-xl font-bold text-gray-800">방문 로그</h1>
         <span className="text-xs text-gray-500">visit_logs — 사이트 전체 페이지 방문 기록</span>
       </div>
+
+      {/* 일일 방문자 시계열 차트 */}
+      <DailyVisitsChart />
 
       {/* 필터 */}
       <form

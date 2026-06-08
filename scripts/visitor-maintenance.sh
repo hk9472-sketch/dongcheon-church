@@ -7,7 +7,7 @@
 # 인증: 앱 .env 의 CRON_SECRET 을 x-cron-secret 헤더로 전달.
 #   → 서버 .env 에 CRON_SECRET="<openssl rand -hex 16>" 추가 필요 (없으면 503, 작업 스킵).
 #
-# crontab 등록은 deploy/crontab.txt 참고 (매일 04:10).
+# crontab 등록은 deploy/crontab.txt 참고 (매일 03:10 — 04시 이후는 새벽기도 활동 시간).
 # ============================================================
 set -euo pipefail
 APP_DIR="${DC_APP_DIR:-$HOME/pkistdc}"
