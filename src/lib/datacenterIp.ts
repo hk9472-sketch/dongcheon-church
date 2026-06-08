@@ -21,17 +21,18 @@ export function isDatacenterIp(ip: string | null | undefined): boolean {
 
   // ── Tencent Cloud ──
   if (a === 43 && b >= 128 && b <= 191) return true; // 43.128.0.0/10 (주 크롤러 대역)
-  if (a === 49 && b === 51) return true;
-  if (a === 119 && (b === 28 || b === 29)) return true; // 119.28.0.0/15
-  if (a === 119 && b === 45) return true;
+  if (a === 49 && (b === 51 || b === 232)) return true;
+  if (a === 119 && (b === 8 || b === 13 || b === 28 || b === 29 || b === 45)) return true;
+  if (a === 124 && (b === 156 || b === 243)) return true;
+  if (a === 82 && (b === 156 || b === 157)) return true;
+  if (a === 111 && (b === 119 || b === 230)) return true;
+  if (a === 152 && b === 136) return true;
+  if (a === 1 && (b === 92 || (b >= 12 && b <= 15))) return true; // 1.12/14 + 1.92
   if (a === 129 && b === 226) return true;
   if (a === 150 && b === 109) return true;
   if (a === 170 && b === 106) return true;
-  if (a === 124 && b === 156) return true;
   if (a === 101 && (b === 32 || b === 42)) return true;
-  if (a === 111 && b === 230) return true;
   if (a === 81 && b >= 68 && b <= 71) return true; // 81.68.0.0/14
-  if (a === 1 && b >= 12 && b <= 15) return true; // 1.12.0.0/14
   if (a === 134 && b === 175) return true;
   if (a === 162 && b === 14) return true;
 
@@ -48,11 +49,14 @@ export function isDatacenterIp(ip: string | null | undefined): boolean {
   if (a === 8 && b >= 128 && b <= 159) return true; // 8.128.0.0/12
   if (a === 120 && b >= 24 && b <= 27) return true;
 
-  // ── 관측된 기타 크롤러 대역 ──
+  // ── 관측된 기타 크롤러 대역 (로그 마이닝) ──
   if (a === 113 && b === 44) return true;
   if (a === 180 && b === 153) return true;
   if (a === 140 && b === 206) return true;
   if (a === 94 && b === 74) return true;
+  if (a === 46 && b === 250) return true;
+  if (a === 149 && b === 232) return true;
+  if (a === 190 && b === 92) return true;
 
   return false;
 }
