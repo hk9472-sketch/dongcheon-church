@@ -3,6 +3,7 @@ import prisma from "@/lib/db";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import { countActive } from "@/lib/activePresence";
 import { getCurrentUser } from "@/lib/auth";
+import { isDatacenterIp } from "@/lib/datacenterIp";
 
 // ============================================================
 // 봇/크롤러 User-Agent 필터
@@ -85,33 +86,26 @@ async function getVisitorStats(): Promise<VisitorStats> {
   const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
   const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
 
-  // 고유 방문자 = 같은 사람이 IP 가 바뀌어도(WiFi↔LTE, 통신사 NAT, 기기 변경) 1 로 집계.
-  // 식별 우선순위: userId(로그인 — 기기 무관 동일인) > sessionId(브라우저 localStorage,
-  // IP 변경에도 유지) > ip(둘 다 없는 익명 폴백).
-  //
-  // 단순 COALESCE(...) DISTINCT 는 부분 커버리지 구간에서 부풀려진다(같은 사람이 sessionId
-  // 행 + sessionId 없는 행을 둘 다 가지면 세션키 + ip키 2중 카운트). 그래서 2단 합산:
-  //   ① identity_keys: userId/sessionId 가 있는 행들의 고유 신원 수
-  //   ② ip_only      : 그 윈도우에서 단 한 번도 userId/sessionId 가 안 붙은 ip 만 (이미 ①에
-  //                    세션/유저로 대표된 ip 는 NOT EXISTS 로 제외 → 유령 ip 키 방지)
+  // 고유 방문자 = "실제로 머문 사람" 만. 식별 우선순위 sessionId(브라우저, IP 변경에도 유지)
+  // > userId(로그인) > ip(폴백) 로 묶고, 그 신원이 아래 '사람 신호' 중 하나라도 있을 때만 카운트:
+  //   · dwellSec>0      : 최소 한 번 heartbeat (≈20초+ 머묾)
+  //   · 복수 페이지      : 한 신원이 2개 이상 경로 조회
+  //   · 로그인           : userId 존재
+  //   · 모바일 UA        : 안드/아이폰 (현 크롤러는 데스크톱 UA 위장)
+  // → UA·IP 를 위장하고 JS 까지 돌리는 크롤러(1페이지·0체류·데스크톱)는 자동 제외.
+  // (데이터센터 IP 는 ingest 단계 isDatacenterIp 에서 이미 차단되지만, 잔여분도 여기서 거름)
   const distinctVisitors = (from: Date, to: Date) =>
     prisma.$queryRaw<{ c: bigint }[]>`
-      SELECT
-        ( SELECT COUNT(DISTINCT COALESCE(CONCAT('u:', userId), NULLIF(sessionId, '')))
-          FROM visit_logs
-          WHERE createdAt >= ${from} AND createdAt < ${to}
-            AND (userId IS NOT NULL OR NULLIF(sessionId, '') IS NOT NULL) )
-        +
-        ( SELECT COUNT(DISTINCT v.ip)
-          FROM visit_logs v
-          WHERE v.createdAt >= ${from} AND v.createdAt < ${to}
-            AND v.userId IS NULL AND NULLIF(v.sessionId, '') IS NULL
-            AND NOT EXISTS (
-              SELECT 1 FROM visit_logs w
-              WHERE w.ip = v.ip
-                AND w.createdAt >= ${from} AND w.createdAt < ${to}
-                AND (w.userId IS NOT NULL OR NULLIF(w.sessionId, '') IS NOT NULL) ) )
-        AS c`;
+      SELECT COUNT(*) AS c FROM (
+        SELECT COALESCE(NULLIF(sessionId, ''), CONCAT('u:', userId), ip) AS k
+        FROM visit_logs
+        WHERE createdAt >= ${from} AND createdAt < ${to}
+        GROUP BY k
+        HAVING MAX(dwellSec) > 0
+            OR COUNT(DISTINCT path) >= 2
+            OR MAX(userId IS NOT NULL) = 1
+            OR MAX(userAgent REGEXP 'Android|iPhone|iPad|CPU iPhone') = 1
+      ) t`;
 
   // 병렬로 모든 데이터 조회
   const [totalAgg, todayRows, yesterdayRows, baseSetting] = await Promise.all([
@@ -200,6 +194,11 @@ export async function POST(request: NextRequest) {
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       request.headers.get("x-real-ip") ||
       "127.0.0.1";
+
+    // 데이터센터/클라우드 IP = UA 위장 크롤러 → 로그·카운트 제외 (방문자 부풀림 방지)
+    if (isDatacenterIp(ip)) {
+      return NextResponse.json({ skipped: true, reason: "datacenter-ip" });
+    }
 
     const { today, todayStart } = getKoreanDates();
     const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
