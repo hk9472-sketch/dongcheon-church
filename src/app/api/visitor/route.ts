@@ -3,7 +3,7 @@ import prisma from "@/lib/db";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import { countActive } from "@/lib/activePresence";
 import { getCurrentUser } from "@/lib/auth";
-import { isDatacenterIp } from "@/lib/datacenterIp";
+import { isCrawlerIp } from "@/lib/crawlerFilter";
 
 // ============================================================
 // 봇/크롤러 User-Agent 필터
@@ -196,8 +196,9 @@ export async function POST(request: NextRequest) {
       "127.0.0.1";
 
     // 데이터센터/클라우드 IP = UA 위장 크롤러 → 로그·카운트 제외 (방문자 부풀림 방지)
-    if (isDatacenterIp(ip)) {
-      return NextResponse.json({ skipped: true, reason: "datacenter-ip" });
+    // 정적 대역 + DB 동적 목록(유지보수 cron 이 자동 등록)
+    if (await isCrawlerIp(ip)) {
+      return NextResponse.json({ skipped: true, reason: "crawler-ip" });
     }
 
     const { today, todayStart } = getKoreanDates();

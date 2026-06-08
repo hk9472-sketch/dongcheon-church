@@ -21,6 +21,11 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # 방문자가 /live 를 안 열어도 모든 예배가 기록되게 하는 핵심.
 * * * * * bash /home/hk9472/pkistdc/scripts/poll-live-youtube.sh >> /home/hk9472/backups/poll-yt.log 2>&1
 
+# ── 방문자 봇 정리 (매일 04:10 KST) ─────────────────────────
+# 최근 14일 카운트 행태 재집계(봇 제거 유지) + 신규 크롤러 IP 대역 자동 등록.
+# 4/26 이전 레거시는 건드리지 않음. .env 의 CRON_SECRET 필요(없으면 스킵).
+10 4 * * * bash /home/hk9472/pkistdc/scripts/visitor-maintenance.sh >> /home/hk9472/backups/visitor-maint.log 2>&1
+
 # ── 일일 백업 (매일 03:00 KST) ──────────────────────────────
 # DB(매일) + data/(월요일) + 암호화된 .env(매일) + 보존정리 + (설정 시)오프사이트
 0 3 * * * bash /home/hk9472/pkistdc/deploy/backup.sh >> /home/hk9472/backups/cron.log 2>&1

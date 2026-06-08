@@ -35,7 +35,8 @@
 | 4 | **`.env` 시크릿** | `~/pkistdc/.env` (gitignore) | **암호화 백업본**(§4) 복호화. 키 목록은 [.env.example](../.env.example) |
 | 5 | PM2 프로세스 등록 + 부팅 자동시작 | `~/.pm2/`, systemd | `deploy/server-bootstrap.sh` + `pm2 startup`(sudo 1회) |
 | 6 | PM2 로그로테이트 | pm2 모듈 | `deploy/server-bootstrap.sh` (자동) |
-| 7 | **crontab** (poll·백업·offsite·cert) | `crontab -l` | **`deploy/crontab.txt`** → `crontab deploy/crontab.txt` |
+| 7 | **crontab** (poll·백업·offsite·cert·방문자봇정리) | `crontab -l` | **`deploy/crontab.txt`** → `crontab deploy/crontab.txt` |
+| 7b | `CRON_SECRET` (.env) — 방문자 봇 정리 cron 인증 | `~/pkistdc/.env` | `openssl rand -hex 16` 값 추가 (없으면 봇 정리 스킵) |
 | 8 | nginx 리버스 프록시 + 레거시 리다이렉트 | `/etc/nginx/sites-*` | [`nginx/nginx.conf`](../nginx/nginx.conf), [`scripts/nginx-legacy*.conf`](../scripts/) → §5 |
 | 9 | SSL 인증서 + 자동갱신 권한 | `/etc/letsencrypt`, sudoers | `certbot` 발급 + `scripts/setup-cert-renew.sh`(sudo 1회) |
 | 10 | DB 데이터 | MySQL `dongcheon` | 일일 백업(§4) 복원 |
