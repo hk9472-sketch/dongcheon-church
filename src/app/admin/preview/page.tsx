@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // ============================================================
-// 해상도별 미리보기 — iframe 을 지정 해상도 크기로 띄워 그 뷰포트 기준으로
-// 실제 반응형(미디어쿼리)이 적용된 모습을 보여준다. 화면 폭에 맞춰 축소 표시.
-// 푸터까지 스크롤 없이 들어오는지(scrollHeight vs 높이) 수치로 표시.
+// 해상도별 미리보기 + 라이브 간격 편집기.
+// · iframe 을 지정 해상도 뷰포트로 렌더 → 그 해상도 기준 반응형이 그대로 보임.
+// · 위젯 간격(게시글 행 높이 / 위젯 간 간격 / 줄 수)을 슬라이더로 조절하면
+//   iframe 에 CSS 변수를 실시간 주입해 저장 전에 바로 미리보기.
+// · [저장] 하면 site_settings(skin_widget_*) 에 반영 → 라이브 서비스 기준이 됨.
+// · 푸터까지 들어오는지(scrollHeight) 수치로 ✓/✕ 표시.
 // ============================================================
 
 const PRESETS: { label: string; w: number; h: number }[] = [
@@ -20,30 +23,55 @@ const PRESETS: { label: string; w: number; h: number }[] = [
   { label: "390×844 (모바일)", w: 390, h: 844 },
 ];
 
-const PATHS = [
-  { label: "메인", path: "/" },
-  { label: "방문 로그", path: "/admin/visit-logs" },
-  { label: "연보 통합 입력", path: "/accounting/offering/multi-entry" },
-];
-
-// 1920×1080 모니터 100% = 브라우저 크롬 제외 실제 뷰포트 ≈ 956px.
-// 미리보기는 '크롬 제외 실제 뷰포트'를 가정하는 게 정확하므로 보정 옵션 제공.
 const CHROME_PX = 120;
+
+/** "1.75rem" / "28px" / "28" → px 정수 */
+function toPx(v: string | undefined, fallback: number): number {
+  if (!v) return fallback;
+  const m = String(v).trim().match(/^([\d.]+)\s*(px|rem)?$/);
+  if (!m) return fallback;
+  const n = parseFloat(m[1]);
+  if (!Number.isFinite(n)) return fallback;
+  return m[2] === "rem" ? Math.round(n * 16) : Math.round(n);
+}
 
 export default function ResolutionPreviewPage() {
   const [w, setW] = useState(1920);
   const [h, setH] = useState(1080);
-  const [path, setPath] = useState("/");
   const [excludeChrome, setExcludeChrome] = useState(true);
   const [scale, setScale] = useState(1);
   const [overflow, setOverflow] = useState<{ scrollH: number; viewH: number } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  // 간격 편집 상태 (px / 정수)
+  const [rowH, setRowH] = useState(28);
+  const [gap, setGap] = useState(8);
+  const [rows, setRows] = useState(5);
+  const [saved, setSaved] = useState<{ rowH: number; gap: number; rows: number } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // 크롬(주소창/탭) 높이를 뺀 실제 뷰포트 높이
   const viewH = excludeChrome ? Math.max(200, h - CHROME_PX) : h;
+  const dirty = !saved || saved.rowH !== rowH || saved.gap !== gap || saved.rows !== rows;
+
+  // 현재 저장된 설정 로드
+  useEffect(() => {
+    fetch("/api/admin/settings")
+      .then((r) => r.json())
+      .then((d) => {
+        const rh = toPx(d.skin_widget_row_height, 28);
+        const g = toPx(d.skin_widget_gap, 8);
+        const rw = parseInt(d.skin_widget_rows || "5", 10) || 5;
+        setRowH(rh);
+        setGap(g);
+        setRows(rw);
+        setSaved({ rowH: rh, gap: g, rows: rw });
+      })
+      .catch(() => setSaved({ rowH: 28, gap: 8, rows: 5 }));
+  }, []);
 
   const recomputeScale = useCallback(() => {
     const cw = (containerRef.current?.clientWidth || 0) - 4;
@@ -56,26 +84,72 @@ export default function ResolutionPreviewPage() {
     return () => window.removeEventListener("resize", recomputeScale);
   }, [recomputeScale]);
 
-  // iframe 로드 후 컨텐츠 높이 측정 (same-origin 이라 접근 가능)
-  const onLoad = () => {
+  // iframe 에 간격 CSS 변수 실시간 주입 + 컨텐츠 높이 측정
+  const syncPreview = useCallback(() => {
     try {
       const doc = iframeRef.current?.contentDocument;
-      if (doc) {
-        const sh = Math.max(
-          doc.documentElement.scrollHeight,
-          doc.body?.scrollHeight || 0,
-        );
-        setOverflow({ scrollH: sh, viewH });
-      } else setOverflow(null);
+      if (!doc) {
+        setOverflow(null);
+        return;
+      }
+      doc.documentElement.style.setProperty("--skin-widget-row-height", `${rowH}px`);
+      doc.documentElement.style.setProperty("--skin-widget-gap", `${gap}px`);
+      // 측정은 다음 프레임(레이아웃 반영 후)
+      requestAnimationFrame(() => {
+        try {
+          const sh = Math.max(
+            doc.documentElement.scrollHeight,
+            doc.body?.scrollHeight || 0,
+          );
+          setOverflow({ scrollH: sh, viewH });
+        } catch {
+          setOverflow(null);
+        }
+      });
     } catch {
       setOverflow(null);
     }
+  }, [rowH, gap, viewH]);
+
+  // 값/뷰포트 변경 시 실시간 반영
+  useEffect(() => {
+    syncPreview();
+  }, [syncPreview]);
+
+  // 저장 — site_settings 반영 후 iframe 리로드(줄 수 등 서버 렌더 반영)
+  const save = async () => {
+    setSaving(true);
+    setSavedMsg(null);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          skin_widget_row_height: `${rowH}px`,
+          skin_widget_gap: `${gap}px`,
+          skin_widget_rows: String(rows),
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d?.message || "저장 실패");
+      }
+      setSaved({ rowH, gap, rows });
+      setSavedMsg("저장됨 — 라이브 서비스에 반영되었습니다.");
+      setReloadKey((k) => k + 1); // 줄 수 반영 위해 리로드
+    } catch (e) {
+      setSavedMsg(e instanceof Error ? e.message : "저장 실패");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const applyPreset = (p: { w: number; h: number }) => {
-    setW(p.w);
-    setH(p.h);
-    setOverflow(null);
+  const resetToSaved = () => {
+    if (!saved) return;
+    setRowH(saved.rowH);
+    setGap(saved.gap);
+    setRows(saved.rows);
+    setReloadKey((k) => k + 1);
   };
 
   const fits = overflow ? overflow.scrollH <= overflow.viewH + 2 : null;
@@ -85,13 +159,13 @@ export default function ResolutionPreviewPage() {
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
         <span className="inline-block w-1 h-7 bg-blue-700 rounded-full" />
-        <h1 className="text-xl font-bold text-gray-800">해상도 미리보기</h1>
+        <h1 className="text-xl font-bold text-gray-800">해상도 미리보기 · 간격 조정</h1>
         <span className="text-xs text-gray-500">
-          지정 해상도의 뷰포트로 렌더 → 반응형(압축 등) 실제 모습 + 푸터까지 들어오는지 확인
+          기준 해상도를 고르고, 보면서 간격을 조절한 뒤 저장 → 그 값이 서비스 기준이 됩니다.
         </span>
       </div>
 
-      {/* 컨트롤 */}
+      {/* 해상도 컨트롤 */}
       <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-3">
         <div className="flex flex-wrap gap-1.5">
           {PRESETS.map((p) => {
@@ -100,11 +174,9 @@ export default function ResolutionPreviewPage() {
               <button
                 key={p.label}
                 type="button"
-                onClick={() => applyPreset(p)}
+                onClick={() => { setW(p.w); setH(p.h); }}
                 className={`px-2.5 py-1 text-xs rounded border transition-colors ${
-                  active
-                    ? "bg-blue-700 text-white border-blue-700"
-                    : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                  active ? "bg-blue-700 text-white border-blue-700" : "border-gray-300 text-gray-700 hover:bg-gray-50"
                 }`}
               >
                 {p.label}
@@ -112,108 +184,102 @@ export default function ResolutionPreviewPage() {
             );
           })}
         </div>
-
         <div className="flex flex-wrap items-end gap-3 text-sm">
           <label className="flex flex-col gap-0.5">
             <span className="text-[11px] text-gray-500">가로(px)</span>
-            <input
-              type="number"
-              value={w}
-              onChange={(e) => setW(Math.max(320, parseInt(e.target.value, 10) || 0))}
-              className="w-24 rounded border border-gray-300 px-2 py-1"
-            />
+            <input type="number" value={w} onChange={(e) => setW(Math.max(320, parseInt(e.target.value, 10) || 0))}
+              className="w-24 rounded border border-gray-300 px-2 py-1" />
           </label>
           <label className="flex flex-col gap-0.5">
             <span className="text-[11px] text-gray-500">세로(px)</span>
-            <input
-              type="number"
-              value={h}
-              onChange={(e) => setH(Math.max(320, parseInt(e.target.value, 10) || 0))}
-              className="w-24 rounded border border-gray-300 px-2 py-1"
-            />
-          </label>
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[11px] text-gray-500">페이지</span>
-            <select
-              value={path}
-              onChange={(e) => setPath(e.target.value)}
-              className="rounded border border-gray-300 px-2 py-1"
-            >
-              {PATHS.map((p) => (
-                <option key={p.path} value={p.path}>{p.label}</option>
-              ))}
-            </select>
+            <input type="number" value={h} onChange={(e) => setH(Math.max(320, parseInt(e.target.value, 10) || 0))}
+              className="w-24 rounded border border-gray-300 px-2 py-1" />
           </label>
           <label className="flex items-center gap-1.5 text-xs text-gray-600">
-            <input
-              type="checkbox"
-              checked={excludeChrome}
-              onChange={(e) => setExcludeChrome(e.target.checked)}
-            />
-            브라우저 크롬(주소창·탭 {CHROME_PX}px) 제외해 실제 뷰포트로
+            <input type="checkbox" checked={excludeChrome} onChange={(e) => setExcludeChrome(e.target.checked)} />
+            브라우저 크롬(주소창·탭 {CHROME_PX}px) 제외
           </label>
-          <button
-            type="button"
-            onClick={() => setReloadKey((k) => k + 1)}
-            className="ml-auto rounded border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50"
-          >
-            ↻ 새로고침
-          </button>
-        </div>
-
-        {/* 적합 여부 */}
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <span className="text-gray-500 text-xs">
-            렌더 뷰포트: <strong>{w}×{viewH}</strong>
-            {excludeChrome && <span className="text-gray-400"> (모니터 {h} − 크롬 {CHROME_PX})</span>}
-            {" · "}축소 {Math.round(scale * 100)}%
+          <span className="text-gray-500 text-xs ml-auto">
+            렌더: <strong>{w}×{viewH}</strong> · 축소 {Math.round(scale * 100)}%
           </span>
+        </div>
+      </div>
+
+      {/* 간격 편집기 */}
+      <div className="bg-indigo-50/40 rounded-lg border border-indigo-200 p-3 space-y-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-bold text-indigo-800">위젯 간격 조정 (메인 화면)</span>
           {fits === null ? (
             <span className="text-gray-400 text-xs">측정 중…</span>
           ) : fits ? (
             <span className="rounded bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-              ✓ 푸터까지 한 화면에 들어옴 (콘텐츠 {overflow!.scrollH}px ≤ {overflow!.viewH}px)
+              ✓ 푸터까지 들어옴 (콘텐츠 {overflow!.scrollH} ≤ {overflow!.viewH}px)
             </span>
           ) : (
             <span className="rounded bg-rose-50 border border-rose-200 px-2 py-0.5 text-xs font-semibold text-rose-700">
-              ✕ {overBy}px 초과 — 스크롤 발생 (콘텐츠 {overflow!.scrollH}px &gt; {overflow!.viewH}px)
+              ✕ {overBy}px 초과 (콘텐츠 {overflow!.scrollH} &gt; {overflow!.viewH}px)
             </span>
           )}
+          <div className="ml-auto flex items-center gap-2">
+            {savedMsg && <span className="text-xs text-emerald-700">{savedMsg}</span>}
+            {dirty && <span className="text-xs text-amber-600 font-medium">● 미저장</span>}
+            <button type="button" onClick={resetToSaved} disabled={!dirty || saving}
+              className="rounded border border-gray-300 bg-white px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-40">
+              되돌리기
+            </button>
+            <button type="button" onClick={save} disabled={!dirty || saving}
+              className="rounded bg-indigo-600 px-4 py-1 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
+              {saving ? "저장 중…" : "저장"}
+            </button>
+          </div>
         </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* 게시글 행 높이 */}
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-gray-600">게시글 행 높이 <strong className="text-indigo-700">{rowH}px</strong></span>
+            <input type="range" min={16} max={36} value={rowH} onChange={(e) => setRowH(parseInt(e.target.value, 10))} />
+            <input type="number" min={16} max={48} value={rowH} onChange={(e) => setRowH(parseInt(e.target.value, 10) || 16)}
+              className="w-20 rounded border border-gray-300 px-2 py-0.5 text-sm" />
+          </label>
+          {/* 위젯 간 간격 */}
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-gray-600">위젯 간 간격 <strong className="text-indigo-700">{gap}px</strong></span>
+            <input type="range" min={0} max={24} value={gap} onChange={(e) => setGap(parseInt(e.target.value, 10))} />
+            <input type="number" min={0} max={40} value={gap} onChange={(e) => setGap(parseInt(e.target.value, 10) || 0)}
+              className="w-20 rounded border border-gray-300 px-2 py-0.5 text-sm" />
+          </label>
+          {/* 줄 수 */}
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-gray-600">
+              위젯당 줄 수 <strong className="text-indigo-700">{rows}</strong>
+              <span className="text-gray-400"> (저장 후 반영)</span>
+            </span>
+            <input type="range" min={3} max={10} value={rows} onChange={(e) => setRows(parseInt(e.target.value, 10))} />
+            <input type="number" min={3} max={10} value={rows} onChange={(e) => setRows(parseInt(e.target.value, 10) || 5)}
+              className="w-20 rounded border border-gray-300 px-2 py-0.5 text-sm" />
+          </label>
+        </div>
+        <p className="text-[11px] text-gray-500">
+          행 높이·위젯 간격은 슬라이더 조절 즉시 미리보기에 반영됩니다(저장 전 미리보기). 줄 수는 서버 렌더라
+          [저장] 후 반영됩니다. ✓ 가 뜰 때까지 줄이고 저장하면 그 값이 모든 사용자에게 적용됩니다.
+        </p>
       </div>
 
-      {/* 미리보기 — 지정 해상도 iframe 을 화면 폭에 맞춰 축소 */}
-      <div
-        ref={containerRef}
-        className="bg-gray-100 rounded-lg border border-gray-200 p-2 overflow-auto"
-      >
-        <div
-          style={{ width: w * scale, height: viewH * scale }}
-          className="relative mx-auto shadow-lg ring-1 ring-gray-300 overflow-hidden bg-white"
-        >
+      {/* 미리보기 */}
+      <div ref={containerRef} className="bg-gray-100 rounded-lg border border-gray-200 p-2 overflow-auto">
+        <div style={{ width: w * scale, height: viewH * scale }}
+          className="relative mx-auto shadow-lg ring-1 ring-gray-300 overflow-hidden bg-white">
           <iframe
-            key={`${w}-${viewH}-${path}-${reloadKey}`}
+            key={`${w}-${viewH}-${reloadKey}`}
             ref={iframeRef}
-            src={path}
-            onLoad={onLoad}
+            src="/"
+            onLoad={syncPreview}
             title="resolution-preview"
-            style={{
-              width: w,
-              height: viewH,
-              border: "0",
-              transform: `scale(${scale})`,
-              transformOrigin: "top left",
-            }}
+            style={{ width: w, height: viewH, border: "0", transform: `scale(${scale})`, transformOrigin: "top left" }}
           />
         </div>
       </div>
-
-      <p className="text-xs text-gray-500 leading-relaxed bg-gray-50 border border-gray-200 rounded-md p-3">
-        · iframe 을 실제 해상도 크기로 렌더하므로 그 안의 <strong>미디어쿼리(압축 등)가 그 해상도 기준</strong>으로 적용됩니다.
-        1920×1080 선택 시 1080p 압축 레이아웃을 그대로 봅니다.<br />
-        · <strong>브라우저 크롬 제외</strong> 체크 시, 실제로 보이는 영역(주소창·탭 약 {CHROME_PX}px 제외)을 기준으로 적합 여부를 판정합니다 — 이게 사용자 실제 화면에 가깝습니다.<br />
-        · ✓/✕ 표시로 그 해상도에서 푸터까지 들어오는지 수치로 확인하고, 그에 맞춰 위젯 간격 기준을 정하면 됩니다.
-      </p>
     </div>
   );
 }
