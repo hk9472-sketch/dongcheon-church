@@ -19,6 +19,7 @@ const ADMIN_GROUPS: { key: string; label: string; items: Item[] }[] = [
       { label: "게시판 생성", href: "/admin/boards/create", icon: "➕" },
       { label: "게시글 이동", href: "/admin/posts/bulk-move", icon: "🔀" },
       { label: "헤드넘 재정렬", href: "/admin/boards/reorder", icon: "🔢" },
+      { label: "해상도 미리보기", href: "/admin/preview", icon: "🖥️" },
     ],
   },
   {
