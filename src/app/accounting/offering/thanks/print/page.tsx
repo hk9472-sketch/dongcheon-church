@@ -243,8 +243,8 @@ function PrintInner() {
   .no-print { display: none !important; }
   .print-target, .print-target * { visibility: visible !important; }
   .print-target {
-    position: absolute !important;
-    inset: 0 !important;
+    position: static !important;   /* absolute 면 다단/긴 내용이 페이지네이션 안 돼 빈 페이지 발생 */
+    inset: auto !important;
     opacity: 1 !important;
     pointer-events: auto !important;
     z-index: auto !important;
@@ -294,9 +294,9 @@ function PrintInner() {
             <button
               type="button"
               onClick={() => window.close()}
-              className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+              className="px-4 py-1.5 text-sm bg-gray-700 text-white rounded hover:bg-gray-800 font-semibold"
             >
-              닫기
+              ✕ 닫기
             </button>
           </div>
         </div>
@@ -351,13 +351,15 @@ function PrintInner() {
             className="relative bg-white shadow-lg mx-auto"
             style={{
               width: "min(800px, 100%)",
-              aspectRatio: "210 / 297",
+              // A4 비율(1:1.4142)을 최소 높이로만 두고, 내용이 길면 늘어나게 → 박스 밖으로
+              // 흘러넘쳐 사이트 푸터와 겹치는 문제 방지. (고정 aspect-ratio + absolute 제거)
+              minHeight: "calc(min(800px, 100%) * 1.4142)",
               maxWidth: "100%",
             }}
           >
-            {/* 실제 콘텐츠 — 여백 안쪽 */}
+            {/* 실제 콘텐츠 — 여백 안쪽 (일반 흐름이라 박스가 내용따라 성장) */}
             <div
-              className="absolute inset-0 thanks-content"
+              className="thanks-content"
               style={{
                 paddingTop: `${margins.top}mm`,
                 paddingRight: `${margins.right}mm`,

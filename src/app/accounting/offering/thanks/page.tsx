@@ -26,11 +26,6 @@ function todayStr() {
   return `${y}-${m}-${dd}`;
 }
 
-function monthStartStr() {
-  const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
 function formatDate(dateStr: string) {
   const d = new Date(dateStr);
   const y = d.getFullYear();
@@ -41,7 +36,7 @@ function formatDate(dateStr: string) {
 
 export default function ThanksOfferingPage() {
   const { hasMemberEdit } = useAccountPerms();
-  const [dateFrom, setDateFrom] = useState(monthStartStr());
+  const [dateFrom, setDateFrom] = useState(todayStr());
   const [dateTo, setDateTo] = useState(todayStr());
   // 인쇄 기준일자 — 단일 일자, 출력물 헤더에 표시.
   // 기본값은 종료일과 동일.
@@ -68,8 +63,8 @@ export default function ThanksOfferingPage() {
       if (!res.ok) throw new Error("데이터를 불러오지 못했습니다.");
       const data = await res.json();
       setEntries(Array.isArray(data) ? data : data.entries || []);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "데이터를 불러오지 못했습니다.");
       setEntries([]);
     } finally {
       setLoading(false);
