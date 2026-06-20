@@ -516,6 +516,60 @@ function Sep() {
   return <div className="w-px h-5 bg-gray-300 mx-0.5" />;
 }
 
+// ─── 이모지 선택 팝업 (외부 라이브러리 없이 큐레이션) ───
+const EMOJIS = [
+  "😊", "🙂", "😀", "😄", "😁", "😆", "😂", "🥹", "😉", "😍", "🥰", "😘", "🤗", "🤔", "😌", "😎",
+  "🥳", "😇", "🙃", "😢", "😭", "😅", "😴", "🤭", "😮", "🙄", "😏", "😋",
+  "👍", "👏", "🙏", "🤝", "✌️", "👌", "💪", "🙌", "✋", "👋", "🤙", "👀",
+  "❤️", "🧡", "💛", "💚", "💙", "💜", "🤍", "💖", "💕", "💗", "✨", "⭐", "🌟", "🔥", "💯",
+  "🎉", "🎊", "✅", "❗", "❓", "⚠️", "📌", "📢", "🔔", "🎁", "💐", "☕", "🍰",
+  "✝️", "📖", "🕊️", "⛪", "🛐", "🎵", "🎶", "🌿", "🌷", "🌸", "☀️", "🌈", "🍞", "🍷", "🌙",
+];
+
+function EmojiPicker({ onInsert }: { onInsert: (emoji: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        title="이모지 삽입"
+        onClick={() => setOpen((v) => !v)}
+        className="w-7 h-7 flex items-center justify-center text-sm rounded border transition-colors bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+      >
+        😊
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 w-[300px] max-h-[230px] overflow-y-auto bg-white border border-gray-300 rounded shadow-lg z-50 p-2">
+          <div className="grid grid-cols-8 gap-0.5">
+            {EMOJIS.map((em, i) => (
+              <button
+                key={`${em}-${i}`}
+                type="button"
+                onClick={() => {
+                  onInsert(em);
+                  setOpen(false);
+                }}
+                className="w-8 h-8 flex items-center justify-center text-lg rounded hover:bg-indigo-50"
+                title={em}
+              >
+                {em}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── 표 생성 그리드 피커 (PPT 스타일) ───
 function TablePicker({ onInsert, title }: { onInsert: (rows: number, cols: number) => void; title?: string }) {
   const [open, setOpen] = useState(false);
@@ -1611,6 +1665,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
         >
           ─
         </TBtn>
+        <EmojiPicker onInsert={(em) => editor.chain().focus().insertContent(em).run()} />
 
         {/* 표 편집 (표 안에 커서가 있을 때만 표시) */}
         {editor.isActive("table") && (
