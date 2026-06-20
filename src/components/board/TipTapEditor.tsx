@@ -543,8 +543,21 @@ const EMOJIS = [
   "➖", "🔴", "🟢", "🟡", "🔵",
 ];
 
-function EmojiPicker({ onInsert }: { onInsert: (emoji: string) => void }) {
+// 특수문자 — 카테고리별
+const SYMBOL_GROUPS: { label: string; items: string[] }[] = [
+  { label: "화살표", items: ["←", "→", "↑", "↓", "↔", "↕", "⇐", "⇒", "⇑", "⇓", "⇔", "⇕", "↗", "↘", "↙", "↖", "▶", "◀", "▲", "▼", "➡", "⬅", "⬆", "⬇", "↩", "↪", "⤴", "⤵", "↻", "↺"] },
+  { label: "괄호·문장부호", items: ["“", "”", "‘", "’", "「", "」", "『", "』", "【", "】", "〔", "〕", "〈", "〉", "《", "》", "«", "»", "‹", "›", "…", "—", "–", "·", "ㆍ", "※", "¶", "§", "°", "′", "″"] },
+  { label: "도형·체크", items: ["■", "□", "▣", "▦", "▤", "▥", "●", "○", "◎", "◇", "◆", "△", "▽", "▷", "◁", "★", "☆", "♠", "♣", "♥", "♦", "◐", "◑", "✓", "✔", "✕", "✖", "☑", "☒", "✚", "❖"] },
+  { label: "화폐", items: ["₩", "$", "¥", "€", "£", "¢", "฿", "₫", "₽", "₹", "₪", "₿"] },
+  { label: "수학·단위", items: ["±", "×", "÷", "≠", "≤", "≥", "≈", "≒", "≡", "∞", "√", "∑", "∏", "∫", "∂", "∈", "∉", "⊂", "⊃", "∪", "∩", "∀", "∃", "∅", "∝", "∴", "∵", "⊥", "∥", "∠", "㎡", "㎥", "℃", "℉", "‰", "㎏", "㎝", "㎜", "㎞", "㎖"] },
+  { label: "원·번호문자", items: ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "㉠", "㉡", "㉢", "㉣", "㉤", "ⓐ", "ⓑ", "ⓒ", "Ⓐ", "Ⓑ", "Ⓒ", "㈀", "㈁", "㈂"] },
+  { label: "로마·분수", items: ["Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ", "Ⅴ", "Ⅵ", "Ⅶ", "Ⅷ", "Ⅸ", "Ⅹ", "ⅰ", "ⅱ", "ⅲ", "ⅳ", "ⅴ", "½", "⅓", "⅔", "¼", "¾", "⅛"] },
+  { label: "기호·장식", items: ["™", "©", "®", "№", "☎", "☏", "✉", "♨", "☯", "☮", "✝", "✞", "☦", "✡", "☪", "☀", "☁", "☂", "☃", "♩", "♪", "♫", "♬", "✿", "❀", "❁", "☘", "♻", "⚠", "✦", "✧"] },
+];
+
+function EmojiPicker({ onInsert }: { onInsert: (ch: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"emoji" | "symbol">("emoji");
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -553,33 +566,75 @@ function EmojiPicker({ onInsert }: { onInsert: (emoji: string) => void }) {
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
+
+  const cellBtn = (ch: string, i: number) => (
+    <button
+      key={`${ch}-${i}`}
+      type="button"
+      onClick={() => {
+        onInsert(ch);
+        setOpen(false);
+      }}
+      className="w-9 h-8 flex items-center justify-center text-lg rounded hover:bg-indigo-50"
+      title={ch}
+    >
+      {ch}
+    </button>
+  );
+
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
-        title="이모지 삽입"
+        title="이모지·특수문자 삽입"
         onClick={() => setOpen((v) => !v)}
         className="w-7 h-7 flex items-center justify-center text-sm rounded border transition-colors bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
       >
         😊
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-1 w-[300px] max-h-[230px] overflow-y-auto bg-white border border-gray-300 rounded shadow-lg z-50 p-2">
-          <div className="grid grid-cols-8 gap-0.5">
-            {EMOJIS.map((em, i) => (
-              <button
-                key={`${em}-${i}`}
-                type="button"
-                onClick={() => {
-                  onInsert(em);
-                  setOpen(false);
-                }}
-                className="w-8 h-8 flex items-center justify-center text-lg rounded hover:bg-indigo-50"
-                title={em}
-              >
-                {em}
-              </button>
-            ))}
+        <div className="absolute top-full left-0 mt-1 w-[330px] bg-white border border-gray-300 rounded shadow-lg z-50">
+          {/* 탭 */}
+          <div className="flex border-b border-gray-200">
+            <button
+              type="button"
+              onClick={() => setTab("emoji")}
+              className={`flex-1 px-2 py-1.5 text-xs font-medium ${
+                tab === "emoji"
+                  ? "bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600"
+                  : "text-gray-500 hover:bg-gray-50"
+              }`}
+            >
+              😊 이모지
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("symbol")}
+              className={`flex-1 px-2 py-1.5 text-xs font-medium ${
+                tab === "symbol"
+                  ? "bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600"
+                  : "text-gray-500 hover:bg-gray-50"
+              }`}
+            >
+              Ω 특수문자
+            </button>
+          </div>
+          {/* 내용 */}
+          <div className="max-h-[260px] overflow-y-auto p-1.5">
+            {tab === "emoji" ? (
+              <div className="grid grid-cols-8 gap-0.5">
+                {EMOJIS.map((em, i) => cellBtn(em, i))}
+              </div>
+            ) : (
+              SYMBOL_GROUPS.map((g) => (
+                <div key={g.label} className="mb-1">
+                  <div className="text-[10px] text-gray-400 px-1 pb-0.5">{g.label}</div>
+                  <div className="grid grid-cols-8 gap-0.5">
+                    {g.items.map((ch, i) => cellBtn(ch, i))}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
