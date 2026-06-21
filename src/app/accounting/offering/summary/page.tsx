@@ -5,49 +5,40 @@ import { useAccountPerms } from "@/lib/useAccountPerms";
 import HelpButton from "@/components/HelpButton";
 
 /* ───── constants ───── */
-const OFFERING_TYPES = ["주일연보", "감사", "특별", "절기", "오일"] as const;
+// DB(offering_entries.offeringType) 에 저장된 실제 값과 동일한 풀네임 사용.
+// (예전엔 "감사/특별/절기/오일" short name 이라 주일연보만 매칭되고 십일조연보 누락됐음)
+const OFFERING_TYPES = [
+  "주일연보",
+  "십일조연보",
+  "감사연보",
+  "특별연보",
+  "오일연보",
+  "절기연보",
+] as const;
+type OfferingType = (typeof OFFERING_TYPES)[number];
+type TypeAmounts = Record<OfferingType, number>;
 
 /* ───── types ───── */
-interface MemberSummaryRow {
+type MemberSummaryRow = TypeAmounts & {
   memberId: number;
   memberName: string;
   groupName: string | null;
-  주일연보: number;
-  감사: number;
-  특별: number;
-  절기: number;
-  오일: number;
   total: number;
-}
+};
 
-interface DateSummaryRow {
+type DateSummaryRow = TypeAmounts & {
   date: string;
-  주일연보: number;
-  감사: number;
-  특별: number;
-  절기: number;
-  오일: number;
   total: number;
-}
+};
 
-interface MonthSummaryRow {
+type MonthSummaryRow = TypeAmounts & {
   month: number;
-  주일연보: number;
-  감사: number;
-  특별: number;
-  절기: number;
-  오일: number;
   total: number;
-}
+};
 
-interface PeriodSummary {
-  주일연보: number;
-  감사: number;
-  특별: number;
-  절기: number;
-  오일: number;
+type PeriodSummary = TypeAmounts & {
   total: number;
-}
+};
 
 /* ───── helpers ───── */
 function fmtAmount(n: number): string {
@@ -110,8 +101,8 @@ export default function OfferingSummaryPage() {
   };
 
   /* ---- byType 레코드 → OFFERING_TYPES 평면화 ---- */
-  function flattenByType(byType: Record<string, number> | undefined): Record<(typeof OFFERING_TYPES)[number], number> {
-    const out = { 주일연보: 0, 감사: 0, 특별: 0, 절기: 0, 오일: 0 };
+  function flattenByType(byType: Record<string, number> | undefined): TypeAmounts {
+    const out = Object.fromEntries(OFFERING_TYPES.map((t) => [t, 0])) as TypeAmounts;
     if (!byType) return out;
     for (const t of OFFERING_TYPES) {
       out[t] = byType[t] || 0;
@@ -201,9 +192,12 @@ export default function OfferingSummaryPage() {
            */
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const arr: any[] = Array.isArray(d?.data) ? d.data : [];
-          const agg: PeriodSummary = { 주일연보: 0, 감사: 0, 특별: 0, 절기: 0, 오일: 0, total: 0 };
+          const agg: PeriodSummary = {
+            ...(Object.fromEntries(OFFERING_TYPES.map((t) => [t, 0])) as TypeAmounts),
+            total: 0,
+          };
           for (const row of arr) {
-            const t = row.offeringType as (typeof OFFERING_TYPES)[number];
+            const t = row.offeringType as OfferingType;
             const amt = typeof row.amount === "number" ? row.amount : 0;
             if (t && t in agg) {
               agg[t] += amt;
@@ -377,7 +371,7 @@ export default function OfferingSummaryPage() {
                   <tbody>
                     {memberRows.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
+                        <td colSpan={9} className="px-4 py-8 text-center text-gray-400">
                           조회된 데이터가 없습니다.
                         </td>
                       </tr>
@@ -433,7 +427,7 @@ export default function OfferingSummaryPage() {
                   <tbody>
                     {dateRows.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                        <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                           조회된 데이터가 없습니다.
                         </td>
                       </tr>
@@ -488,7 +482,7 @@ export default function OfferingSummaryPage() {
                   <tbody>
                     {monthRows.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                        <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                           조회된 데이터가 없습니다.
                         </td>
                       </tr>
