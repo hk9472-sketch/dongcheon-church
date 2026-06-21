@@ -5,7 +5,11 @@ import { useAccountPerms } from "@/lib/useAccountPerms";
 import HelpButton from "@/components/HelpButton";
 
 /* ───── constants ───── */
-const OFFERING_TYPES = ["주일연보", "감사", "특별", "절기", "오일"] as const;
+const OFFERING_TYPES = ["주일연보", "십일조연보", "감사연보", "특별연보", "오일연보", "절기연보"] as const;
+// 비고(내역)는 감사연보에만 표시·기록
+const DESC_TYPE = "감사연보";
+
+type SortBy = "member" | "input";
 
 /* ───── types ───── */
 interface EntryItem {
@@ -39,6 +43,18 @@ function firstDayOfMonth(): string {
   return `${y}-${m}-01`;
 }
 
+function sortEntries(items: EntryItem[], sortBy: SortBy): EntryItem[] {
+  return [...items].sort((a, b) => {
+    if (sortBy === "member") {
+      const na = a.memberNoAtDate ?? a.memberId ?? 9_999_999;
+      const nb = b.memberNoAtDate ?? b.memberId ?? 9_999_999;
+      if (na !== nb) return na - nb;
+      return a.id - b.id;
+    }
+    return a.id - b.id; // 입력순서
+  });
+}
+
 type ViewTab = "member" | "date" | "period";
 
 /* ───── component ───── */
@@ -46,6 +62,7 @@ export default function OfferingListPage() {
   const { hasMemberEdit } = useAccountPerms();
   const [viewTab, setViewTab] = useState<ViewTab>("member");
   const [entries, setEntries] = useState<EntryItem[]>([]);
+  const [sortBy, setSortBy] = useState<SortBy>("member");
   const [loading, setLoading] = useState(false);
 
   // member tab
@@ -318,6 +335,19 @@ export default function OfferingListPage() {
 
       {/* results table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        {entries.length > 0 && (
+          <div className="flex items-center gap-4 px-4 py-2 border-b border-gray-100 text-sm">
+            <span className="text-gray-500">정렬</span>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="radio" name="list-sort" checked={sortBy === "member"} onChange={() => setSortBy("member")} />
+              개인번호별
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="radio" name="list-sort" checked={sortBy === "input"} onChange={() => setSortBy("input")} />
+              입력순서별
+            </label>
+          </div>
+        )}
         {loading ? (
           <div className="px-4 py-8 text-center text-gray-400">로딩 중...</div>
         ) : viewTab === "date" && entries.length > 0 ? (
@@ -343,7 +373,7 @@ export default function OfferingListPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((e) => (
+                    {sortEntries(items, sortBy).map((e) => (
                       <tr key={e.id} className="border-t border-gray-100">
                         <td className="px-4 py-2 text-gray-600">
                           {typeof e.date === "string" ? e.date.slice(0, 10) : ""}
@@ -352,7 +382,7 @@ export default function OfferingListPage() {
                         {hasMemberEdit && <td className="px-4 py-2 text-gray-800">{e.member?.name ?? "(개인번호없음)"}</td>}
                         <td className="px-4 py-2 text-gray-400">—</td>
                         <td className="px-4 py-2 text-right text-blue-700 font-medium">{fmtAmount(e.amount)}</td>
-                        <td className="px-4 py-2 text-gray-500">{e.description || ""}</td>
+                        <td className="px-4 py-2 text-gray-500">{e.offeringType === DESC_TYPE ? (e.description || "") : ""}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -388,7 +418,7 @@ export default function OfferingListPage() {
                     </td>
                   </tr>
                 ) : (
-                  entries.map((e) => (
+                  sortEntries(entries, sortBy).map((e) => (
                     <tr key={e.id} className="border-t border-gray-100 hover:bg-gray-50">
                       <td className="px-4 py-2 text-gray-600">
                         {typeof e.date === "string" ? e.date.slice(0, 10) : ""}
@@ -399,7 +429,7 @@ export default function OfferingListPage() {
                       <td className="px-4 py-2 text-right text-blue-700 font-medium">
                         {fmtAmount(e.amount)}
                       </td>
-                      <td className="px-4 py-2 text-gray-500">{e.description || ""}</td>
+                      <td className="px-4 py-2 text-gray-500">{e.offeringType === DESC_TYPE ? (e.description || "") : ""}</td>
                     </tr>
                   ))
                 )}

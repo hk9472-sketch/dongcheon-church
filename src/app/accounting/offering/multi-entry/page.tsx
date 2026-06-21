@@ -50,6 +50,7 @@ export default function MultiOfferingEntryPage() {
   const [pendingDraft, setPendingDraft] = useState<{ date: string; rows: Row[] } | null>(null);
   const [loading, setLoading] = useState(false); // 불러오기 중
   const [loadMsg, setLoadMsg] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<"member" | "input">("member");
   // 셀 참조: cellRefs[row][col] — col 0 = memberNo, 1~6 = 6개 종류 금액, 7 = 비고
   const cellRefs = useRef<Array<Array<HTMLInputElement | null>>>([]);
   const COLS_PER_ROW = 1 + TYPES.length + 1; // = 8
@@ -222,7 +223,8 @@ export default function MultiOfferingEntryPage() {
             memberId: memberIdForBody,
             offeringType: u.offeringType,
             amount: u.amount,
-            description: r.description || null,
+            // 비고(내역)는 감사연보에만 기록
+            description: u.offeringType === "감사연보" ? r.description || null : null,
           }),
         });
         if (!res.ok) {
@@ -243,7 +245,8 @@ export default function MultiOfferingEntryPage() {
               memberId: memberIdForBody,
               offeringType: c.offeringType,
               amount: c.amount,
-              description: r.description || null,
+              // 비고(내역)는 감사연보에만 기록
+              description: c.offeringType === "감사연보" ? r.description || null : null,
             })),
           }),
         });
@@ -339,7 +342,7 @@ export default function MultiOfferingEntryPage() {
               memberId,
               offeringType: t.key,
               amount: amt,
-              description: r.description || null,
+              description: t.key === "감사연보" ? r.description || null : null,
             });
           } else if (existingId && amt === 0) {
             deletePlan.push({ rowIdx: idx, offeringType: t.key, id: existingId });
@@ -349,7 +352,7 @@ export default function MultiOfferingEntryPage() {
               memberId,
               offeringType: t.key,
               amount: amt,
-              description: r.description || null,
+              description: t.key === "감사연보" ? r.description || null : null,
             });
           }
         }
@@ -554,6 +557,33 @@ export default function MultiOfferingEntryPage() {
     }
   };
 
+  // 현재 입력된 행을 개인번호별/입력순서별로 재정렬 (빈 행은 맨 끝 유지)
+  const applySort = (by: "member" | "input") => {
+    setSortBy(by);
+    setRows((prev) => {
+      const nonBlank = prev.filter(
+        (r) =>
+          r.memberNo.trim() !== "" ||
+          Object.keys(r.savedIds).length > 0 ||
+          TYPES.some((t) => (parseInt(r.amounts[t.key] || "0", 10) || 0) > 0),
+      );
+      const minId = (r: Row) => {
+        const ids = Object.values(r.savedIds);
+        return ids.length ? Math.min(...ids) : Number.MAX_SAFE_INTEGER;
+      };
+      const sorted = [...nonBlank].sort((a, b) => {
+        if (by === "member") {
+          const na = parseInt(a.memberNo || "0", 10) || 0;
+          const nb = parseInt(b.memberNo || "0", 10) || 0;
+          if (na !== nb) return na - nb;
+        }
+        return minId(a) - minId(b); // 입력순서 (저장 id 기준)
+      });
+      cellRefs.current = [];
+      return [...sorted, blankRow()];
+    });
+  };
+
   // ============ 셀 참조 + 화살표 키 이동 ============
   const setCellRef = (row: number, col: number) => (el: HTMLInputElement | null) => {
     if (!cellRefs.current[row]) cellRefs.current[row] = [];
@@ -723,6 +753,17 @@ export default function MultiOfferingEntryPage() {
         >
           {savingAll ? "저장 중..." : "전체 저장"}
         </button>
+        <div className="flex items-center gap-2 text-xs text-gray-600 ml-2">
+          <span>정렬</span>
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input type="radio" name="me-sort" checked={sortBy === "member"} onChange={() => applySort("member")} />
+            개인번호
+          </label>
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input type="radio" name="me-sort" checked={sortBy === "input"} onChange={() => applySort("input")} />
+            입력순서
+          </label>
+        </div>
         <button
           type="button"
           onClick={resetScreen}
@@ -751,7 +792,7 @@ export default function MultiOfferingEntryPage() {
                   {t.label}
                 </th>
               ))}
-              <th className="px-2 py-2 text-left font-medium">비고</th>
+              <th className="px-2 py-2 text-left font-medium">감사내역 <span className="text-gray-400 font-normal">(감사연보만)</span></th>
               <th className="px-2 py-2 w-24 text-center font-medium">작업</th>
             </tr>
           </thead>

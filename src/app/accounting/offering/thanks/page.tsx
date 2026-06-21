@@ -42,8 +42,18 @@ export default function ThanksOfferingPage() {
   // 기본값은 종료일과 동일.
   const [printDate, setPrintDate] = useState(todayStr());
   const [entries, setEntries] = useState<ThanksEntry[]>([]);
+  const [sortBy, setSortBy] = useState<"member" | "input">("member");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const sortedEntries = [...entries].sort((a, b) => {
+    if (sortBy === "member") {
+      const na = a.memberNoAtDate ?? a.memberId ?? 9_999_999;
+      const nb = b.memberNoAtDate ?? b.memberId ?? 9_999_999;
+      if (na !== nb) return na - nb;
+    }
+    return a.id - b.id;
+  });
 
   const openPrint = (mode: "ad" | "list" | "handout") => {
     const url = `/accounting/offering/thanks/print?mode=${mode}&date=${encodeURIComponent(printDate)}`;
@@ -164,6 +174,21 @@ export default function ThanksOfferingPage() {
       {/* 결과 */}
       {!loading && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          {/* 정렬 */}
+          {entries.length > 0 && (
+            <div className="print:hidden flex items-center gap-4 px-4 py-2 border-b border-gray-100 text-sm">
+              <span className="text-gray-500">정렬</span>
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input type="radio" name="thanks-sort" checked={sortBy === "member"} onChange={() => setSortBy("member")} />
+                개인번호별
+              </label>
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input type="radio" name="thanks-sort" checked={sortBy === "input"} onChange={() => setSortBy("input")} />
+                입력순서별
+              </label>
+            </div>
+          )}
+
           {/* 인쇄용 제목 */}
           <div className="hidden print:block text-center py-4">
             <h2 className="text-lg font-bold">감사연보현황</h2>
@@ -195,7 +220,7 @@ export default function ThanksOfferingPage() {
                     </td>
                   </tr>
                 ) : (
-                  entries.map((e, idx) => (
+                  sortedEntries.map((e, idx) => (
                     <tr key={e.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-4 py-2.5 text-gray-600">{formatDate(e.date)}</td>
                       <td className="px-4 py-2.5 text-center text-gray-500">{idx + 1}</td>

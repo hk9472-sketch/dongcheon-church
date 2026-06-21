@@ -62,6 +62,26 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
   const [rows, setRows] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<"member" | "input">("member");
+
+  // 저장된 행을 개인번호별/입력순서별로 재정렬 (신규 행은 끝에 유지)
+  const applySort = (by: "member" | "input") => {
+    setSortBy(by);
+    setRows((prev) => {
+      const saved = prev.filter((r) => r.id > 0);
+      const news = prev.filter((r) => r.id === 0);
+      const sorted = [...saved].sort((a, b) => {
+        if (by === "member") {
+          const na = parseInt(a.memberId || "0", 10) || 0;
+          const nb = parseInt(b.memberId || "0", 10) || 0;
+          if (na !== nb) return na - nb;
+        }
+        return a.id - b.id;
+      });
+      cellRefs.current = [];
+      return [...sorted, ...news];
+    });
+  };
 
   // 행간 화살표 이동 — 각 셀(input/select) 의 ref 를 [row][col] 에 저장.
   // col 순서: 일자(0) / 관리번호(1) / [연보종류(2)] / 금액 / 비고
@@ -195,6 +215,8 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
       return;
     }
     const mid = r.memberId.trim() === "" ? null : parseInt(r.memberId, 10);
+    // 비고(내역)는 감사연보에만 기록
+    const desc = r.offeringType === "감사연보" ? r.description || null : null;
     setRows((prev) => {
       const n = [...prev];
       n[idx] = { ...n[idx], status: "saving", message: undefined };
@@ -213,7 +235,7 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
                 memberId: mid,
                 offeringType: r.offeringType,
                 amount: amt,
-                description: r.description || null,
+                description: desc,
               },
             ],
           }),
@@ -238,7 +260,7 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
             memberId: mid,
             offeringType: r.offeringType,
             amount: amt,
-            description: r.description || null,
+            description: desc,
           }),
         });
         const data = await res.json();
@@ -328,6 +350,8 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
       }
       const mid = r.memberId.trim() === "" ? null : parseInt(r.memberId, 10);
       const memberId = mid !== null && Number.isFinite(mid) ? mid : null;
+      // 비고(내역)는 감사연보에만 기록
+      const desc = r.offeringType === "감사연보" ? r.description || null : null;
       if (r.id === 0) {
         createPlan.push({
           rowIdx: idx,
@@ -336,7 +360,7 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
             memberId,
             offeringType: r.offeringType,
             amount: amt,
-            description: r.description || null,
+            description: desc,
           },
         });
       } else {
@@ -348,7 +372,7 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
             memberId,
             offeringType: r.offeringType,
             amount: amt,
-            description: r.description || null,
+            description: desc,
           },
         });
       }
@@ -517,6 +541,17 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
         >
           조회
         </button>
+        <div className="flex items-center gap-2 text-xs text-gray-600">
+          <span>정렬</span>
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input type="radio" name="bulk-sort" checked={sortBy === "member"} onChange={() => applySort("member")} />
+            개인번호
+          </label>
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input type="radio" name="bulk-sort" checked={sortBy === "input"} onChange={() => applySort("input")} />
+            입력순서
+          </label>
+        </div>
         <button
           type="button"
           onClick={() =>
@@ -636,14 +671,25 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
                       />
                     </td>
                     <td className="px-2 py-1">
-                      <input
-                        ref={setCellRef(idx, showTypeColumn ? 4 : 3)}
-                        type="text"
-                        value={r.description}
-                        onChange={(e) => updateField(idx, "description", e.target.value)}
-                        onKeyDown={(e) => onCellKeyDown(e, idx, showTypeColumn ? 4 : 3)}
-                        className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-sm"
-                      />
+                      {r.offeringType === "감사연보" ? (
+                        <input
+                          ref={setCellRef(idx, showTypeColumn ? 4 : 3)}
+                          type="text"
+                          value={r.description}
+                          onChange={(e) => updateField(idx, "description", e.target.value)}
+                          onKeyDown={(e) => onCellKeyDown(e, idx, showTypeColumn ? 4 : 3)}
+                          className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-sm"
+                        />
+                      ) : (
+                        <input
+                          ref={setCellRef(idx, showTypeColumn ? 4 : 3)}
+                          type="text"
+                          value=""
+                          disabled
+                          placeholder="감사연보만"
+                          className="w-full rounded border border-gray-100 bg-gray-50 px-1.5 py-0.5 text-sm text-gray-300"
+                        />
+                      )}
                     </td>
                     <td className="px-2 py-1">
                       <div className="flex items-center justify-center gap-1">
@@ -708,7 +754,7 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
       <div className="text-xs text-gray-500">
         ※ 노란 배경 = 신규 행, 주황 배경 = 변경됨(저장 필요). 각 행의 ✓ 로 저장, ✕ 로 삭제.
         일자도 셀에서 수정 가능. ↑↓ 또는 Enter 로 같은 컬럼 위/아래 행 이동, 마지막 행에서
-        ↓ 누르면 빈 행이 자동 추가됨. 상단 "+ 줄 추가" 로도 즉시 행 생성 가능.
+        ↓ 누르면 빈 행이 자동 추가됨. 상단 [+ 줄 추가] 로도 즉시 행 생성 가능.
         새 줄의 일자는 상단 <strong>기준일자</strong> 값으로 자동 채워집니다.
       </div>
     </div>
