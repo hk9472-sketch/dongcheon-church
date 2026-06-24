@@ -44,6 +44,27 @@ function todayKstYmd(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
+// ============================================================
+// YouTube ToS 준수 — III.E.4: API 로 받은 통계(동시 시청자 등)를 30일 초과
+// 저장·표시 금지. 30일 초과 행을 삭제하면 저장·표시(데이터 없음) 둘 다 자동 충족.
+// 대상: service/minute/hour 통계(= YouTube API 동시시청자 파생) + embed 표본.
+// ============================================================
+export const YT_RETENTION_DAYS = 30;
+
+export async function purgeOldYoutubeStats(): Promise<number> {
+  const cutoffYmd = new Date(Date.now() - YT_RETENTION_DAYS * 24 * 3600 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const cutoff = new Date(`${cutoffYmd}T00:00:00.000Z`);
+  const [a, b, c, d] = await Promise.all([
+    prisma.liveYoutubeServiceStat.deleteMany({ where: { serviceDate: { lt: cutoff } } }),
+    prisma.liveYoutubeMinuteStat.deleteMany({ where: { serviceDate: { lt: cutoff } } }),
+    prisma.liveYoutubeHourStat.deleteMany({ where: { serviceDate: { lt: cutoff } } }),
+    prisma.liveYoutubeEmbedSample.deleteMany({ where: { serviceDate: { lt: cutoff } } }),
+  ]);
+  return a.count + b.count + c.count + d.count;
+}
+
 /** URL → video ID 직접 추출 (watch/youtu.be/embed/live/shorts) */
 export function extractVideoId(url: string): string | null {
   if (!url) return null;
@@ -223,6 +244,11 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
   const today = todayKstYmd();
   const prev = await loadState();
   const now = Date.now();
+
+  // 날짜가 바뀐 첫 폴링에서 30일 초과 통계 1회 정리 (cron 백업과 별개 자가치유 — ToS III.E.4)
+  if (prev && prev.date !== today) {
+    purgeOldYoutubeStats().catch(() => {});
+  }
 
   // 서비스 윈도우 검사 — 윈도우 밖이면 외부 API 호출 0건 (quota 절약)
   const windows = await loadWindows();

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { isDatacenterIp } from "@/lib/datacenterIp";
 import { CRAWLER_PREFIX_KEY, invalidateCrawlerCache } from "@/lib/crawlerFilter";
+import { purgeOldYoutubeStats } from "@/lib/youtubeViewers";
 
 // ============================================================
 // GET /api/cron/visitor-maintenance  (헤더 x-cron-secret: <CRON_SECRET> 필요)
@@ -80,10 +81,19 @@ export async function GET(req: NextRequest) {
     invalidateCrawlerCache();
   }
 
+  // 3) YouTube ToS III.E.4 — API 통계 30일 초과분 삭제 (저장·표시 둘 다 30일로 제한)
+  let ytPurged = 0;
+  try {
+    ytPurged = await purgeOldYoutubeStats();
+  } catch {
+    /* 통계 정리 실패는 메인 작업에 영향 X */
+  }
+
   return NextResponse.json({
     ok: true,
     retrimmedRows,
     newPrefixes: added,
     dynamicPrefixCount: set.size,
+    ytPurged,
   });
 }

@@ -17,12 +17,11 @@ function getFooterLinks() {
       type: "link" as const,
       label: "실시간 예배",
       href: "/live",
-      // YouTube 로고 대신 일반 LIVE 인디케이터 (빨간 점 + 원) — YouTube 브랜딩과 무관한
-      // 자체 아이콘. 사이트 내 /live 페이지로 이동하며 그 안에서 YouTube 가 임베드됨.
+      // YouTube 브랜딩 가이드라인 준수 — YouTube 로고/플레이버튼을 연상시키지 않는
+      // 일반 '방송(signal)' 아이콘. 사이트 내 /live 페이지로 이동(그 안에서 공식 iframe 임베드).
       icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
-          <circle cx="12" cy="12" r="3.5" fill="currentColor" />
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.652a3.75 3.75 0 010-5.304m5.304 0a3.75 3.75 0 010 5.304m-7.425 2.121a6.75 6.75 0 010-9.546m9.546 0a6.75 6.75 0 010 9.546M5.106 18.894c-3.808-3.808-3.808-9.98 0-13.789m13.788 0c3.808 3.808 3.808 9.981 0 13.79M12 12h.008v.008H12V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
         </svg>
       ),
       external: false,
@@ -31,9 +30,10 @@ function getFooterLinks() {
       type: "link" as const,
       label: "다시보기",
       href: replayUrl ? (replayUrl.startsWith("http") || replayUrl.startsWith("/") ? replayUrl : `/board/${replayUrl}`) : "#",
+      // 플레이-삼각형(YouTube 연상) 대신 일반 '다시보기(순환 화살표)' 아이콘
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
         </svg>
       ),
       external: isExternal(replayUrl),
