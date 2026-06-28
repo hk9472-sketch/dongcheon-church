@@ -175,7 +175,7 @@ export async function POST(req: NextRequest) {
     const msg = e instanceof Error ? e.message : String(e);
     let userMsg = "저장 중 오류가 발생했습니다. 입력 내용은 그대로 보존됩니다 — 잠시 후 다시 저장하세요.";
     if (/too long|P2000|Data too long/i.test(msg)) {
-      userMsg = "일부 행의 비고가 너무 깁니다(200자 이내로). 해당 행을 줄여 다시 저장하세요.";
+      userMsg = "일부 행의 비고가 너무 깁니다(1000자 이내로). 해당 행을 줄여 다시 저장하세요.";
     } else if (/P2028|timed out|timeout/i.test(msg)) {
       userMsg = "처리량이 많아 시간이 초과됐습니다. 기간/건수를 나눠 저장하거나 다시 시도하세요.";
     } else if (/P2024|connection pool|Timed out fetching/i.test(msg)) {
