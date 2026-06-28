@@ -71,10 +71,13 @@ export function buildThanksListHtml(
   const above = items.slice(0, LIST_DIVIDER_AFTER_DATA);
   const below = items.slice(LIST_DIVIDER_AFTER_DATA);
 
-  const leadLines = FIXED_LEADS.map((t, i) => `${i + 1}. ${escapeHtml(t)}`);
-  const aboveLines = above.map((t, i) => `${FIXED_LEADS.length + i + 1}. ${escapeHtml(t)}`);
+  // 항목 텍스트 → HTML: 이스케이프 + 비고 안의 줄바꿈(\n)을 <br> 로 보존(게시글에서 그대로 표시)
+  const itemHtml = (t: string) => escapeHtml(t).replace(/\r?\n/g, "<br>");
+
+  const leadLines = FIXED_LEADS.map((t, i) => `${i + 1}. ${itemHtml(t)}`);
+  const aboveLines = above.map((t, i) => `${FIXED_LEADS.length + i + 1}. ${itemHtml(t)}`);
   const belowLines = below.map(
-    (t, i) => `${FIXED_LEADS.length + above.length + i + 1}. ${escapeHtml(t)}`,
+    (t, i) => `${FIXED_LEADS.length + above.length + i + 1}. ${itemHtml(t)}`,
   );
 
   const parts: string[] = [];
