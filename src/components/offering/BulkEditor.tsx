@@ -166,6 +166,85 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
     load();
   }, [load]);
 
+  // ============================================================
+  // 입력 보호 — 미저장 행을 localStorage 초안으로 자동 보관.
+  // 저장 실패(세션/네트워크/서버 오류)나 실수로 페이지를 떠나도 입력이 사라지지 않게 한다.
+  // (≈150건 일괄 저장이 실패하고 다시 로그인하면 입력이 통째로 사라지던 문제 대응)
+  // ============================================================
+  const DRAFT_KEY = `offeringBulkDraft:v1:${fixedType ?? "all"}:${showTypeColumn ? "T" : "F"}`;
+  const [draftFound, setDraftFound] = useState<Entry[] | null>(null);
+
+  // 입력값이 있는 미저장 행만 추출 (빈 행/저장완료 행 제외)
+  const unsavedRows = useCallback((rs: Entry[]): Entry[] => {
+    return rs.filter(
+      (r) =>
+        r.status !== "saved" &&
+        (r.memberId.trim() !== "" || r.amount.trim() !== "" || r.description.trim() !== ""),
+    );
+  }, []);
+
+  // 마운트 시 기존 초안 감지 (아래 자동저장이 지우기 전에 먼저 읽어 메모리에 보관)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (Array.isArray(d?.rows) && d.rows.length > 0) setDraftFound(d.rows as Entry[]);
+      }
+    } catch {
+      /* ignore */
+    }
+    // 최초 1회만 — DRAFT_KEY 는 props 로부터 고정
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // rows 변경 시 미저장분 자동 보관(디바운스). 미저장 없으면 초안 삭제(저장 성공 시 자동 정리).
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        const unsaved = unsavedRows(rows).map((r) => ({
+          ...r,
+          status: "dirty" as const,
+          message: undefined,
+        }));
+        if (unsaved.length === 0) localStorage.removeItem(DRAFT_KEY);
+        else localStorage.setItem(DRAFT_KEY, JSON.stringify({ at: Date.now(), rows: unsaved }));
+      } catch {
+        /* ignore quota */
+      }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [rows, DRAFT_KEY, unsavedRows]);
+
+  const restoreDraft = () => {
+    if (!draftFound) return;
+    setRows((prev) => {
+      const news = draftFound
+        .filter((r) => r.id === 0)
+        .map((r) => ({ ...r, status: "dirty" as const }));
+      const updatesById = new Map(
+        draftFound
+          .filter((r) => r.id > 0)
+          .map((r) => [r.id, { ...r, status: "dirty" as const }] as const),
+      );
+      const merged = prev.map((r) => (r.id > 0 && updatesById.has(r.id) ? updatesById.get(r.id)! : r));
+      const blankIdx = Math.max(0, merged.length - 1); // 마지막 빈 행 앞에 신규 초안 삽입
+      merged.splice(blankIdx, 0, ...news);
+      return merged;
+    });
+    setDraftFound(null);
+    cellRefs.current = [];
+  };
+
+  const discardDraft = () => {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
+    setDraftFound(null);
+  };
+
   const updateField = (idx: number, field: keyof Entry, value: string) => {
     setRows((prev) => {
       const next = [...prev];
@@ -473,6 +552,29 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* 미저장 입력 복구 배너 — 직전에 저장 못한 입력이 남아 있을 때 */}
+      {draftFound && draftFound.length > 0 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 flex flex-wrap items-center gap-3">
+          <span className="text-sm text-amber-800">
+            저장되지 않은 입력 <strong>{draftFound.length}건</strong>이 남아 있습니다. 복구할까요?
+          </span>
+          <button
+            type="button"
+            onClick={restoreDraft}
+            className="px-3 py-1.5 text-sm bg-amber-600 text-white rounded hover:bg-amber-700 font-semibold"
+          >
+            입력 복구
+          </button>
+          <button
+            type="button"
+            onClick={discardDraft}
+            className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-100 text-gray-600"
+          >
+            버리기
+          </button>
+        </div>
+      )}
+
       {/* 필터 */}
       <div className="bg-white rounded-lg border border-gray-200 p-3 flex flex-wrap items-end gap-3">
         <div>
