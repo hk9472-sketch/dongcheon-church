@@ -13,10 +13,14 @@ import {
 } from "@/components/widgets/WidgetBodies";
 import {
   parseLayout,
+  parseTitles,
   isSpecial,
   SPECIAL_LABELS,
+  BOARD_TITLE_OVERRIDE,
+  WIDGET_TITLES_KEY,
   collectKeys,
   type WidgetLayout,
+  type WidgetTitles,
 } from "@/lib/widgetLayout";
 
 // 게시판별 아이콘 (기본값: 📋)
@@ -35,14 +39,6 @@ const BOARD_ICONS: Record<string, string> = {
   DcNotice: "📢",
   DcElement: "🏫",
   DcWsRePlay: "🔄",
-};
-
-// 위젯 표시명 오버라이드 (DB title 대신 사용)
-const TITLE_OVERRIDE: Record<string, string> = {
-  DcElement: "주교/중간반",
-  DcPds: "자료실",
-  DcCouncil: "권찰회",
-  DcBibleStudyX: "연경실",
 };
 
 const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
@@ -239,6 +235,12 @@ export default async function HomePage() {
   });
   const layout: WidgetLayout = parseLayout(layoutRow?.value);
 
+  // 위젯 제목 오버라이드 (관리 > 설정 > 위젯에서 편집). { 위젯키: 표시명 }
+  const titlesRow = await prisma.siteSetting.findUnique({
+    where: { key: WIDGET_TITLES_KEY },
+  });
+  const titleOverrides: WidgetTitles = parseTitles(titlesRow?.value);
+
   // 레이아웃에 사용된 모든 보드 slug (특수 키 제외)
   const allKeys = collectKeys(layout);
   const boardSlugs = allKeys.filter((k) => !isSpecial(k));
@@ -278,7 +280,7 @@ export default async function HomePage() {
     if (key === "__NOTICE__") {
       return {
         key,
-        title: SPECIAL_LABELS.__NOTICE__,
+        title: titleOverrides.__NOTICE__ || SPECIAL_LABELS.__NOTICE__,
         href: "/board/DcNotice",
         body: (
           <NoticeBody latestNotice={latestNotice} noticeContentHtml={noticeContentHtml} />
@@ -288,7 +290,7 @@ export default async function HomePage() {
     if (key === "__RECENT_POSTS__") {
       return {
         key,
-        title: SPECIAL_LABELS.__RECENT_POSTS__,
+        title: titleOverrides.__RECENT_POSTS__ || SPECIAL_LABELS.__RECENT_POSTS__,
         href: "/board/recent-posts",
         body: <RecentPostsBody posts={recentNewPosts} rows={widgetRows} />,
       };
@@ -296,16 +298,16 @@ export default async function HomePage() {
     if (key === "__RECENT_COMMENTS__") {
       return {
         key,
-        title: SPECIAL_LABELS.__RECENT_COMMENTS__,
+        title: titleOverrides.__RECENT_COMMENTS__ || SPECIAL_LABELS.__RECENT_COMMENTS__,
         href: "/board/recent-comments",
         body: <RecentCommentsBody comments={recentComments} rows={widgetRows} />,
       };
     }
-    // 게시판
+    // 게시판 — 위젯 제목 우선순위: DB 오버라이드 > 코드 기본 오버라이드 > 게시판명
     const b = boardMap.get(key);
     if (!b) return null;
     if (b.requireLogin && !isLoggedIn) return null;
-    const title = TITLE_OVERRIDE[key] || b.title;
+    const title = titleOverrides[key] || BOARD_TITLE_OVERRIDE[key] || b.title;
     const icon = BOARD_ICONS[key] || "📋";
     const posts = postsByBoard.get(b.id) ?? [];
     return {

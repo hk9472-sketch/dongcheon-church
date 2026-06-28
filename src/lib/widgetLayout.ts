@@ -35,12 +35,44 @@ export const DEFAULT_LAYOUT: WidgetLayout = [
   [["DcCouncil"], ["PkGallery"], ["__RECENT_COMMENTS__"]],
 ];
 
-/** 특수 위젯 표시명 */
+/** 특수 위젯 기본 표시명 (DB widget_titles 오버라이드가 없을 때 사용) */
 export const SPECIAL_LABELS: Record<SpecialKey, string> = {
-  __NOTICE__: "공지사항",
+  __NOTICE__: "금주의 말씀",
   __RECENT_POSTS__: "새글/수정글",
   __RECENT_COMMENTS__: "새댓글",
 };
+
+/**
+ * 게시판 위젯의 기본 표시명 오버라이드 (DB Board.title 대신 사용하는 코드 기본값).
+ * widget_titles(DB) 오버라이드가 있으면 그게 더 우선. 둘 다 없으면 Board.title.
+ */
+export const BOARD_TITLE_OVERRIDE: Record<string, string> = {
+  DcElement: "주교/중간반",
+  DcPds: "자료실",
+  DcCouncil: "권찰회",
+  DcBibleStudyX: "연경실",
+};
+
+/** 위젯 제목 오버라이드 siteSetting 키 — { 위젯키: 표시명 } JSON */
+export const WIDGET_TITLES_KEY = "widget_titles";
+
+export type WidgetTitles = Record<string, string>;
+
+/** widget_titles JSON 문자열 → { 위젯키: 표시명 } 맵. 실패하면 빈 객체. */
+export function parseTitles(json: string | null | undefined): WidgetTitles {
+  if (!json) return {};
+  try {
+    const raw = JSON.parse(json);
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const out: WidgetTitles = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (typeof v === "string" && v.trim()) out[k] = v.trim();
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
 /** JSON 문자열 → 정규화된 레이아웃. 실패하면 기본값. */
 export function parseLayout(json: string | null | undefined): WidgetLayout {

@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 
 interface Item {
   key: string;
-  title: string;
+  title: string;        // 현재 적용값 (오버라이드 우선)
+  defaultTitle: string; // 오버라이드 없을 때의 기본 표시명
   special: boolean;
   showOnMain?: boolean;
 }
@@ -16,6 +17,8 @@ type Layout = Row[];
 export default function WidgetLayoutEditor() {
   const [layout, setLayout] = useState<Layout>([]);
   const [items, setItems] = useState<Item[]>([]);
+  // 위젯 제목 오버라이드 편집값 { 위젯키: 표시명 }. 빈 문자열 = 기본 표시명 사용.
+  const [titleEdits, setTitleEdits] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
@@ -31,6 +34,7 @@ export default function WidgetLayoutEditor() {
       if (res.ok) {
         setLayout(data.layout);
         setItems(data.items);
+        setTitleEdits(data.titles || {});
       } else {
         setMsg({ type: "err", text: data.message || "조회 실패" });
       }
@@ -106,11 +110,12 @@ export default function WidgetLayoutEditor() {
       const res = await fetch("/api/admin/widget-layout", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ layout }),
+        body: JSON.stringify({ layout, titles: titleEdits }),
       });
       const data = await res.json();
       if (res.ok) {
         setMsg({ type: "ok", text: "저장됨. 메인 페이지에 적용됩니다." });
+        load(); // 적용된 제목/기본값 동기화
       } else {
         setMsg({ type: "err", text: data.message || "저장 실패" });
       }
@@ -231,7 +236,7 @@ export default function WidgetLayoutEditor() {
                     )}
                     {cell.map((key, kIdx) => {
                       const item = itemMap.get(key);
-                      const label = item?.title || key;
+                      const label = titleEdits[key]?.trim() || item?.defaultTitle || item?.title || key;
                       const isSpecial = item?.special;
                       const missing = !item;
                       return (
@@ -307,6 +312,54 @@ export default function WidgetLayoutEditor() {
         >
           + 행 추가
         </button>
+      </div>
+
+      {/* 위젯 제목(메인 표시명) 편집 — 위 '저장' 버튼으로 레이아웃과 함께 저장된다. */}
+      <div className="border-t border-gray-200 p-4 space-y-2">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700">위젯 제목 (메인 표시명)</h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            메인 페이지 위젯 헤더에 표시되는 이름입니다. 비워두면 기본값이 사용됩니다.
+            상단 <strong>저장</strong> 버튼으로 레이아웃과 함께 반영돼요.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+          {items.map((it) => {
+            const cur = titleEdits[it.key] ?? "";
+            const overridden = !!cur.trim() && cur.trim() !== it.defaultTitle;
+            return (
+              <div key={it.key} className="flex items-center gap-2">
+                <span
+                  className={`shrink-0 w-24 text-[11px] font-mono truncate ${
+                    it.special ? "text-amber-700" : "text-gray-500"
+                  }`}
+                  title={it.key}
+                >
+                  {it.key}
+                </span>
+                <input
+                  type="text"
+                  value={cur}
+                  onChange={(e) =>
+                    setTitleEdits((p) => ({ ...p, [it.key]: e.target.value }))
+                  }
+                  placeholder={it.defaultTitle}
+                  maxLength={40}
+                  className="flex-1 min-w-0 px-2 py-1 text-sm border border-gray-300 rounded focus:border-blue-400 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setTitleEdits((p) => ({ ...p, [it.key]: "" }))}
+                  disabled={!overridden}
+                  className="shrink-0 text-[11px] text-gray-400 hover:text-red-600 disabled:opacity-0"
+                  title={`기본값(${it.defaultTitle})으로`}
+                >
+                  되돌리기
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* 게시판 선택 모달 */}
