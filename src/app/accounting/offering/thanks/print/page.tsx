@@ -2,6 +2,11 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import {
+  FIXED_LEADS,
+  LIST_DIVIDER_AFTER_DATA,
+  buildThanksDataItems,
+} from "@/lib/thanksOfferingList";
 
 type Mode = "ad" | "list" | "handout";
 
@@ -11,14 +16,8 @@ interface Entry {
   description: string | null;
 }
 
-// 헤더/리스트의 1~3 고정 항목
-const FIXED_LEADS = ["십일조 연보", "감사 연보", "수지 연보"];
-
 // 광고용에 들어가는 데이터 개수 (4번 ~ 10번 = 7개)
 const AD_DATA_COUNT = 7;
-
-// 등재용 구분선 위치 — 1~6 표시 후 구분선 (4~6 = 데이터 첫 3개)
-const LIST_DIVIDER_AFTER_DATA = 3;
 
 function formatDateAd(s: string): string {
   // 광고용: (2026.05.24.)
@@ -170,23 +169,8 @@ function PrintInner() {
     };
   }, [dateStr]);
 
-  // description 별 중복 제거 (입력 순서 유지, 빈 description 제외)
-  const dataItems: string[] = useMemo(() => {
-    // 같은 날짜 안에서 입력 순(id asc) 으로 보고 싶어서 reverse — entries 는 id desc 정렬.
-    // 만약 정렬이 바뀌면 여기를 조정.
-    const ordered = [...entries].sort((a, b) => a.id - b.id);
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const e of ordered) {
-      const d = (e.description || "").trim();
-      if (!d) continue;
-      if (d === "결산차액") continue;
-      if (seen.has(d)) continue;
-      seen.add(d);
-      out.push(d);
-    }
-    return out;
-  }, [entries]);
+  // description 별 중복 제거 (입력순, 빈 값/"결산차액" 제외) — 게시판 등재와 동일 규칙 공유
+  const dataItems: string[] = useMemo(() => buildThanksDataItems(entries), [entries]);
 
   // 총 종류 = 고정 3 + 데이터 종류
   const totalKinds = FIXED_LEADS.length + dataItems.length;
