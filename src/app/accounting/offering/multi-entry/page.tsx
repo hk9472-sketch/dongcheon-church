@@ -52,7 +52,7 @@ export default function MultiOfferingEntryPage() {
   const [loadMsg, setLoadMsg] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"member" | "input">("member");
   // 셀 참조: cellRefs[row][col] — col 0 = memberNo, 1~6 = 6개 종류 금액, 7 = 비고
-  const cellRefs = useRef<Array<Array<HTMLInputElement | null>>>([]);
+  const cellRefs = useRef<Array<Array<HTMLInputElement | HTMLTextAreaElement | null>>>([]);
   const COLS_PER_ROW = 1 + TYPES.length + 1; // = 8
   // saveAll 진행 중에는 자동 행 추가·포커스 이동을 막아 흐름이 깨지지 않게 함
   const savingAllRef = useRef(false);
@@ -585,7 +585,7 @@ export default function MultiOfferingEntryPage() {
   };
 
   // ============ 셀 참조 + 화살표 키 이동 ============
-  const setCellRef = (row: number, col: number) => (el: HTMLInputElement | null) => {
+  const setCellRef = (row: number, col: number) => (el: HTMLInputElement | HTMLTextAreaElement | null) => {
     if (!cellRefs.current[row]) cellRefs.current[row] = [];
     cellRefs.current[row][col] = el;
   };
@@ -597,7 +597,7 @@ export default function MultiOfferingEntryPage() {
     }
   };
   const onCellKey = (
-    e: React.KeyboardEvent<HTMLInputElement>,
+    e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
     row: number,
     col: number,
   ) => {
@@ -605,6 +605,8 @@ export default function MultiOfferingEntryPage() {
     // · 숫자 칸(col 0~6)은 IME 못 켜지므로 composition 체크 X (한국어 모드여도 무조건 Enter)
     // · 비고 칸(마지막 col)만 IME 변환 중에는 건너뜀 — 첫 Enter 는 한글 conversion 완료에 양보.
     const isDescriptionCol = col === COLS_PER_ROW - 1;
+    // 비고 칸에서 Shift+Enter → 줄바꿈 입력(기본 동작 허용). 일반 Enter 는 다음 행 이동.
+    if (isDescriptionCol && e.key === "Enter" && e.shiftKey) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const composing = isDescriptionCol && (e.nativeEvent as any)?.isComposing === true;
     const isEnter =
@@ -855,14 +857,14 @@ export default function MultiOfferingEntryPage() {
                     </td>
                   ))}
                   <td className="px-2 py-1">
-                    <input
+                    <textarea
                       ref={setCellRef(idx, COLS_PER_ROW - 1)}
-                      type="text"
-                      enterKeyHint="next"
+                      rows={Math.min(4, (r.description.match(/\n/g)?.length ?? 0) + 1)}
                       value={r.description}
                       onChange={(e) => update(idx, { description: e.target.value })}
                       onKeyDown={(e) => onCellKey(e, idx, COLS_PER_ROW - 1)}
-                      className={cellClassDesc}
+                      className={`${cellClassDesc} resize-y align-top leading-snug`}
+                      title="Shift+Enter 로 줄바꿈, Enter 는 다음 줄로 이동"
                     />
                   </td>
                   <td className="px-2 py-1 text-center whitespace-nowrap">

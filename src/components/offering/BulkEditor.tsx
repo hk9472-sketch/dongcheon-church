@@ -104,10 +104,16 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
     e: React.KeyboardEvent<HTMLElement>,
     row: number,
     col: number,
+    multiline = false, // 비고(textarea): Shift+Enter 줄바꿈 허용, ↑/↓ 는 줄 내 이동
   ) => {
-    if (e.key === "ArrowDown" || e.key === "Enter") {
+    // Shift+Enter → 줄바꿈 입력(기본 동작 허용). 일반 Enter 는 다음 행 이동(아래).
+    if (e.key === "Enter" && e.shiftKey) return;
+
+    const goNext = e.key === "Enter" || (e.key === "ArrowDown" && !multiline);
+    const goPrev = e.key === "ArrowUp" && !multiline;
+    if (goNext) {
       e.preventDefault();
-      // 마지막 행에서 ↓ 누르면 새 빈 행 추가 후 그 행으로 이동
+      // 마지막 행에서 Enter/↓ 누르면 새 빈 행 추가 후 그 행으로 이동
       if (row === rows.length - 1) {
         setRows((prev) => [...prev, blankRow(fixedType, defaultDate)]);
         // 다음 tick 에 새 행에 ref 가 등록되므로 setTimeout
@@ -115,7 +121,7 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
       } else {
         focusCell(row + 1, col);
       }
-    } else if (e.key === "ArrowUp") {
+    } else if (goPrev) {
       e.preventDefault();
       focusCell(row - 1, col);
     }
@@ -774,13 +780,14 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
                     </td>
                     <td className="px-2 py-1">
                       {r.offeringType === "감사연보" ? (
-                        <input
+                        <textarea
                           ref={setCellRef(idx, showTypeColumn ? 4 : 3)}
-                          type="text"
+                          rows={Math.min(4, (r.description.match(/\n/g)?.length ?? 0) + 1)}
                           value={r.description}
                           onChange={(e) => updateField(idx, "description", e.target.value)}
-                          onKeyDown={(e) => onCellKeyDown(e, idx, showTypeColumn ? 4 : 3)}
-                          className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-sm"
+                          onKeyDown={(e) => onCellKeyDown(e, idx, showTypeColumn ? 4 : 3, true)}
+                          className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-sm resize-y align-top leading-snug"
+                          title="Shift+Enter 로 줄바꿈, Enter 는 다음 줄로 이동"
                         />
                       ) : (
                         <input
