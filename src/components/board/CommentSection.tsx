@@ -53,6 +53,32 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
   const [isSecret, setIsSecret] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // 새댓글 위젯 등에서 #comment-<id> 로 진입 시 해당 댓글로 스크롤·하이라이트
+  const [highlightId, setHighlightId] = useState<number | null>(null);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    function jumpToHash() {
+      const m = window.location.hash.match(/^#comment-(\d+)$/);
+      if (!m) return;
+      const id = Number(m[1]);
+      setHighlightId(id);
+      // 댓글 DOM 이 렌더된 뒤 스크롤 (헤더 가림 방지 위해 화면 중앙 정렬)
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`comment-${id}`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => setHighlightId(null), 3000);
+    }
+    jumpToHash();
+    window.addEventListener("hashchange", jumpToHash);
+    return () => {
+      window.removeEventListener("hashchange", jumpToHash);
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
   // 댓글 수정 상태
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -493,9 +519,10 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
             return (
               <li
                 key={comment.id}
+                id={`comment-${comment.id}`}
                 // 대댓글은 파란 border-l 을 li 가 아닌 안쪽 wrapper 에 두고, 바깥 li 는 py 만 부여.
                 // 이러면 border 가 content 영역만큼만 그려져 답글 사이에 시각적 간격이 생긴다.
-                className={`${rowBorder} ${isReply ? "py-1.5" : "flow-root py-3 px-4"}`}
+                className={`scroll-mt-24 transition-colors duration-700 ${rowBorder} ${isReply ? "py-1.5" : "flow-root py-3 px-4"} ${highlightId === comment.id ? "rounded-lg ring-2 ring-amber-400 bg-amber-50" : ""}`}
                 style={isReply ? { marginLeft: `${indentPx}px` } : undefined}
               >
                 {/* isReply 일 때만 border·bg 를 가진 안쪽 wrapper. 일반 댓글은 div 래핑 없이 바로 content. */}

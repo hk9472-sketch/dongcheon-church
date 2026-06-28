@@ -277,7 +277,7 @@ export function RecentCommentsBody({
         >
           {comment ? (
             <Link
-              href={`/board/${comment.post.board.slug}/${comment.postId}`}
+              href={`/board/${comment.post.board.slug}/${comment.postId}#comment-${comment.id}`}
               className="flex items-center px-2.5 sm:px-3 hover:bg-gray-50 transition-colors group w-full min-w-0"
             >
               <span
