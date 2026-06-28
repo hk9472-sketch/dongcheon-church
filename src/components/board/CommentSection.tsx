@@ -57,25 +57,47 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
   const [highlightId, setHighlightId] = useState<number | null>(null);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let highlightTimer: ReturnType<typeof setTimeout> | undefined;
+
     function jumpToHash() {
       const m = window.location.hash.match(/^#comment-(\d+)$/);
       if (!m) return;
       const id = Number(m[1]);
       setHighlightId(id);
-      // 댓글 DOM 이 렌더된 뒤 스크롤 (헤더 가림 방지 위해 화면 중앙 정렬)
-      requestAnimationFrame(() => {
+
+      // 화면 중앙 정렬로 스크롤. block:center 는 매 호출마다 현재 레이아웃 기준으로
+      // 다시 계산되므로, 높이가 바뀔 때마다 재호출하면 항상 올바른 위치로 보정된다.
+      const scrollToTarget = () => {
         const el = document.getElementById(`comment-${id}`);
-        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-      });
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => setHighlightId(null), 3000);
+        if (el) el.scrollIntoView({ behavior: "auto", block: "center" });
+      };
+
+      // ★ 핵심: 게시글 본문 이미지/iframe 이 늦게 로드되면 그 위 컨텐츠 높이가 늘어나
+      //   댓글이 아래로 밀린다. 한 번만 스크롤하면 본문 중간에서 멈추는 이유.
+      //   (1) 즉시 + 단계적 재시도, (2) 아직 로드 안 끝난 이미지마다 load 시 재정렬.
+      requestAnimationFrame(scrollToTarget);
+      [80, 250, 500, 900, 1400, 2000].forEach((d) => timers.push(setTimeout(scrollToTarget, d)));
+
+      Array.from(document.querySelectorAll<HTMLImageElement>("img"))
+        .filter((im) => !im.complete)
+        .forEach((im) => {
+          im.addEventListener("load", scrollToTarget, { once: true });
+          im.addEventListener("error", scrollToTarget, { once: true });
+        });
+      // 폰트/스크립트 등으로 최종 레이아웃이 늦게 잡히는 경우 대비
+      window.addEventListener("load", scrollToTarget, { once: true });
+
+      if (highlightTimer) clearTimeout(highlightTimer);
+      highlightTimer = setTimeout(() => setHighlightId(null), 3500);
     }
+
     jumpToHash();
     window.addEventListener("hashchange", jumpToHash);
     return () => {
       window.removeEventListener("hashchange", jumpToHash);
-      if (timer) clearTimeout(timer);
+      timers.forEach(clearTimeout);
+      if (highlightTimer) clearTimeout(highlightTimer);
     };
   }, []);
 
