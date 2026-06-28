@@ -590,17 +590,17 @@ export default function OfferingEntryPage() {
                         className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm text-right focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                       />
                     </td>
-                    {/* 비고 */}
+                    {/* 비고 — Enter 로 줄바꿈 입력 가능(textarea) */}
                     <td className="px-2 py-1.5">
-                      <input
-                        type="text"
+                      <textarea
                         data-row={rowIdx}
                         data-col="desc"
+                        rows={Math.min(4, (row.description.match(/\n/g)?.length ?? 0) + 1)}
                         value={row.description}
                         onChange={(e) => updateRow(row.key, "description", e.target.value)}
                         onKeyDown={(e) => handleNavKeyDown(e, rowIdx, 2)}
                         placeholder="비고"
-                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm resize-y align-top leading-snug focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                       />
                     </td>
                     {/* 삭제 */}
@@ -715,7 +715,7 @@ export default function OfferingEntryPage() {
                       <td className="px-3 py-2 text-right text-blue-700 font-medium">
                         {fmtAmount(e.amount)}
                       </td>
-                      <td className="px-3 py-2 text-gray-500">{e.description || ""}</td>
+                      <td className="px-3 py-2 text-gray-500 whitespace-pre-line align-top">{e.description || ""}</td>
                       <td className="px-3 py-2 text-center">
                         <button
                           type="button"

@@ -207,6 +207,7 @@ function PrintInner() {
   padding-left: 2.2em;
   text-indent: -2.2em;
   margin-bottom: 0.05em;
+  white-space: pre-line; /* 비고 안의 줄바꿈(\n) 을 그대로 표시 */
 }
 /* 실제 인쇄 영역 — 화면에서는 숨김, 인쇄 시에만 노출 */
 .print-target {

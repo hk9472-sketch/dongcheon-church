@@ -382,7 +382,7 @@ export default function OfferingListPage() {
                         {hasMemberEdit && <td className="px-4 py-2 text-gray-800">{e.member?.name ?? "(개인번호없음)"}</td>}
                         <td className="px-4 py-2 text-gray-400">—</td>
                         <td className="px-4 py-2 text-right text-blue-700 font-medium">{fmtAmount(e.amount)}</td>
-                        <td className="px-4 py-2 text-gray-500">{e.offeringType === DESC_TYPE ? (e.description || "") : ""}</td>
+                        <td className="px-4 py-2 text-gray-500 whitespace-pre-line align-top">{e.offeringType === DESC_TYPE ? (e.description || "") : ""}</td>
                       </tr>
                     ))}
                   </tbody>

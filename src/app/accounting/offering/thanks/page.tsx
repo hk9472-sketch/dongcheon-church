@@ -330,7 +330,7 @@ export default function ThanksOfferingPage() {
                           </td>
                         </>
                       )}
-                      <td className="px-4 py-2.5 text-gray-700">{e.description || ""}</td>
+                      <td className="px-4 py-2.5 text-gray-700 whitespace-pre-line align-top">{e.description || ""}</td>
                     </tr>
                   ))
                 )}
