@@ -66,11 +66,12 @@ export function NoticeBody({
     );
   }
   return (
-    <div className="p-2 sm:p-3 flex flex-col flex-1">
+    <div className="px-2 sm:px-3 pt-2 pb-1.5 flex flex-col flex-1">
       <h3 className="font-bold text-gray-800 truncate mb-1 text-sm sm:text-base flex-shrink-0 text-center">
         {latestNotice.subject}
       </h3>
-      <div className="text-xs sm:text-sm font-bold text-blue-800 leading-relaxed prose prose-sm max-w-none [&_*]:text-blue-800 overflow-auto flex-1 flex items-center justify-center">
+      {/* leading·단락여백을 압축해 본문 아래 불필요한 공백 최소화 (위젯 높이 절감) */}
+      <div className="text-xs sm:text-sm font-bold text-blue-800 leading-snug prose prose-sm max-w-none [&_*]:text-blue-800 [&_p]:my-0.5 [&_ol]:my-0.5 [&_ul]:my-0.5 [&_li]:my-0 overflow-auto flex-1 flex items-center justify-center">
         <div
           className="text-left w-fit"
           dangerouslySetInnerHTML={{ __html: noticeContentHtml || "<p>(내용 없음)</p>" }}

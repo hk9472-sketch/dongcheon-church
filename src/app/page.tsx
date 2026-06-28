@@ -41,6 +41,18 @@ const BOARD_ICONS: Record<string, string> = {
   DcWsRePlay: "🔄",
 };
 
+// 공지 본문 말미의 빈 단락/줄바꿈(<p><br></p>, <br>, &nbsp;)을 제거 —
+// 위젯 아래쪽에 불필요한 공백 줄이 생겨 첫 줄 위젯만 과도하게 높아지는 문제 방지.
+function trimTrailingBlank(html: string): string {
+  let s = html;
+  let prev: string;
+  do {
+    prev = s;
+    s = s.replace(/(?:<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>|<br\s*\/?>|&nbsp;|\s)+$/i, "");
+  } while (s !== prev);
+  return s;
+}
+
 const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
 
 async function getRecentPostsBatch(
@@ -268,10 +280,12 @@ export default async function HomePage() {
   ]);
 
   const noticeContentHtml = latestNotice
-    ? sanitizeHtml(
-        latestNotice.useHtml
-          ? latestNotice.content
-          : latestNotice.content.replace(/\n/g, "<br>"),
+    ? trimTrailingBlank(
+        sanitizeHtml(
+          latestNotice.useHtml
+            ? latestNotice.content
+            : latestNotice.content.replace(/\n/g, "<br>"),
+        ),
       )
     : "";
 
