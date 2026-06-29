@@ -1,12 +1,8 @@
 // 감사연보 '등재용' 목록 생성 규칙 — 인쇄 미리보기와 게시판 등재가 동일 규칙을 쓰도록 공유.
-//   · 1~3 고정 항목(십일조/감사/수지) + 데이터(감사내역 description) 번호 매김
+//   · 1~3 고정 항목(십일조/감사/수지) + 데이터(감사내역 description) 번호 매김(연속)
 //   · description 중복 제거(입력순), 빈 값/"결산차액" 제외
-//   · 데이터 첫 3개(4~6번) 뒤 구분선
 
 export const FIXED_LEADS = ["십일조 연보", "감사 연보", "수지 연보"];
-
-// 등재용 구분선 위치 — 데이터 첫 N개(4~6번) 뒤 구분선
-export const LIST_DIVIDER_AFTER_DATA = 3;
 
 export interface ThanksEntryLite {
   id: number;
@@ -68,25 +64,18 @@ export function buildThanksListHtml(
   items: string[],
   footerLine: string,
 ): string {
-  const above = items.slice(0, LIST_DIVIDER_AFTER_DATA);
-  const below = items.slice(LIST_DIVIDER_AFTER_DATA);
-
   // 항목 텍스트 → HTML: 이스케이프 + 비고 안의 줄바꿈(\n)을 <br> 로 보존(게시글에서 그대로 표시)
   const itemHtml = (t: string) => escapeHtml(t).replace(/\r?\n/g, "<br>");
 
-  const leadLines = FIXED_LEADS.map((t, i) => `${i + 1}. ${itemHtml(t)}`);
-  const aboveLines = above.map((t, i) => `${FIXED_LEADS.length + i + 1}. ${itemHtml(t)}`);
-  const belowLines = below.map(
-    (t, i) => `${FIXED_LEADS.length + above.length + i + 1}. ${itemHtml(t)}`,
-  );
+  // 고정 3 + 감사내역을 연속 번호로(구분선 없음)
+  const allLines = [
+    ...FIXED_LEADS.map((t, i) => `${i + 1}. ${itemHtml(t)}`),
+    ...items.map((t, i) => `${FIXED_LEADS.length + i + 1}. ${itemHtml(t)}`),
+  ];
 
   const parts: string[] = [];
   parts.push(`<p><strong>지난주 감사연보 ${formatDateList(dateStr)}</strong></p>`);
-  parts.push(`<p>${[...leadLines, ...aboveLines].join("<br>")}</p>`);
-  if (belowLines.length > 0) {
-    parts.push(`<hr>`);
-    parts.push(`<p>${belowLines.join("<br>")}</p>`);
-  }
+  parts.push(`<p>${allLines.join("<br>")}</p>`);
   parts.push(`<p><strong>${escapeHtml(footerLine)}</strong></p>`);
   return parts.join("\n");
 }

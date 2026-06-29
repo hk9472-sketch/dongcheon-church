@@ -4,7 +4,6 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   FIXED_LEADS,
-  LIST_DIVIDER_AFTER_DATA,
   buildThanksDataItems,
 } from "@/lib/thanksOfferingList";
 
@@ -478,12 +477,8 @@ function AdLayout({ date, items, footerLine }: { date: string; items: string[]; 
   );
 }
 
-/* ============ 등재용 (1단, 전체, 6번 후 구분선) ============ */
+/* ============ 등재용 (1단, 전체, 연속 번호) ============ */
 function ListLayout({ date, items, footerLine }: { date: string; items: string[]; footerLine: string }) {
-  // 1~3 고정 + 데이터 첫 LIST_DIVIDER_AFTER_DATA 개(4~6) + 구분선 + 나머지
-  const above = items.slice(0, LIST_DIVIDER_AFTER_DATA);
-  const below = items.slice(LIST_DIVIDER_AFTER_DATA);
-
   return (
     <div>
       {/* 헤더 — 좌측 "지난주 감사연보" + 우측 (날짜) */}
@@ -508,28 +503,9 @@ function ListLayout({ date, items, footerLine }: { date: string; items: string[]
             {i + 1}. {label}
           </li>
         ))}
-        {above.map((d, i) => (
-          <li key={`a-${i}`}>
+        {items.map((d, i) => (
+          <li key={`d-${i}`}>
             {FIXED_LEADS.length + i + 1}. {d}
-          </li>
-        ))}
-      </ol>
-
-      {/* 구분선 — 첨부 양식의 ㅡㅡㅡㅡ 재현 */}
-      {below.length > 0 && (
-        <div
-          style={{
-            borderTop: "1px solid #000",
-            margin: "0.2em 0 0.2em 0",
-            height: 0,
-          }}
-        />
-      )}
-
-      <ol>
-        {below.map((d, i) => (
-          <li key={`b-${i}`}>
-            {FIXED_LEADS.length + above.length + i + 1}. {d}
           </li>
         ))}
       </ol>
