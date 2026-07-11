@@ -64,6 +64,15 @@ export default function BibleReaderPage() {
   const [searching, setSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [highlightWord, setHighlightWord] = useState("");
+  // 검색 필터 + 페이지네이션 (기본 = 전체검색)
+  const [searchTestament, setSearchTestament] = useState<"all" | "OT" | "NT">("all");
+  const [searchBookFrom, setSearchBookFrom] = useState(0); // 0 = 전체
+  const [searchBookTo, setSearchBookTo] = useState(0); // 0 = 전체
+  const [searchChapterFrom, setSearchChapterFrom] = useState(0); // 0 = 처음
+  const [searchChapterTo, setSearchChapterTo] = useState(0); // 0 = 끝
+  const [searchPage, setSearchPage] = useState(1);
+  const [searchTotalPages, setSearchTotalPages] = useState(0);
+  const SEARCH_PAGE_SIZE = 50;
 
   // 원고지 설정 모달
   const [showManuscriptModal, setShowManuscriptModal] = useState(false);
@@ -414,19 +423,45 @@ export default function BibleReaderPage() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  // 검색 실행
-  const handleSearch = () => {
+  // 검색 실행 (page=1 부터). 필터: 검색범위(구약/신약) 또는 성경 책범위(+단일 책이면 장범위).
+  const handleSearch = (page = 1) => {
     const q = searchQuery.trim();
     if (q.length < 2) return;
     setSearching(true);
-    fetch(`/api/bible/search?q=${encodeURIComponent(q)}`)
+    const params = new URLSearchParams({
+      q,
+      page: String(page),
+      pageSize: String(SEARCH_PAGE_SIZE),
+    });
+    if (searchBookFrom > 0 && searchBookTo > 0) {
+      params.set("bookFrom", String(searchBookFrom));
+      params.set("bookTo", String(searchBookTo));
+      if (searchBookFrom === searchBookTo) {
+        if (searchChapterFrom > 0) params.set("chapterFrom", String(searchChapterFrom));
+        if (searchChapterTo > 0) params.set("chapterTo", String(searchChapterTo));
+      }
+    } else if (searchTestament !== "all") {
+      params.set("testament", searchTestament);
+    }
+    fetch(`/api/bible/search?${params.toString()}`)
       .then((res) => res.json())
       .then((data) => {
         setSearchResults(data.results || []);
         setSearchTotal(data.total || 0);
+        setSearchPage(data.page || 1);
+        setSearchTotalPages(data.totalPages || 0);
         setSearching(false);
-      });
+      })
+      .catch(() => setSearching(false));
   };
+
+  // 검색범위(구약/신약)에 따른 책 목록 + 단일 책 선택 여부(장 범위 노출용)
+  const searchBooks =
+    searchTestament === "all" ? books : books.filter((b) => b.testament === searchTestament);
+  const searchSingleBook =
+    searchBookFrom > 0 && searchBookFrom === searchBookTo
+      ? books.find((b) => b.id === searchBookFrom) ?? null
+      : null;
 
   // 검색 결과 클릭 → 해당 본문으로 이동
   const handleSearchResultClick = (result: SearchResult) => {
@@ -795,7 +830,7 @@ export default function BibleReaderPage() {
               className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
-              onClick={handleSearch}
+              onClick={() => handleSearch(1)}
               disabled={searching || searchQuery.trim().length < 2}
               className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
@@ -803,13 +838,100 @@ export default function BibleReaderPage() {
             </button>
           </div>
 
+          {/* 검색 필터 — 기본 전체검색. 검색범위 / 성경 책범위(from~to) / 단일 책이면 장범위 */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3 text-xs">
+            <div className="flex items-center gap-1">
+              <span className="text-gray-500">검색범위</span>
+              <select
+                value={searchTestament}
+                onChange={(e) => {
+                  setSearchTestament(e.target.value as "all" | "OT" | "NT");
+                  setSearchBookFrom(0);
+                  setSearchBookTo(0);
+                  setSearchChapterFrom(0);
+                  setSearchChapterTo(0);
+                }}
+                className="px-2 py-1 border border-gray-300 rounded bg-white"
+              >
+                <option value="all">전체</option>
+                <option value="OT">구약</option>
+                <option value="NT">신약</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <span className="text-gray-500">성경</span>
+              <select
+                value={searchBookFrom}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setSearchBookFrom(v);
+                  setSearchChapterFrom(0);
+                  setSearchChapterTo(0);
+                  // 시작 책을 고르면 끝 책이 비어있을 때 같은 책으로 맞춰 단일 책(장범위) 선택을 쉽게
+                  if (v > 0 && searchBookTo === 0) setSearchBookTo(v);
+                  if (v === 0) setSearchBookTo(0);
+                }}
+                className="px-2 py-1 border border-gray-300 rounded bg-white max-w-[7rem]"
+              >
+                <option value={0}>전체</option>
+                {searchBooks.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+              <span className="text-gray-400">~</span>
+              <select
+                value={searchBookTo}
+                onChange={(e) => {
+                  setSearchBookTo(Number(e.target.value));
+                  setSearchChapterFrom(0);
+                  setSearchChapterTo(0);
+                }}
+                className="px-2 py-1 border border-gray-300 rounded bg-white max-w-[7rem]"
+              >
+                <option value={0}>전체</option>
+                {searchBooks.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {searchSingleBook && (
+              <div className="flex items-center gap-1">
+                <span className="text-gray-500">장</span>
+                <select
+                  value={searchChapterFrom}
+                  onChange={(e) => setSearchChapterFrom(Number(e.target.value))}
+                  className="px-2 py-1 border border-gray-300 rounded bg-white"
+                >
+                  <option value={0}>처음</option>
+                  {Array.from({ length: searchSingleBook.totalChapters }, (_, i) => i + 1).map((c) => (
+                    <option key={c} value={c}>{c}장</option>
+                  ))}
+                </select>
+                <span className="text-gray-400">~</span>
+                <select
+                  value={searchChapterTo}
+                  onChange={(e) => setSearchChapterTo(Number(e.target.value))}
+                  className="px-2 py-1 border border-gray-300 rounded bg-white"
+                >
+                  <option value={0}>끝</option>
+                  {Array.from({ length: searchSingleBook.totalChapters }, (_, i) => i + 1).map((c) => (
+                    <option key={c} value={c}>{c}장</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
           {/* 검색 결과 */}
           {searchResults.length > 0 && (
             <div>
               <p className="text-xs text-gray-600 mb-2">
-                총 {searchTotal}건{searchTotal > 100 ? " (상위 100건 표시)" : ""}
+                총 {searchTotal}건
+                {searchTotalPages > 1 && ` · ${searchPage}/${searchTotalPages}페이지`}
               </p>
-              <div className="max-h-64 overflow-y-auto space-y-1">
+              <div className="max-h-80 overflow-y-auto space-y-1">
                 {searchResults.map((r, i) => (
                   <button
                     key={i}
@@ -825,6 +947,27 @@ export default function BibleReaderPage() {
                   </button>
                 ))}
               </div>
+
+              {/* 페이지네이션 — 결과가 많아도 모두 확인 */}
+              {searchTotalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-3 text-xs">
+                  <button
+                    onClick={() => handleSearch(searchPage - 1)}
+                    disabled={searching || searchPage <= 1}
+                    className="px-3 py-1.5 border border-gray-300 rounded bg-white hover:bg-gray-50 disabled:opacity-40"
+                  >
+                    ← 이전
+                  </button>
+                  <span className="text-gray-600">{searchPage} / {searchTotalPages}</span>
+                  <button
+                    onClick={() => handleSearch(searchPage + 1)}
+                    disabled={searching || searchPage >= searchTotalPages}
+                    className="px-3 py-1.5 border border-gray-300 rounded bg-white hover:bg-gray-50 disabled:opacity-40"
+                  >
+                    다음 →
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
