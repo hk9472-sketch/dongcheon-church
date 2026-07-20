@@ -69,6 +69,15 @@ export default function HymnPage() {
     setPlaylist((prev) => [...prev, hymn]);
   };
 
+  // 현재 목록(검색 결과 포함) 전체를 재생목록에 추가 — 이미 담긴 곡은 건너뜀
+  const addAllToPlaylist = () => {
+    setPlaylist((prev) => {
+      const existing = new Set(prev.map((h) => h.id));
+      const toAdd = hymns.filter((h) => !existing.has(h.id));
+      return toAdd.length === 0 ? prev : [...prev, ...toAdd];
+    });
+  };
+
   // 플레이리스트에서 제거
   const removeFromPlaylist = (idx: number) => {
     setPlaylist((prev) => {
@@ -287,6 +296,20 @@ export default function HymnPage() {
               className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
             />
           </div>
+          {/* 목록 액션 바 — 전체 추가 */}
+          {!loading && hymns.length > 0 && (
+            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-gray-50">
+              <span className="text-xs text-gray-500">{hymns.length}곡</span>
+              <button
+                onClick={addAllToPlaylist}
+                disabled={hymns.every((h) => playlist.some((p) => p.id === h.id))}
+                className="px-2.5 py-1 text-xs rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+                title="현재 목록의 모든 곡을 재생목록에 추가"
+              >
+                목록 전체 추가 ▶
+              </button>
+            </div>
+          )}
           <div className="max-h-[60vh] overflow-y-auto">
             {loading ? (
               <div className="p-4 text-center text-gray-400 text-sm">로딩 중...</div>
