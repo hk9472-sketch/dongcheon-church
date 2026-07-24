@@ -18,7 +18,10 @@ export default function LiveViewerCount() {
         .catch(() => {});
     };
     fetchOnce();
-    const t = setInterval(fetchOnce, 30_000);
+    // quota 상향(50,000/day)으로 갱신 주기 30s → 10s 단축.
+    // 실제 YouTube videos.list 호출은 서버 5초 캐시(POLL_INTERVAL_MS)가 5초당 1회로 상한하므로
+    // 클라를 촘촘히 해도 quota 소비는 시간당 최대 ~720 units(예배 중)로 안전.
+    const t = setInterval(fetchOnce, 10_000);
     return () => clearInterval(t);
   }, []);
 
