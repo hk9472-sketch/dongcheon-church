@@ -5,25 +5,35 @@ import { useEffect, useState } from "react";
 interface Stats {
   currentService: { code: string; label: string; inProgress: boolean; currentCount: number };
   youtube: { enabled: boolean; concurrent: number; cumulative: number };
+  pollIntervalSec?: number;
 }
 
 export default function LiveViewerCount() {
   const [data, setData] = useState<Stats | null>(null);
+  // 갱신 주기는 관리자 설정(yt_poll_interval_sec)을 따름. 첫 응답에서 받은 값으로 재설정.
+  const [intervalMs, setIntervalMs] = useState(10_000);
 
   useEffect(() => {
+    let stopped = false;
     const fetchOnce = () => {
       fetch("/api/live/stats")
         .then((r) => r.json())
-        .then((d) => setData(d))
+        .then((d) => {
+          if (stopped) return;
+          setData(d);
+          if (typeof d?.pollIntervalSec === "number" && d.pollIntervalSec >= 3) {
+            setIntervalMs(d.pollIntervalSec * 1000);
+          }
+        })
         .catch(() => {});
     };
     fetchOnce();
-    // quota 상향(50,000/day)으로 갱신 주기 30s → 10s 단축.
-    // 실제 YouTube videos.list 호출은 서버 5초 캐시(POLL_INTERVAL_MS)가 5초당 1회로 상한하므로
-    // 클라를 촘촘히 해도 quota 소비는 시간당 최대 ~720 units(예배 중)로 안전.
-    const t = setInterval(fetchOnce, 10_000);
-    return () => clearInterval(t);
-  }, []);
+    const t = setInterval(fetchOnce, intervalMs);
+    return () => {
+      stopped = true;
+      clearInterval(t);
+    };
+  }, [intervalMs]);
 
   if (!data) return null;
   const { inProgress, currentCount } = data.currentService;

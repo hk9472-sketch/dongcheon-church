@@ -37,7 +37,30 @@ const CHANNEL_CACHE_KEY = "live_youtube_channel_cache";
 const SETTING_URL_KEY = "live_worship_url";
 const API_KEY_SETTING = "youtube_api_key";
 
-const POLL_INTERVAL_MS = 5 * 1000;
+// 폴링 간격(초) — 관리자 설정(siteSetting: yt_poll_interval_sec)으로 조정. 기본 10초.
+// 이 값이 videos.list 호출 최소 간격(quota 상한)이자 클라 화면 갱신 주기를 함께 결정.
+export const YT_POLL_INTERVAL_KEY = "yt_poll_interval_sec";
+export const YT_POLL_DEFAULT_SEC = 10;
+export const YT_POLL_MIN_SEC = 3;
+export const YT_POLL_MAX_SEC = 300;
+let _pollCache = { sec: YT_POLL_DEFAULT_SEC, at: 0 };
+
+/** 관리자 설정된 폴링 간격(초). 60초 모듈 캐시로 DB 부하 최소화. */
+export async function getPollIntervalSec(): Promise<number> {
+  const now = Date.now();
+  if (now - _pollCache.at < 60_000) return _pollCache.sec;
+  let sec = YT_POLL_DEFAULT_SEC;
+  try {
+    const row = await prisma.siteSetting.findUnique({ where: { key: YT_POLL_INTERVAL_KEY } });
+    const v = row ? parseInt(row.value, 10) : NaN;
+    if (Number.isFinite(v) && v >= YT_POLL_MIN_SEC && v <= YT_POLL_MAX_SEC) sec = v;
+  } catch {
+    /* 설정 조회 실패 시 기본값 */
+  }
+  _pollCache = { sec, at: now };
+  return sec;
+}
+
 const CHANNEL_RESOLVE_CACHE_MS = 10 * 60 * 1000; // 10분
 
 function todayKstYmd(): string {
@@ -317,9 +340,10 @@ export async function pollYoutubeViewers(force = false): Promise<PollResult> {
     }
   }
 
-  // 5s 캐시
+  // 폴링 간격 캐시 (관리자 설정값) — 간격 안이면 videos.list 재호출 없이 이전값 반환(quota 상한)
+  const pollIntervalMs = (await getPollIntervalSec()) * 1000;
   if (!force && prev && prev.videoId === videoId && prev.date === today &&
-      now - prev.polledAt < POLL_INTERVAL_MS) {
+      now - prev.polledAt < pollIntervalMs) {
     return {
       ok: true, hasApiKey: true, hasUrl: true, videoId,
       concurrent: prev.concurrent, cumulative: prev.cumulative,

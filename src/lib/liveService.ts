@@ -51,6 +51,35 @@ export const DEFAULT_WINDOWS: ServiceWindow[] = [
 
 const SETTING_KEY = "live_service_windows";
 
+/** 예배 윈도우 총시간 통계 — YouTube 폴링 quota 예상 계산용 */
+export interface ServiceWindowStats {
+  weeklySeconds: number; // 주간 총 예배(윈도우) 초
+  peakDaySeconds: number; // 하루 최대 예배 초(요일 중)
+  peakDayLabel: string; // 예: "일요일"
+}
+
+const DOW_LABEL = ["일", "월", "화", "수", "목", "금", "토"];
+
+export function serviceWindowStats(windows: ServiceWindow[]): ServiceWindowStats {
+  const perDay = [0, 0, 0, 0, 0, 0, 0];
+  for (const w of windows) {
+    const sec = Math.max(0, w.endMin - w.startMin) * 60;
+    for (const d of w.days) {
+      if (d >= 0 && d <= 6) perDay[d] += sec;
+    }
+  }
+  const weeklySeconds = perDay.reduce((a, b) => a + b, 0);
+  let peak = 0;
+  let peakIdx = 0;
+  perDay.forEach((s, i) => {
+    if (s > peak) {
+      peak = s;
+      peakIdx = i;
+    }
+  });
+  return { weeklySeconds, peakDaySeconds: peak, peakDayLabel: `${DOW_LABEL[peakIdx]}요일` };
+}
+
 /** DB에서 윈도우 설정 로드.
  *  사용자 저장값이 우선이지만, DEFAULT_WINDOWS 에 정의된 정기 예배 코드 중
  *  누락된 것은 자동으로 보완. 운영자가 admin/live-stats 의 windows 탭에서

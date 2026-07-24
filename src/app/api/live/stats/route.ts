@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { classifyService, nextServiceStart, SERVICE_CODES, loadWindows, type ServiceCode } from "@/lib/liveService";
-import { pollYoutubeViewers } from "@/lib/youtubeViewers";
+import { pollYoutubeViewers, getPollIntervalSec } from "@/lib/youtubeViewers";
 
 /**
  * GET /api/live/stats
@@ -173,6 +173,7 @@ export async function GET(req: NextRequest) {
 
   // YouTube 시청자 (옵션 — API 키 미설정 시 0)
   const yt = await pollYoutubeViewers().catch(() => null);
+  const pollIntervalSec = await getPollIntervalSec().catch(() => 10);
 
   // 자체 사이트의 오늘 누적 (모든 서비스 포함)
   const webTotalToday = Object.values(todayPerService).reduce((s, n) => s + (n as number), 0);
@@ -208,6 +209,7 @@ export async function GET(req: NextRequest) {
           videoId: yt.videoId,
         }
       : { enabled: false, concurrent: 0, cumulative: 0, polledAt: 0, reason: "error", hasApiKey: false, hasUrl: false, videoId: null },
+    pollIntervalSec,
     combined: {
       // 현재 시청 중 — 웹 활성 + 유튜브 동시
       currentNow: currentCount + (yt?.concurrent ?? 0),
