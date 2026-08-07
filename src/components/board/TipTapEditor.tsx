@@ -45,6 +45,10 @@ interface TipTapEditorProps {
 // 글머리/번호 목록에 dataStyle 속성 추가 — globals.css 의 ul/ol[data-style="..."]
 // 규칙으로 다양한 마커 (circle, square, lower-alpha, lower-roman, paren "9)" 등) 표시.
 const StyledBulletList = BulletList.extend({
+  // "- " / "* " 자동 글머리 변환 비활성화 — 툴바 버튼으로만 목록 생성(의도한 경우만).
+  addInputRules() {
+    return [];
+  },
   addAttributes() {
     return {
       ...this.parent?.(),
@@ -153,6 +157,10 @@ const ParagraphLayout = Extension.create({
 });
 
 const StyledOrderedList = OrderedList.extend({
+  // "1. " 자동 번호목록 변환 비활성화 — 툴바 버튼으로만 목록 생성(의도한 경우만).
+  addInputRules() {
+    return [];
+  },
   addAttributes() {
     return {
       ...this.parent?.(),

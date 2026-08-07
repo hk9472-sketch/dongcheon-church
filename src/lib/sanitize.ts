@@ -157,7 +157,20 @@ export function sanitizeHtml(dirty: string | null | undefined): string {
       return `${newTag}<a class="media-download-link" href="${dlHref}" download rel="noopener noreferrer">📥 다운로드</a>`;
     }
   );
-  return withDownload;
+
+  // 정렬용 공백 보존 — 태그 밖 텍스트의 '선행 공백' + '연속 공백(2+)' 을 &nbsp; 로.
+  //  · HTML 은 연속 공백/선행 공백을 한 칸으로 붕괴시켜 사용자가 공백으로 맞춘 정렬이 사라진다.
+  //  · \n(줄바꿈) 은 건드리지 않아 white-space:normal 동작/기존 글에 영향 없음.
+  //  · 단일 인접 공백(단어 사이)은 보존이 필요없지만, 선행 공백은 들여쓰기 의도라 1개도 변환.
+  const withSpaces = withDownload.replace(/>([^<]*)</g, (full, text: string) => {
+    if (text.indexOf(" ") === -1) return full;
+    const t = text
+      .replace(/^ +/, (sp) => "&nbsp;".repeat(sp.length)) // 선행 공백(들여쓰기)
+      .replace(/ {2,}/g, (sp) => "&nbsp;".repeat(sp.length)); // 내부 연속 공백
+    return `>${t}<`;
+  });
+
+  return withSpaces;
 }
 
 /**
