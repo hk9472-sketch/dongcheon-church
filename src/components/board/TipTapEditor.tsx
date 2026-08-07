@@ -1,6 +1,7 @@
 "use client";
 
 import { useEditor, EditorContent } from "@tiptap/react";
+import { Extension, type Editor, type ChainedCommands } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import BulletList from "@tiptap/extension-bullet-list";
 import OrderedList from "@tiptap/extension-ordered-list";
@@ -53,6 +54,80 @@ const StyledBulletList = BulletList.extend({
         renderHTML: (attrs: Record<string, unknown>) =>
           attrs.dataStyle ? { "data-style": attrs.dataStyle as string } : {},
       },
+    };
+  },
+});
+
+// 문단 들여쓰기(margin-left) · 문단 위 간격(margin-top) — inline style 로 저장돼
+// sanitize(style 허용)와 재편집에 그대로 보존된다. 정렬(TextAlign) 과 함께 style 병합.
+const PARA_INDENT_STEP = 2; // em
+const PARA_INDENT_MAX = 12;
+const PARA_SPACE_STEP = 0.5; // em
+const PARA_SPACE_MAX = 6;
+
+function activeBlockType(editor: Editor): "heading" | "paragraph" {
+  return editor.isActive("heading") ? "heading" : "paragraph";
+}
+
+declare module "@tiptap/core" {
+  interface Commands<ReturnType> {
+    paragraphLayout: {
+      changeIndent: (delta: number) => ReturnType;
+      changeSpaceTop: (delta: number) => ReturnType;
+    };
+  }
+}
+
+const ParagraphLayout = Extension.create({
+  name: "paragraphLayout",
+  addGlobalAttributes() {
+    return [
+      {
+        types: ["paragraph", "heading"],
+        attributes: {
+          indent: {
+            default: 0,
+            parseHTML: (el: HTMLElement) => {
+              const v = parseFloat(el.style.marginLeft || "0");
+              return Number.isFinite(v) && v > 0 ? v : 0;
+            },
+            renderHTML: (attrs: Record<string, unknown>) =>
+              attrs.indent ? { style: `margin-left:${attrs.indent}em` } : {},
+          },
+          spaceTop: {
+            default: 0,
+            parseHTML: (el: HTMLElement) => {
+              const v = parseFloat(el.style.marginTop || "0");
+              return Number.isFinite(v) && v > 0 ? v : 0;
+            },
+            renderHTML: (attrs: Record<string, unknown>) =>
+              attrs.spaceTop ? { style: `margin-top:${attrs.spaceTop}em` } : {},
+          },
+        },
+      },
+    ];
+  },
+  addCommands() {
+    return {
+      changeIndent:
+        (delta: number) =>
+        ({ editor, chain }: { editor: Editor; chain: () => ChainedCommands }) => {
+          const type = activeBlockType(editor);
+          const cur = Number(editor.getAttributes(type).indent) || 0;
+          const next = Math.max(0, Math.min(PARA_INDENT_MAX, cur + delta * PARA_INDENT_STEP));
+          return chain().updateAttributes(type, { indent: next }).run();
+        },
+      changeSpaceTop:
+        (delta: number) =>
+        ({ editor, chain }: { editor: Editor; chain: () => ChainedCommands }) => {
+          const type = activeBlockType(editor);
+          const cur = Number(editor.getAttributes(type).spaceTop) || 0;
+          const next = Math.max(
+            0,
+            Math.min(PARA_SPACE_MAX, Math.round((cur + delta * PARA_SPACE_STEP) * 100) / 100),
+          );
+          return chain().updateAttributes(type, { spaceTop: next }).run();
+        },
     };
   },
 });
@@ -845,6 +920,7 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
       TextAlign.configure({
         types: ["heading", "paragraph"],
       }),
+      ParagraphLayout,
       ResizableImage.configure({
         HTMLAttributes: { class: "max-w-full" },
       }),
@@ -1627,6 +1703,39 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
           title="우측 정렬"
         >
           ≡
+        </TBtn>
+
+        <Sep />
+
+        {/* 문단 들여쓰기 (왼쪽 여백) — 목록이 아닐 때. 중앙정렬 대신 살짝 밀 때 유용 */}
+        {!editor.isActive("bulletList") && !editor.isActive("orderedList") && (
+          <>
+            <TBtn
+              onClick={() => editor.chain().focus().changeIndent(-1).run()}
+              title="내어쓰기 — 문단 왼쪽 여백 줄임"
+            >
+              ⇤
+            </TBtn>
+            <TBtn
+              onClick={() => editor.chain().focus().changeIndent(1).run()}
+              title="들여쓰기 — 문단 왼쪽 여백 늘림(tab 효과)"
+            >
+              ⇥
+            </TBtn>
+          </>
+        )}
+        {/* 문단 위 간격 (세로 여백) — 빈 줄 없이 문단 사이를 벌림 */}
+        <TBtn
+          onClick={() => editor.chain().focus().changeSpaceTop(-1).run()}
+          title="문단 위 간격 줄임"
+        >
+          <span className="text-xs">간격−</span>
+        </TBtn>
+        <TBtn
+          onClick={() => editor.chain().focus().changeSpaceTop(1).run()}
+          title="문단 위 간격 늘림 (빈 줄 없이 문단 사이를 벌림)"
+        >
+          <span className="text-xs">간격+</span>
         </TBtn>
 
         <Sep />
