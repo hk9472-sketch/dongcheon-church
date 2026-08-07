@@ -112,6 +112,19 @@ const ParagraphLayout = Extension.create({
           },
         },
       },
+      {
+        // 목록 항목(li) 자체 글자 크기 — <li style="font-size:..."> 로 저장.
+        // ::marker 는 li 의 font-size 를 상속하므로, 목록 글자 크기를 바꾸면 글머리/번호도 같이 커진다.
+        types: ["listItem"],
+        attributes: {
+          liFontSize: {
+            default: null,
+            parseHTML: (el: HTMLElement) => el.style.fontSize || null,
+            renderHTML: (attrs: Record<string, unknown>) =>
+              attrs.liFontSize ? { style: `font-size:${attrs.liFontSize as string}` } : {},
+          },
+        },
+      },
     ];
   },
   addCommands() {
@@ -1590,7 +1603,13 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
           <div className="w-20">
             <button
               type="button"
-              onClick={() => editor.chain().focus().unsetFontSize().run()}
+              onClick={() => {
+                const inList = editor.isActive("bulletList") || editor.isActive("orderedList");
+                const chain = editor.chain().focus().unsetFontSize();
+                // 목록 안이면 li 크기도 기본으로 → 마커도 기본 크기
+                if (inList) chain.updateAttributes("listItem", { liFontSize: null });
+                chain.run();
+              }}
               className="block w-full px-3 py-1 text-left text-sm hover:bg-blue-50 text-gray-400"
             >
               기본
@@ -1599,7 +1618,13 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
               <button
                 key={s.value}
                 type="button"
-                onClick={() => editor.chain().focus().setFontSize(s.value).run()}
+                onClick={() => {
+                  const inList = editor.isActive("bulletList") || editor.isActive("orderedList");
+                  const chain = editor.chain().focus().setFontSize(s.value);
+                  // 목록 안이면 li 에도 같은 크기 반영 → ::marker(글머리/번호)도 함께 커짐
+                  if (inList) chain.updateAttributes("listItem", { liFontSize: s.value });
+                  chain.run();
+                }}
                 className="block w-full px-3 py-1 text-left text-sm hover:bg-blue-50"
               >
                 {s.label}
