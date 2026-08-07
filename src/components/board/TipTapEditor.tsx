@@ -54,6 +54,13 @@ const StyledBulletList = BulletList.extend({
         renderHTML: (attrs: Record<string, unknown>) =>
           attrs.dataStyle ? { "data-style": attrs.dataStyle as string } : {},
       },
+      // 글머리 기호 강조(굵게/기울임) — data-marker="bold" | "italic" | "bold italic"
+      dataMarker: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-marker"),
+        renderHTML: (attrs: Record<string, unknown>) =>
+          attrs.dataMarker ? { "data-marker": attrs.dataMarker as string } : {},
+      },
     };
   },
 });
@@ -141,6 +148,13 @@ const StyledOrderedList = OrderedList.extend({
         parseHTML: (el) => el.getAttribute("data-style"),
         renderHTML: (attrs: Record<string, unknown>) =>
           attrs.dataStyle ? { "data-style": attrs.dataStyle as string } : {},
+      },
+      // 번호 강조(굵게/기울임) + 점 기준 정렬 — data-marker 토큰: "bold" "italic" "numright"
+      dataMarker: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-marker"),
+        renderHTML: (attrs: Record<string, unknown>) =>
+          attrs.dataMarker ? { "data-marker": attrs.dataMarker as string } : {},
       },
     };
   },
@@ -1803,6 +1817,39 @@ export default function TipTapEditor({ content, onChange, placeholder, minHeight
             </TBtn>
           </>
         )}
+
+        {/* 글머리/번호 마커 강조(굵게·기울임) + 번호 점(.) 기준 정렬 */}
+        {(editor.isActive("bulletList") || editor.isActive("orderedList")) &&
+          (() => {
+            const lt = editor.isActive("orderedList") ? "orderedList" : "bulletList";
+            const cur = ((editor.getAttributes(lt).dataMarker as string) || "")
+              .split(/\s+/)
+              .filter(Boolean);
+            const toggle = (token: string) => {
+              const has = cur.includes(token);
+              const next = (has ? cur.filter((t) => t !== token) : [...cur, token]).join(" ");
+              editor.chain().focus().updateAttributes(lt, { dataMarker: next || null }).run();
+            };
+            return (
+              <>
+                <TBtn onClick={() => toggle("bold")} active={cur.includes("bold")} title="글머리/번호 굵게">
+                  <span className="font-bold text-xs">•B</span>
+                </TBtn>
+                <TBtn onClick={() => toggle("italic")} active={cur.includes("italic")} title="글머리/번호 기울임">
+                  <span className="italic text-xs">•I</span>
+                </TBtn>
+                {editor.isActive("orderedList") && (
+                  <TBtn
+                    onClick={() => toggle("numright")}
+                    active={cur.includes("numright")}
+                    title="번호 점(.) 기준 정렬 — 1. / 11. 자릿수 맞춤(우측정렬)"
+                  >
+                    <span className="text-xs">.정렬</span>
+                  </TBtn>
+                )}
+              </>
+            );
+          })()}
 
         <Sep />
 
