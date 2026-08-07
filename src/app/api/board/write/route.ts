@@ -32,6 +32,21 @@ function sanitizeStoredName(stored: string): string {
   return base.replace(/[^A-Za-z0-9_.]/g, "_");
 }
 
+/**
+ * 빈 문단(<p></p>, 공백/&nbsp;/<br> 만 있는 문단)을 <p><br></p> 로 정규화.
+ * ProseMirror(TipTap)는 편집을 다시 열 때 '완전히 빈' 문단을 떨어뜨려 여러 빈 줄이
+ * 한 줄로 줄어든다. <br> 을 품은 문단은 '비어있지 않음'으로 취급돼 그대로 보존되므로,
+ * 저장 시 이 형태로 바꿔두면 사용자가 넣은 빈 줄(문단 간격)이 재편집·재저장에도 유지된다.
+ * (문단의 정렬 등 속성은 보존)
+ */
+function normalizeBlankParagraphs(html: string): string {
+  if (!html) return html;
+  return html.replace(
+    /<p(\s[^>]*)?>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>/gi,
+    (_m, attrs) => `<p${attrs || ""}><br></p>`,
+  );
+}
+
 /** 업로드 파일 검증. 유효하지 않으면 에러 메시지를 반환. */
 function validateUploadFile(file: File): string | null {
   if (file.size > MAX_UPLOAD_SIZE) {
@@ -72,7 +87,7 @@ export async function POST(request: NextRequest) {
     const email = (formData.get("email") as string) || null;
     const homepage = (formData.get("homepage") as string) || null;
     const subject = formData.get("subject") as string;
-    const content = formData.get("content") as string;
+    const content = normalizeBlankParagraphs(formData.get("content") as string);
     const isSecret = formData.get("isSecret") === "true";
     const isNotice = formData.get("isNotice") === "true";
     const useHtml = formData.get("useHtml") === "true";
