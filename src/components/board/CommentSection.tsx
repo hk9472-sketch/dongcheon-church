@@ -250,6 +250,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
   const [manageMode, setManageMode] = useState(false);
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkLocking, setBulkLocking] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -414,6 +415,38 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
     }
   }
 
+  // 선택 댓글 잠금(비밀 처리)/해제 — 잠그면 일반 사용자에게 내용이 "(비밀댓글)" 로 가려짐.
+  async function handleBulkLock(lock: boolean) {
+    if (checkedIds.size === 0) return;
+    if (
+      lock &&
+      !confirm(
+        `선택한 ${checkedIds.size}개 댓글을 잠글까요?\n일반 사용자에게는 내용이 "(비밀댓글)" 로 가려집니다. (관리자·작성자는 열람 가능)`,
+      )
+    ) {
+      return;
+    }
+    setBulkLocking(true);
+    try {
+      const res = await fetch("/api/board/comment/lock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentIds: [...checkedIds], lock }),
+      });
+      if (res.ok) {
+        setCheckedIds(new Set());
+        router.refresh();
+      } else {
+        const err = await res.json();
+        alert(err.message || "처리에 실패했습니다.");
+      }
+    } catch {
+      alert("처리에 실패했습니다.");
+    } finally {
+      setBulkLocking(false);
+    }
+  }
+
   function exitManageMode() {
     setManageMode(false);
     setCheckedIds(new Set());
@@ -450,13 +483,31 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
           </div>
           <div className="flex items-center gap-2">
             {manageMode && checkedIds.size > 0 && (
-              <button
-                onClick={handleBulkDelete}
-                disabled={bulkDeleting}
-                className="px-3 py-1 text-xs text-white bg-red-500 hover:bg-red-600 rounded transition-colors disabled:opacity-50"
-              >
-                {bulkDeleting ? "삭제 중..." : `선택 삭제 (${checkedIds.size})`}
-              </button>
+              <>
+                <button
+                  onClick={() => handleBulkLock(true)}
+                  disabled={bulkLocking || bulkDeleting}
+                  className="px-3 py-1 text-xs text-white bg-amber-500 hover:bg-amber-600 rounded transition-colors disabled:opacity-50"
+                  title="선택 댓글을 잠가 일반 사용자가 못 보게 함(비밀 처리)"
+                >
+                  {bulkLocking ? "처리 중..." : `🔒 잠금 (${checkedIds.size})`}
+                </button>
+                <button
+                  onClick={() => handleBulkLock(false)}
+                  disabled={bulkLocking || bulkDeleting}
+                  className="px-3 py-1 text-xs border border-gray-300 text-gray-600 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+                  title="선택 댓글의 잠금 해제(다시 공개)"
+                >
+                  잠금 해제
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleting || bulkLocking}
+                  className="px-3 py-1 text-xs text-white bg-red-500 hover:bg-red-600 rounded transition-colors disabled:opacity-50"
+                >
+                  {bulkDeleting ? "삭제 중..." : `선택 삭제 (${checkedIds.size})`}
+                </button>
+              </>
             )}
             {commentPolicy === "DISABLED" && (
               <span className="text-xs text-gray-400">댓글이 막힌 게시글입니다</span>
