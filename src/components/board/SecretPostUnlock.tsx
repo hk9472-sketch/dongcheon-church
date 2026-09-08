@@ -7,6 +7,7 @@ interface SecretPostUnlockProps {
 }
 
 export default function SecretPostUnlock({ postId }: SecretPostUnlockProps) {
+  const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,10 +40,25 @@ export default function SecretPostUnlock({ postId }: SecretPostUnlockProps) {
     }
   }
 
+  // 처음엔 버튼만 — 누르면 비번 입력 폼이 나타남
+  if (!open) {
+    return (
+      <div className="mt-6">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="px-4 py-2 text-sm bg-blue-700 text-white rounded hover:bg-blue-800"
+        >
+          🔑 비밀번호 입력하기
+        </button>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="mt-6 max-w-sm mx-auto">
       <p className="text-xs text-gray-500 mb-2">
-        작성자에게 받은 비밀번호를 입력하면 열람할 수 있습니다.
+        비밀번호를 입력하면 열람할 수 있습니다.
       </p>
       <div className="flex gap-2">
         <input

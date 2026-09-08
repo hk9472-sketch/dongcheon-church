@@ -35,7 +35,7 @@ export default function PostManageActions({
   onDone,
 }: Props) {
   const router = useRouter();
-  const [openMenu, setOpenMenu] = useState<"none" | "cat" | "board" | "pw">("none");
+  const [openMenu, setOpenMenu] = useState<"none" | "cat" | "board" | "pw" | "lock">("none");
   const [submitting, setSubmitting] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -50,6 +50,9 @@ export default function PostManageActions({
 
   // 비번 설정 상태
   const [pwInput, setPwInput] = useState("");
+
+  // 비밀글 잠금 상태 (열람 비번)
+  const [lockPw, setLockPw] = useState("");
 
   // 외부 클릭 닫기
   useEffect(() => {
@@ -205,6 +208,45 @@ export default function PostManageActions({
     }
   }
 
+  async function applyLock(lock: boolean) {
+    if (selectedIds.length === 0) return;
+    const pw = lockPw.trim();
+    if (lock) {
+      if (
+        !confirm(
+          `선택한 ${selectedIds.length}건을 비밀글로 잠급니다.\n${
+            pw
+              ? "이 비번을 아는 사람만 열람할 수 있습니다."
+              : "(비번 없이 — 관리자·작성자만 열람, 비번 열람 불가)"
+          }`,
+        )
+      ) {
+        return;
+      }
+    } else if (!confirm(`선택한 ${selectedIds.length}건의 비밀글 잠금을 해제할까요?`)) {
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/admin/posts/lock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postIds: selectedIds, lock, password: pw }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "처리 실패");
+      alert(`완료 — ${data.updated}건 ${lock ? "잠금" : "잠금 해제"}.`);
+      setOpenMenu("none");
+      setLockPw("");
+      onDone();
+      router.refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "처리 실패");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="relative inline-flex items-center gap-1.5" ref={ref}>
       {/* 카테고리 변경 — useCategory 인 게시판에서만 의미 있음 */}
@@ -236,6 +278,16 @@ export default function PostManageActions({
         title="선택 글에 비밀번호 설정/제거 — 비번 부여 후 비로그인 사용자도 비번으로 수정 가능"
       >
         비번 설정 🔑
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setOpenMenu(openMenu === "lock" ? "none" : "lock")}
+        disabled={submitting}
+        className="px-3 py-1 text-xs border border-red-300 text-red-700 rounded hover:bg-red-50"
+        title="선택 글을 비밀글로 잠금 — 비번을 아는 사람만 열람(비번 열람은 게시글 화면에서)"
+      >
+        🔒 비밀글 잠금 ▾
       </button>
 
       {openMenu === "cat" && (
@@ -375,6 +427,52 @@ export default function PostManageActions({
             >
               {pwInput.trim().length === 0 ? "제거" : "설정"}
             </button>
+          </div>
+        </div>
+      )}
+
+      {openMenu === "lock" && (
+        <div className="absolute z-30 top-full right-0 mt-1 w-72 rounded-md border border-red-300 bg-white shadow-lg p-3 space-y-2">
+          <div className="text-xs font-semibold text-red-800">비밀글 잠금 / 해제</div>
+          <p className="text-[10px] text-gray-500 leading-relaxed">
+            선택한 <strong>{selectedIds.length}건</strong> 을 <strong>비밀글로 잠급니다</strong>.
+            <br />
+            열람 비밀번호를 입력하면 그 비번을 아는 사람만 열람(비우면 관리자·작성자만 열람).
+          </p>
+          <input
+            type="text"
+            value={lockPw}
+            onChange={(e) => setLockPw(e.target.value)}
+            placeholder="열람 비밀번호 (비우면 관리자 전용)"
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded font-mono"
+            autoComplete="off"
+          />
+          <div className="flex items-center justify-between gap-1.5">
+            <button
+              type="button"
+              onClick={() => applyLock(false)}
+              disabled={submitting}
+              className="px-2.5 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40"
+            >
+              잠금 해제
+            </button>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => setOpenMenu("none")}
+                className="px-2.5 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => applyLock(true)}
+                disabled={submitting}
+                className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-40"
+              >
+                🔒 잠금
+              </button>
+            </div>
           </div>
         </div>
       )}

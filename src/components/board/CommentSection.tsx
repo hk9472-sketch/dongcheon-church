@@ -255,7 +255,8 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkLocking, setBulkLocking] = useState(false);
-  // 비밀댓글 열람(unlock) — 게시글 SecretPostUnlock 과 동일 프로세스
+  // 비밀댓글 열람(unlock) — 게시글 SecretPostUnlock 과 동일 프로세스(버튼 → 비번 입력)
+  const [unlockOpen, setUnlockOpen] = useState<Record<number, boolean>>({});
   const [unlockPw, setUnlockPw] = useState<Record<number, string>>({});
   const [unlockingId, setUnlockingId] = useState<number | null>(null);
   const [unlockErr, setUnlockErr] = useState<Record<number, string>>({});
@@ -744,32 +745,47 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                     />
                   )
                 ) : comment.canUnlock ? (
-                  <div className="mt-1 max-w-sm">
-                    <p className="text-xs text-red-500 mb-1">
-                      🔒 비밀댓글 — 비밀번호를 입력하면 열람할 수 있습니다.
-                    </p>
-                    <div className="flex gap-2">
-                      <input
-                        type="password"
-                        value={unlockPw[comment.id] || ""}
-                        onChange={(e) => setUnlockPw((p) => ({ ...p, [comment.id]: e.target.value }))}
-                        onKeyDown={(e) => e.key === "Enter" && handleUnlock(comment.id)}
-                        placeholder="비밀번호"
-                        autoComplete="off"
-                        className="flex-1 px-3 py-1.5 text-sm border border-gray-400 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
+                  unlockOpen[comment.id] ? (
+                    <div className="mt-1 max-w-sm">
+                      <p className="text-xs text-red-500 mb-1">
+                        🔒 비밀번호를 입력하면 열람할 수 있습니다.
+                      </p>
+                      <div className="flex gap-2">
+                        <input
+                          type="password"
+                          value={unlockPw[comment.id] || ""}
+                          onChange={(e) => setUnlockPw((p) => ({ ...p, [comment.id]: e.target.value }))}
+                          onKeyDown={(e) => e.key === "Enter" && handleUnlock(comment.id)}
+                          placeholder="비밀번호"
+                          autoComplete="off"
+                          autoFocus
+                          className="flex-1 px-3 py-1.5 text-sm border border-gray-400 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                        <button
+                          onClick={() => handleUnlock(comment.id)}
+                          disabled={unlockingId === comment.id}
+                          className="px-3 py-1.5 text-sm bg-blue-700 text-white rounded hover:bg-blue-800 disabled:opacity-50"
+                        >
+                          {unlockingId === comment.id ? "확인중..." : "열람"}
+                        </button>
+                      </div>
+                      {unlockErr[comment.id] && (
+                        <p className="mt-1 text-xs text-red-600">{unlockErr[comment.id]}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm text-red-500 italic">
+                        🔒 관리자에 의해 잠긴 비밀댓글입니다.
+                      </span>
                       <button
-                        onClick={() => handleUnlock(comment.id)}
-                        disabled={unlockingId === comment.id}
-                        className="px-3 py-1.5 text-sm bg-blue-700 text-white rounded hover:bg-blue-800 disabled:opacity-50"
+                        onClick={() => setUnlockOpen((p) => ({ ...p, [comment.id]: true }))}
+                        className="px-2.5 py-1 text-xs border border-red-300 text-red-600 rounded hover:bg-red-50"
                       >
-                        {unlockingId === comment.id ? "확인중..." : "열람"}
+                        🔑 비밀번호 입력하기
                       </button>
                     </div>
-                    {unlockErr[comment.id] && (
-                      <p className="mt-1 text-xs text-red-600">{unlockErr[comment.id]}</p>
-                    )}
-                  </div>
+                  )
                 ) : (
                   <div className="text-sm text-red-500 italic">
                     🔒 비밀댓글입니다.
