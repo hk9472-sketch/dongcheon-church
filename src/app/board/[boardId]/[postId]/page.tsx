@@ -472,15 +472,27 @@ export default async function PostDetailPage({ params }: PageProps) {
           isAdmin={currentUser ? currentUser.isAdmin <= 2 : false}
           currentUserId={currentUser?.id ?? null}
           postAuthorId={post.authorId}
-          comments={comments.map((c) => ({
-            id: c.id,
-            authorName: c.authorName,
-            content: c.content,
-            isSecret: c.isSecret,
-            createdAt: c.createdAt.toISOString(),
-            authorId: c.authorId,
-            parentId: c.parentId,
-          }))}
+          comments={comments.map((c) => {
+            // 비밀댓글 열람 권한(서버 계산): 관리자 / 글 작성자 / 댓글 작성자 / unlock 쿠키 보유자.
+            // 비인가자에겐 content 를 아예 마스킹("")해 전송 → devtools 로도 못 봄.
+            const viewable =
+              !c.isSecret ||
+              (currentUser ? currentUser.isAdmin <= 2 : false) ||
+              (currentUser?.id != null && currentUser.id === post.authorId) ||
+              (currentUser?.id != null && c.authorId != null && currentUser.id === c.authorId) ||
+              !!cookieStore.get(`dc_comment_unlock_${c.id}`)?.value;
+            return {
+              id: c.id,
+              authorName: c.authorName,
+              content: viewable ? c.content : "",
+              isSecret: c.isSecret,
+              locked: !viewable,
+              canUnlock: !viewable && !!c.password, // 공유 비번이 설정된 잠금 댓글만 비번 열람 가능
+              createdAt: c.createdAt.toISOString(),
+              authorId: c.authorId,
+              parentId: c.parentId,
+            };
+          })}
         />
       )}
 

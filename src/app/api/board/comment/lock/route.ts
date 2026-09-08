@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { hashPassword } from "@/lib/auth";
 
 async function verifyAdmin(request: NextRequest) {
   const sessionToken = request.cookies.get("dc_session")?.value;
@@ -12,9 +13,10 @@ async function verifyAdmin(request: NextRequest) {
 }
 
 // POST /api/board/comment/lock
-//   body: { commentIds: number[], lock: boolean }
-//   lock=true  → isSecret=true (일반 사용자 열람 차단: 내용이 "(비밀댓글)" 로 가려짐)
-//   lock=false → 잠금 해제
+//   body: { commentIds: number[], lock: boolean, password?: string }
+//   lock=true  → isSecret=true. password 있으면 그 비번(해시)으로 공유 열람 가능(게시글 비밀글과 동일).
+//                password 비우면 관리자·작성자만 열람(비번 열람 불가).
+//   lock=false → 잠금 해제(isSecret=false). password 는 건드리지 않음(비회원 댓글의 수정·삭제 비번 보존).
 //   관리자(isAdmin<=2) 만 가능.
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -23,7 +25,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { commentIds, lock } = await request.json();
+    const { commentIds, lock, password } = await request.json();
     if (!Array.isArray(commentIds) || commentIds.length === 0) {
       return NextResponse.json({ message: "댓글을 선택하세요." }, { status: 400 });
     }
@@ -32,12 +34,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "잘못된 요청입니다." }, { status: 400 });
     }
 
-    const res = await prisma.comment.updateMany({
-      where: { id: { in: ids } },
-      data: { isSecret: !!lock },
-    });
-
-    return NextResponse.json({ updated: res.count, lock: !!lock });
+    let res;
+    if (lock) {
+      const pw = typeof password === "string" ? password.trim() : "";
+      const data: { isSecret: boolean; password?: string } = { isSecret: true };
+      if (pw) data.password = await hashPassword(pw); // 공유 열람 비번(해시)
+      res = await prisma.comment.updateMany({ where: { id: { in: ids } }, data });
+      return NextResponse.json({ updated: res.count, lock: true, hasPassword: !!pw });
+    } else {
+      res = await prisma.comment.updateMany({
+        where: { id: { in: ids } },
+        data: { isSecret: false }, // password 는 보존(비회원 수정/삭제 비번 유지)
+      });
+      return NextResponse.json({ updated: res.count, lock: false });
+    }
   } catch (error) {
     console.error("Comment lock error:", error);
     return NextResponse.json({ message: "서버 오류" }, { status: 500 });

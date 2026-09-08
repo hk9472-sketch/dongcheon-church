@@ -33,6 +33,10 @@ interface Comment {
   createdAt: string;
   authorId: number | null;
   parentId?: number | null;
+  // 서버에서 계산: locked=이 열람자가 내용을 볼 수 없음(내용은 마스킹돼 전송 안 됨).
+  // canUnlock=공유 비밀번호가 설정돼 있어 비번 입력으로 열람 가능.
+  locked?: boolean;
+  canUnlock?: boolean;
 }
 
 interface CommentSectionProps {
@@ -45,7 +49,7 @@ interface CommentSectionProps {
   postAuthorId?: number | null;
 }
 
-export default function CommentSection({ boardSlug, postId, commentPolicy, comments, isAdmin, currentUserId, postAuthorId }: CommentSectionProps) {
+export default function CommentSection({ boardSlug, postId, commentPolicy, comments, isAdmin, currentUserId }: CommentSectionProps) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -251,6 +255,38 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkLocking, setBulkLocking] = useState(false);
+  // 비밀댓글 열람(unlock) — 게시글 SecretPostUnlock 과 동일 프로세스
+  const [unlockPw, setUnlockPw] = useState<Record<number, string>>({});
+  const [unlockingId, setUnlockingId] = useState<number | null>(null);
+  const [unlockErr, setUnlockErr] = useState<Record<number, string>>({});
+
+  async function handleUnlock(commentId: number) {
+    const pw = (unlockPw[commentId] || "").trim();
+    if (!pw) {
+      setUnlockErr((p) => ({ ...p, [commentId]: "비밀번호를 입력하세요." }));
+      return;
+    }
+    setUnlockingId(commentId);
+    setUnlockErr((p) => ({ ...p, [commentId]: "" }));
+    try {
+      const res = await fetch("/api/board/comment/verify-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentId, password: pw }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        // 성공: unlock 쿠키 설정됨 → 재로드하면 서버가 내용을 내려줌
+        window.location.reload();
+        return;
+      }
+      setUnlockErr((p) => ({ ...p, [commentId]: data.message || "비밀번호가 일치하지 않습니다." }));
+    } catch {
+      setUnlockErr((p) => ({ ...p, [commentId]: "요청 처리 중 오류가 발생했습니다." }));
+    } finally {
+      setUnlockingId(null);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -418,20 +454,20 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
   // 선택 댓글 잠금(비밀 처리)/해제 — 잠그면 일반 사용자에게 내용이 "(비밀댓글)" 로 가려짐.
   async function handleBulkLock(lock: boolean) {
     if (checkedIds.size === 0) return;
-    if (
-      lock &&
-      !confirm(
-        `선택한 ${checkedIds.size}개 댓글을 잠글까요?\n일반 사용자에게는 내용이 "(비밀댓글)" 로 가려집니다. (관리자·작성자는 열람 가능)`,
-      )
-    ) {
-      return;
+    let lockPassword = "";
+    if (lock) {
+      const pw = prompt(
+        `선택한 ${checkedIds.size}개 댓글을 잠급니다.\n\n열람 비밀번호를 입력하세요 — 이 비번을 아는 사람만 열람할 수 있습니다.\n(비워 두면 관리자·작성자만 열람, 비번 열람 불가)`,
+      );
+      if (pw === null) return; // 취소
+      lockPassword = pw.trim();
     }
     setBulkLocking(true);
     try {
       const res = await fetch("/api/board/comment/lock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ commentIds: [...checkedIds], lock }),
+        body: JSON.stringify({ commentIds: [...checkedIds], lock, password: lockPassword }),
       });
       if (res.ok) {
         setCheckedIds(new Set());
@@ -548,11 +584,9 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
             const prev = rowIdx > 0 ? sortedComments[rowIdx - 1] : null;
             const startsNewGroup = !isReply && (!prev || true);
             const rowBorder = startsNewGroup && rowIdx > 0 ? "border-t border-gray-200" : "";
-            // 비밀댓글 열람 권한: 관리자, 글 작성자, 댓글 작성자
-            const canViewSecret = !comment.isSecret ||
-              isAdmin ||
-              (currentUserId != null && currentUserId === postAuthorId) ||
-              (currentUserId != null && currentUserId === comment.authorId);
+            // 비밀댓글 열람 권한 — 서버가 계산한 locked 를 신뢰(관리자/작성자/unlock쿠키 반영,
+            // 비인가자에겐 content 가 애초에 마스킹돼 전송되지 않음).
+            const canViewSecret = !comment.locked;
 
             const isOwnComment = currentUserId != null && currentUserId === comment.authorId;
             const isGuestComment = comment.authorId === null;
@@ -581,14 +615,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
             // 답글이면 부모 댓글 정보 준비 (비밀댓글은 부모도 가려야 하므로 canViewSecret 와 무관하게
             // 부모가 secret 이고 내가 권한 없으면 내용 숨김)
             const parent = isReply && comment.parentId ? commentById.get(comment.parentId) : null;
-            const canSeeParentContent =
-              parent &&
-              (
-                !parent.isSecret ||
-                isAdmin ||
-                (currentUserId != null && currentUserId === postAuthorId) ||
-                (currentUserId != null && currentUserId === parent.authorId)
-              );
+            const canSeeParentContent = parent && !parent.locked;
             return (
               <li
                 key={comment.id}
@@ -716,9 +743,36 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                       dangerouslySetInnerHTML={{ __html: sanitizeHtml(comment.content) }}
                     />
                   )
+                ) : comment.canUnlock ? (
+                  <div className="mt-1 max-w-sm">
+                    <p className="text-xs text-gray-500 mb-1">
+                      🔒 비밀댓글 — 비밀번호를 입력하면 열람할 수 있습니다.
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        value={unlockPw[comment.id] || ""}
+                        onChange={(e) => setUnlockPw((p) => ({ ...p, [comment.id]: e.target.value }))}
+                        onKeyDown={(e) => e.key === "Enter" && handleUnlock(comment.id)}
+                        placeholder="비밀번호"
+                        autoComplete="off"
+                        className="flex-1 px-3 py-1.5 text-sm border border-gray-400 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                      <button
+                        onClick={() => handleUnlock(comment.id)}
+                        disabled={unlockingId === comment.id}
+                        className="px-3 py-1.5 text-sm bg-blue-700 text-white rounded hover:bg-blue-800 disabled:opacity-50"
+                      >
+                        {unlockingId === comment.id ? "확인중..." : "열람"}
+                      </button>
+                    </div>
+                    {unlockErr[comment.id] && (
+                      <p className="mt-1 text-xs text-red-600">{unlockErr[comment.id]}</p>
+                    )}
+                  </div>
                 ) : (
                   <div className="text-sm text-gray-400 italic">
-                    비밀댓글입니다.
+                    🔒 비밀댓글입니다.
                   </div>
                 )}
 
