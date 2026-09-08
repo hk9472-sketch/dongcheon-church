@@ -659,7 +659,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                     )}
                     <strong className="text-gray-700">{comment.authorName}</strong>
                     {comment.isSecret && (
-                      <span className="text-[11px] text-gray-400" title="비밀댓글">🔒</span>
+                      <span className="text-[11px] text-red-500" title="잠금 댓글(비밀)">🔒</span>
                     )}
                     <span className="text-gray-400 text-xs">{formatTime(comment.createdAt)}</span>
                   </div>
@@ -745,7 +745,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                   )
                 ) : comment.canUnlock ? (
                   <div className="mt-1 max-w-sm">
-                    <p className="text-xs text-gray-500 mb-1">
+                    <p className="text-xs text-red-500 mb-1">
                       🔒 비밀댓글 — 비밀번호를 입력하면 열람할 수 있습니다.
                     </p>
                     <div className="flex gap-2">
@@ -771,7 +771,7 @@ export default function CommentSection({ boardSlug, postId, commentPolicy, comme
                     )}
                   </div>
                 ) : (
-                  <div className="text-sm text-gray-400 italic">
+                  <div className="text-sm text-red-500 italic">
                     🔒 비밀댓글입니다.
                   </div>
                 )}
