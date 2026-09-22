@@ -24,6 +24,7 @@ export interface RecentPost {
 export interface RecentComment {
   id: number;
   content: string;
+  isSecret: boolean;
   authorName: string;
   createdAt: Date;
   updatedAt: Date;
@@ -302,7 +303,9 @@ export function RecentCommentsBody({
                 }}
               >
                 <span className="truncate min-w-0">
-                  {comment.content.replace(/<[^>]*>/g, "").substring(0, 50)}
+                  {comment.isSecret
+                    ? "🔒 비밀댓글"
+                    : comment.content.replace(/<[^>]*>/g, "").substring(0, 50)}
                 </span>
                 <span
                   className="shrink-0 ml-1"

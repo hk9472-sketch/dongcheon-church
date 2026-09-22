@@ -190,7 +190,7 @@ async function getRecentNewPosts(rows: number): Promise<RecentPost[]> {
 async function getRecentComments(rows: number): Promise<RecentComment[]> {
   try {
     const fiveDaysAgo = new Date(Date.now() - FIVE_DAYS_MS);
-    return await prisma.comment.findMany({
+    const list = await prisma.comment.findMany({
       where: {
         OR: [
           { createdAt: { gte: fiveDaysAgo } },
@@ -202,6 +202,7 @@ async function getRecentComments(rows: number): Promise<RecentComment[]> {
       select: {
         id: true,
         content: true,
+        isSecret: true,
         authorName: true,
         createdAt: true,
         updatedAt: true,
@@ -214,6 +215,8 @@ async function getRecentComments(rows: number): Promise<RecentComment[]> {
         },
       },
     });
+    // 비밀댓글은 내용을 서버에서 아예 제거(마스킹) — 위젯에서 "🔒 비밀댓글" 로 표시
+    return list.map((c) => ({ ...c, content: c.isSecret ? "" : c.content }));
   } catch {
     return [];
   }

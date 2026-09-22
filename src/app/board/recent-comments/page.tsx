@@ -45,6 +45,7 @@ export default async function RecentCommentsPage() {
     select: {
       id: true,
       content: true,
+      isSecret: true,
       authorName: true,
       createdAt: true,
       updatedAt: true,
@@ -97,7 +98,9 @@ export default async function RecentCommentsPage() {
                 const created = new Date(comment.createdAt).getTime();
                 const updated = new Date(comment.updatedAt).getTime();
                 const isUpdated = updated - created > 60000;
-                const plainContent = stripHtml(comment.content).substring(0, 80);
+                const plainContent = comment.isSecret
+                  ? "🔒 비밀댓글"
+                  : stripHtml(comment.content).substring(0, 80);
                 return (
                   <tr key={comment.id} className="hover:bg-gray-50 transition-colors">
                     <td className="py-2.5 text-center">
