@@ -196,7 +196,7 @@ export default async function RootLayout({
 
   return (
     <html lang="ko" style={themeStyle}>
-      <body className="flex flex-col min-h-dvh bg-gray-50 text-gray-900">
+      <body className="flex flex-col min-h-dvh bg-[var(--background)] text-gray-900">
         <ScrollRestorer />
         <VisitorTracker />
         <ActiveHeartbeat />
