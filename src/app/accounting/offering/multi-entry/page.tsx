@@ -66,32 +66,42 @@ export default function MultiOfferingEntryPage() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const data = JSON.parse(raw) as { date?: string; rows?: Row[] } | null;
-        if (data && Array.isArray(data.rows) && data.rows.length > 0) {
-          const meaningful = data.rows.some(
+        const data = JSON.parse(raw) as { at?: number; date?: string; rows?: Row[] } | null;
+        // 복구 제안 조건: (1) 최근(24시간 내) 저장분 + (2) '미저장(dirty/error)' 작업이 남아 있음.
+        //   저장 완료분이나 며칠·몇 달 지난 잔재는 복구 대상이 아님 → 조용히 제거.
+        //   (복구는 '입력 도중 새로고침/중단' 대응이 목적)
+        const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
+        const fresh = typeof data?.at === "number" && Date.now() - data.at < DRAFT_TTL_MS;
+        const hasUnsaved =
+          Array.isArray(data?.rows) &&
+          data!.rows.some(
             (r) =>
-              (r.memberNo || "").trim() !== "" ||
-              TYPES.some((t) => (parseInt(r.amounts?.[t.key] || "0", 10) || 0) > 0),
+              (r.status === "dirty" || r.status === "error") &&
+              ((r.memberNo || "").trim() !== "" ||
+                (r.description || "").trim() !== "" ||
+                TYPES.some((t) => (parseInt(r.amounts?.[t.key] || "0", 10) || 0) > 0)),
           );
-          if (meaningful) {
-            // F5 새로고침 vs 처음 진입 구별 — Navigation Timing API.
-            //  · reload(F5) → 작업 보존 위해 자동 복원
-            //  · navigate/back_forward(처음 진입·새 탭·링크) → 깨끗하게 시작 + 배너로 복구 선택권
-            const navEntry = performance.getEntriesByType("navigation")[0] as
-              | PerformanceNavigationTiming
-              | undefined;
-            const isReload =
-              navEntry?.type === "reload" ||
-              // 구형 브라우저 fallback (deprecated)
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (performance as any).navigation?.type === 1;
-            if (isReload) {
-              setDate(data.date || todayStr());
-              setRows(data.rows);
-            } else {
-              setPendingDraft({ date: data.date || todayStr(), rows: data.rows });
-            }
+        if (data && Array.isArray(data.rows) && data.rows.length > 0 && fresh && hasUnsaved) {
+          // F5 새로고침 vs 처음 진입 구별 — Navigation Timing API.
+          //  · reload(F5) → 작업 보존 위해 자동 복원
+          //  · navigate/back_forward(처음 진입·새 탭·링크) → 깨끗하게 시작 + 배너로 복구 선택권
+          const navEntry = performance.getEntriesByType("navigation")[0] as
+            | PerformanceNavigationTiming
+            | undefined;
+          const isReload =
+            navEntry?.type === "reload" ||
+            // 구형 브라우저 fallback (deprecated)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (performance as any).navigation?.type === 1;
+          if (isReload) {
+            setDate(data.date || todayStr());
+            setRows(data.rows);
+          } else {
+            setPendingDraft({ date: data.date || todayStr(), rows: data.rows });
           }
+        } else {
+          // 오래됐거나 미저장 작업이 없는 잔재 → 제거(다음 진입부터 복구 안 물음)
+          localStorage.removeItem(STORAGE_KEY);
         }
       }
     } catch {
@@ -107,16 +117,18 @@ export default function MultiOfferingEntryPage() {
     if (!restoredRef.current || pendingDraft) return;
     const t = setTimeout(() => {
       try {
-        // 모든 행이 비어있거나 saved 만 있으면 draft 비우기
-        const hasDraft = rows.some(
+        // '미저장(dirty/error) + 실제 내용 있는' 행이 있을 때만 draft 보관.
+        //   저장 완료(saved)·빈 행만 있으면 삭제 → 저장된 내용까지 남겨 매번 복구를 묻던 문제 제거.
+        //   (blankRow 는 기본 status=dirty 라 내용 유무까지 확인해야 함)
+        const hasUnsaved = rows.some(
           (r) =>
-            r.status === "dirty" ||
-            r.status === "error" ||
-            r.memberNo.trim() !== "" ||
-            TYPES.some((t) => (parseInt(r.amounts[t.key] || "0", 10) || 0) > 0),
+            (r.status === "dirty" || r.status === "error") &&
+            (r.memberNo.trim() !== "" ||
+              (r.description || "").trim() !== "" ||
+              TYPES.some((t) => (parseInt(r.amounts[t.key] || "0", 10) || 0) > 0)),
         );
-        if (hasDraft) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify({ date, rows }));
+        if (hasUnsaved) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({ at: Date.now(), date, rows }));
         } else {
           localStorage.removeItem(STORAGE_KEY);
         }
@@ -622,14 +634,15 @@ export default function MultiOfferingEntryPage() {
         e.key === "Send" ||
         e.keyCode === 13);
     if (isEnter) {
-      // Enter: 다음 줄의 첫 칸(개인번호) 으로 이동 — 다음 행 입력 시작
+      // Enter: 새 입력 줄을 '현재 위치'에 끼워 넣고(방금 입력한 줄은 아래로 밀림) 같은 화면 위치에 포커스 유지.
+      //  → 줄이 아래로 길어지며 생기던 페이지 스크롤/입력칸 요동 제거(새 줄이 사실상 '위'에 생기는 효과).
       e.preventDefault();
-      if (row === rows.length - 1) {
-        setRows((p) => [...p, blankRow()]);
-        setTimeout(() => focusCell(row + 1, 0), 0);
-      } else {
-        focusCell(row + 1, 0);
-      }
+      setRows((p) => {
+        const n = [...p];
+        n.splice(row, 0, blankRow());
+        return n;
+      });
+      setTimeout(() => focusCell(row, 0), 0);
     } else if (e.key === "ArrowDown") {
       // ↓: 같은 컬럼 다음 행 (세로 이동)
       e.preventDefault();
