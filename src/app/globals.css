@@ -1,7 +1,9 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
+  /* 페이지 바탕 — 순백(#fff) 대신 눈에 부담이 적은 연한 블루그레이 오프화이트.
+     콘텐츠 카드(흰색)와 대비가 생겨 가독성↑·눈부심↓. 색을 바꾸려면 이 값만 조정. */
+  --background: #eef1f5;
   --foreground: #171717;
 
   /* 사이트 테마 색상 (관리자 설정에서 변경 가능) */
