@@ -11,7 +11,7 @@ import { checkAccAccess } from "@/lib/accountAuth";
 //   해당 일자의 OfferingEntry 합계 + 주일학교를 회계단위별로 분리해서 수입(D) 전표 생성.
 //   카테고리 → 회계단위 매핑 (이름 후보 첫 매치):
 //     · 십일조연보       → 회계단위 "십일조회계"
-//     · 주일학교         → 회계단위 "주교회계"
+//     · 주일학교         → 회계단위 "주일학교회계"
 //     · 그 외 (주일/감사/특별/오일/절기) → 회계단위 "일반회계"
 //   각 단위 안에서 같은 이름의 AccAccount(type=D, isActive) 매칭.
 //   절기 금액 > 0 이면 seasonType (부활감사/맥추감사/추수감사/성탄감사) 1개 선택 필수.
@@ -27,7 +27,7 @@ interface CategoryMap {
 }
 
 const TITHE_UNIT = ["십일조회계", "십일조"];
-const SS_UNIT = ["주교회계", "주일학교회계", "주교"];
+const SS_UNIT = ["주일학교회계", "주교회계", "주교"];
 const GEN_UNIT = ["일반회계", "일반"];
 
 const CAT_MAPS: Record<string, CategoryMap> = {

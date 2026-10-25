@@ -13,6 +13,8 @@ DELETE FROM acc_vouchers;
 
 -- 회계단위 순서 = 결산서 순서 (십일조 → 일반 → 건축 → 전도 → 주일학교)
 UPDATE acc_units SET sortOrder = CASE id WHEN 2 THEN 1 WHEN 1 THEN 2 WHEN 3 THEN 3 WHEN 5 THEN 4 WHEN 4 THEN 5 END;
+-- 결산서 명칭에 맞춤
+UPDATE acc_units SET name = '주일학교회계' WHERE id = 4;
 
 -- ── 1) 일반회계(unit 1) — 외부 회계사이트 코드 채택 ──
 UPDATE acc_accounts SET code='1006', level=1, sortOrder=40 WHERE id=4;            -- 특별연보 (1003→1006)

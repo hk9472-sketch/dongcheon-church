@@ -30,7 +30,7 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
 
 // 카테고리 → 회계단위 매핑 (서버와 동일)
 const TITHE_UNIT = "십일조회계";
-const SS_UNIT = "주교회계";
+const SS_UNIT = "주일학교회계";
 const GEN_UNIT = "일반회계";
 
 export default function PostVoucherModal({
