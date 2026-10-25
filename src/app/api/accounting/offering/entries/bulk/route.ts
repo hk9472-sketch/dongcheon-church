@@ -149,6 +149,8 @@ export async function POST(req: NextRequest) {
               amount: u.amount,
               description: u.description?.toString().trim() || null,
               ...(validRowKey(u.rowKey) ? { rowKey: u.rowKey as string } : {}),
+              modifiedBy: createdBy,
+              modifiedAt: new Date(),
             },
           });
         }

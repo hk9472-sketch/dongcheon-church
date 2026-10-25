@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { auditInline, type AuditFields } from "@/components/accounting/AuditStamp";
+import LastInputBar from "@/components/accounting/LastInputBar";
 
-interface DepositLite {
+interface DepositLite extends AuditFields {
   date: string;
   amount: number;
 }
@@ -43,6 +45,8 @@ export default function MemberReport({ category }: Props) {
   const [hideZero, setHideZero] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** load 마다 증가 — LastInputBar 재조회용 */
+  const [loadSeq, setLoadSeq] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,6 +63,7 @@ export default function MemberReport({ category }: Props) {
       setRows(data.rows || []);
       setGrandTotal(data.grandTotal || 0);
       setTotalExpected(data.totalExpected || 0);
+      setLoadSeq((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "조회 실패");
     } finally {
@@ -136,6 +141,14 @@ export default function MemberReport({ category }: Props) {
         </div>
       </div>
 
+      <LastInputBar
+        key={loadSeq}
+        scope="dues"
+        category={category}
+        dateFrom={`${year}-01-01`}
+        dateTo={`${year}-12-31`}
+      />
+
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
         <table className="w-full text-xs">
           <thead className="border-b bg-gray-50 text-gray-600 sticky top-0">
@@ -180,7 +193,9 @@ export default function MemberReport({ category }: Props) {
                     <td
                       key={m}
                       className="px-2 py-1.5 text-right font-mono leading-tight"
-                      title={details.map((d) => `${d.date} ${fmt(d.amount)}`).join("\n")}
+                      title={details
+                        .map((d) => `${d.date} ${fmt(d.amount)}  (${auditInline(d)})`)
+                        .join("\n")}
                     >
                       <div className="text-gray-800">{fmt(sum)}</div>
                       <div className="text-[10px] text-gray-500">

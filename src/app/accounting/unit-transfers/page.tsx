@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { fmtStamp } from "@/components/accounting/AuditStamp";
 
 interface Fund {
   id: number;
@@ -20,6 +21,7 @@ interface Transfer {
   amount: number;
   description: string | null;
   createdBy: string;
+  createdAt: string;
 }
 interface Loan {
   lender: string;
@@ -237,7 +239,9 @@ export default function UnitTransferPage() {
                 </td>
                 <td className="px-4 py-2 text-right font-semibold">{fmt(t.amount)}</td>
                 <td className="px-4 py-2 text-gray-500">{t.description}</td>
-                <td className="px-4 py-2 text-xs text-gray-400">{t.createdBy}</td>
+                <td className="px-4 py-2 text-xs text-gray-400 whitespace-nowrap">
+                  {t.createdBy} · {fmtStamp(t.createdAt, true)}
+                </td>
                 <td className="px-4 py-2 text-right">
                   <button onClick={() => remove(t)} className="text-xs text-red-500 hover:underline">
                     삭제

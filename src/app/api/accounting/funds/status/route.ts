@@ -59,6 +59,8 @@ export async function GET(request: NextRequest) {
         bookAmount: book,
         diff: c.actualAmount - book,
         memo: c.memo,
+        createdBy: c.createdBy,
+        createdAt: c.createdAt.toISOString(),
       },
     };
   });

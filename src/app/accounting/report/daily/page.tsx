@@ -2,6 +2,8 @@
 
 import { Fragment, useEffect, useState, useCallback } from "react";
 import HelpButton from "@/components/HelpButton";
+import LastInputBar from "@/components/accounting/LastInputBar";
+import { auditInline, auditTitle } from "@/components/accounting/AuditStamp";
 
 interface AccUnit {
   id: number;
@@ -17,6 +19,10 @@ interface VoucherDetail {
   description: string;
   counterpart: string;
   amount: number;
+  createdBy?: string;
+  createdAt?: string;
+  modifiedBy?: string | null;
+  modifiedAt?: string | null;
 }
 
 interface DailyRow {
@@ -214,6 +220,10 @@ export default function DailyReportPage() {
         <div className="flex items-center justify-center py-12 text-gray-400">불러오는 중...</div>
       )}
 
+      {report && !loading && (
+        <LastInputBar scope="ledger" dateFrom={dateFrom} dateTo={dateTo} unitId={unitId} className="mb-2 print:hidden" />
+      )}
+
       {/* 보고서 */}
       {report && !loading && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -293,6 +303,9 @@ export default function DailyReportPage() {
                             {detail.counterpart && (
                               <span className="text-gray-400 ml-1">({detail.counterpart})</span>
                             )}
+                            <span className="ml-2 text-[11px] text-gray-400" title={auditTitle(detail)}>
+                              [{auditInline(detail)}]
+                            </span>
                           </td>
                           <td className="px-4 py-1.5 text-xs text-right text-blue-600">
                             {detail.type === "D" ? fmt(detail.amount) : ""}

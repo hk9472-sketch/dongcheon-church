@@ -111,20 +111,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const operator = acc.user?.name ?? acc.user?.userId ?? "";
   try {
     const result = await prisma.$transaction(async (tx) => {
       // 1) 신규 회원 + amount
       const createdMembers: Array<{ memberNo: number; name: string; id: number }> = [];
       for (const m of newMembersResolved) {
         const mem = await tx.monthlyDuesMember.create({
-          data: { category, memberNo: m.memberNo, name: m.name, isActive: true },
+          data: { category, memberNo: m.memberNo, name: m.name, isActive: true, createdBy: operator },
         });
         createdMembers.push({ memberNo: mem.memberNo, name: mem.name, id: mem.id });
         if (m.amount > 0) {
           await tx.monthlyDuesAmount.upsert({
             where: { category_year_memberId: { category, year, memberId: mem.id } },
-            create: { category, year, memberId: mem.id, amount: m.amount },
-            update: { amount: m.amount },
+            create: { category, year, memberId: mem.id, amount: m.amount, createdBy: operator },
+            update: { amount: m.amount, modifiedBy: operator, modifiedAt: new Date() },
           });
         }
       }
@@ -132,8 +133,8 @@ export async function POST(req: NextRequest) {
       for (const a of amounts) {
         await tx.monthlyDuesAmount.upsert({
           where: { category_year_memberId: { category, year, memberId: a.memberId } },
-          create: { category, year, memberId: a.memberId, amount: Math.floor(a.amount) },
-          update: { amount: Math.floor(a.amount) },
+          create: { category, year, memberId: a.memberId, amount: Math.floor(a.amount), createdBy: operator },
+          update: { amount: Math.floor(a.amount), modifiedBy: operator, modifiedAt: new Date() },
         });
       }
       return { createdMembers, updateCount: amounts.length };

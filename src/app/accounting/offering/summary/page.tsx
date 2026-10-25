@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAccountPerms } from "@/lib/useAccountPerms";
 import HelpButton from "@/components/HelpButton";
+import LastInputBar from "@/components/accounting/LastInputBar";
 
 /* ───── constants ───── */
 // DB(offering_entries.offeringType) 에 저장된 실제 값과 동일한 풀네임 사용.
@@ -230,6 +231,16 @@ export default function OfferingSummaryPage() {
     return rows.reduce((s, r) => s + ((r[col] as number) || 0), 0);
   }
 
+  // 입력자 · 최종입력 요약용 조회 범위 (탭별)
+  const [barFrom, barTo] =
+    viewTab === "member"
+      ? [memberFrom, memberTo]
+      : viewTab === "date"
+      ? [dateFrom, dateTo]
+      : viewTab === "month"
+      ? [`${monthYear}-01-01`, `${monthYear}-12-31`]
+      : [periodFrom, periodTo];
+
   const tabs: { key: ViewTab; label: string }[] = [
     { key: "member", label: "개인별" },
     { key: "date", label: "일자별" },
@@ -350,6 +361,12 @@ export default function OfferingSummaryPage() {
 
       {/* results */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <LastInputBar
+          scope="offering"
+          dateFrom={barFrom}
+          dateTo={barTo}
+          className="px-4 py-2 border-b border-gray-100 bg-gray-50"
+        />
         {loading ? (
           <div className="px-4 py-8 text-center text-gray-400">로딩 중...</div>
         ) : (

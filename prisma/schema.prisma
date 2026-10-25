@@ -1298,6 +1298,8 @@ model AccVoucher {
   fund        AccFund? @relation(fields: [fundId], references: [id])
   externalRef String?  @db.VarChar(60)             // 외부 분개장 가져오기 원본 키 (중복 방지)
   createdBy   String   @db.VarChar(50)
+  modifiedBy  String?  @db.VarChar(50)             // 최종 수정자 (사용자 입력·수정 시에만 기록)
+  modifiedAt  DateTime?                            // 최종 수정일시 (마감 등 시스템 갱신과 무관)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -1391,7 +1393,10 @@ model OfferingMember {
   family    OfferingMember?  @relation("FamilyGroup", fields: [familyId], references: [id])
   members   OfferingMember[] @relation("FamilyGroup")
   isActive  Boolean  @default(true)
+  createdBy String?  @db.VarChar(50)
   createdAt DateTime @default(now())
+  modifiedBy  String?  @db.VarChar(50)             // 최종 수정자 (사용자 입력·수정 시에만 기록)
+  modifiedAt  DateTime?                            // 최종 수정일시 (마감 등 시스템 갱신과 무관)
 
   // 기부금영수증용 기부자 정보 (국세청 서식 29호)
   // 주민등록번호는 개인정보보호법상 고유식별정보 → 최소 수집·접근 제한 필수.
@@ -1423,6 +1428,8 @@ model OfferingEntry {
   rowKey       String?  @db.VarChar(40)              // 통합입력의 '입력 줄' 키 — 같은 줄에서 입력한 건을 묶어 복원(무기명 섞임 방지)
   createdBy    String?  @db.VarChar(50)
   createdAt    DateTime @default(now())
+  modifiedBy  String?  @db.VarChar(50)             // 최종 수정자 (사용자 입력·수정 시에만 기록)
+  modifiedAt  DateTime?                            // 최종 수정일시 (마감 등 시스템 갱신과 무관)
 
   @@index([memberId, date])
   @@index([date])
@@ -1446,7 +1453,10 @@ model OfferingMemberNumber {
   memberNo   Int                                   // 표면 관리번호
   validFrom  DateTime  @db.Date
   validUntil DateTime? @db.Date
+  createdBy  String?   @db.VarChar(50)
   createdAt  DateTime  @default(now())
+  modifiedBy String?   @db.VarChar(50)
+  modifiedAt DateTime?
 
   @@index([memberNo, validFrom])
   @@index([memberId])
@@ -1461,7 +1471,10 @@ model MonthlyDuesMember {
   memberNo  Int                        // 단위별 고유번호 (category 안에서 unique)
   name      String   @db.VarChar(50)
   isActive  Boolean  @default(true)
+  createdBy String?  @db.VarChar(50)
   createdAt DateTime @default(now())
+  modifiedBy  String?  @db.VarChar(50)             // 최종 수정자 (사용자 입력·수정 시에만 기록)
+  modifiedAt  DateTime?                            // 최종 수정일시 (마감 등 시스템 갱신과 무관)
 
   @@unique([category, memberNo])
   @@index([category, name])
@@ -1475,8 +1488,11 @@ model MonthlyDuesAmount {
   year      Int
   memberId  Int                        // soft FK → MonthlyDuesMember.id
   amount    Int
+  createdBy String?  @db.VarChar(50)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  modifiedBy  String?  @db.VarChar(50)             // 최종 수정자 (사용자 입력·수정 시에만 기록)
+  modifiedAt  DateTime?                            // 최종 수정일시 (마감 등 시스템 갱신과 무관)
 
   @@unique([category, year, memberId])
   @@index([category, year])
@@ -1495,6 +1511,8 @@ model MonthlyDuesDeposit {
   createdBy   String?  @db.VarChar(50)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  modifiedBy  String?  @db.VarChar(50)             // 최종 수정자 (사용자 입력·수정 시에만 기록)
+  modifiedAt  DateTime?                            // 최종 수정일시 (마감 등 시스템 갱신과 무관)
 
   @@index([category, date])
   @@index([category, memberId])
@@ -1545,8 +1563,11 @@ model OfferingSettlement {
   // 확정
   finalizedAt  DateTime?
   finalizedBy  String?   @db.VarChar(50)
+  createdBy    String?   @db.VarChar(50)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+  modifiedBy  String?  @db.VarChar(50)             // 최종 수정자 (사용자 입력·수정 시에만 기록)
+  modifiedAt  DateTime?                            // 최종 수정일시 (마감 등 시스템 갱신과 무관)
 
   @@map("offering_settlements")
 }

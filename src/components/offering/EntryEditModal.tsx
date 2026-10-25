@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { fmtStamp, lastInputAt, auditTitle } from "@/components/accounting/AuditStamp";
 
 const OFFERING_TYPES = [
   "주일연보",
@@ -18,6 +19,11 @@ interface SavedEntry {
   offeringType: string;
   amount: number;
   description: string | null;
+  // 입력자 · 최종입력 (있으면 하단에 표시)
+  createdBy?: string | null;
+  createdAt?: string | null;
+  modifiedBy?: string | null;
+  modifiedAt?: string | null;
 }
 
 interface Props {
@@ -151,7 +157,16 @@ export default function EntryEditModal({ entry, onClose, onSaved }: Props) {
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 border-t bg-gray-50 px-5 py-3">
+        <div className="flex items-center justify-end gap-2 border-t bg-gray-50 px-5 py-3">
+          {(entry.createdBy || entry.createdAt) && (
+            <span className="mr-auto text-[11px] text-gray-500" title={auditTitle(entry)}>
+              입력자 {entry.createdBy || "-"}
+              {entry.modifiedBy && entry.modifiedBy !== entry.createdBy && (
+                <span className="text-amber-700"> → {entry.modifiedBy}</span>
+              )}
+              {" · "}최종입력 {fmtStamp(lastInputAt(entry))}
+            </span>
+          )}
           <button
             type="button"
             onClick={onClose}

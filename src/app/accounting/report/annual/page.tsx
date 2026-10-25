@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import LastInputBar from "@/components/accounting/LastInputBar";
 
 interface Line {
   label: string;
@@ -193,6 +194,9 @@ export default function AnnualReportPage() {
 
       {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
       {loading && <div className="py-12 text-center text-gray-400">불러오는 중...</div>}
+      {data && !loading && (
+        <LastInputBar scope="ledger" dateFrom={`${data.year}-01-01`} dateTo={data.dateTo} className="mb-2 print:hidden" />
+      )}
 
       {data && !loading && (
         <div className="bg-white p-6 md:p-10 rounded-lg shadow-sm border border-gray-200 print:shadow-none print:border-0 print:p-0 space-y-10">

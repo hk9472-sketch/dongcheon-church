@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import AuditStamp, { type AuditFields } from "@/components/accounting/AuditStamp";
 
-interface Deposit {
+interface Deposit extends AuditFields {
   id: number; // 0 = 신규
   date: string;
   memberId: number;
@@ -161,6 +162,10 @@ export default function DepositTable({ category }: Props) {
         installment: String(d.installment),
         description: d.description ?? "",
         status: "saved",
+        createdBy: d.createdBy ?? null,
+        createdAt: d.createdAt ?? null,
+        modifiedBy: d.modifiedBy ?? null,
+        modifiedAt: d.modifiedAt ?? null,
       }));
       list.push(blankRow());
       setRows(list);
@@ -316,6 +321,12 @@ export default function DepositTable({ category }: Props) {
       setRows((p) => {
         const n = [...p];
         n[idx] = { ...n[idx], id: newId, status: "saved", message: "저장됨" };
+        if (data.item) {
+          n[idx].createdBy = data.item.createdBy ?? null;
+          n[idx].createdAt = data.item.createdAt ?? null;
+          n[idx].modifiedBy = data.item.modifiedBy ?? null;
+          n[idx].modifiedAt = data.item.modifiedAt ?? null;
+        }
         if (idx === n.length - 1) n.push(blankRow());
         return n;
       });
@@ -676,6 +687,7 @@ export default function DepositTable({ category }: Props) {
               <th className="px-2 py-2 text-right font-medium w-32">금액</th>
               <th className="px-2 py-2 text-center font-medium w-20">회차</th>
               <th className="px-2 py-2 text-left font-medium">비고</th>
+              <th className="px-2 py-2 text-left font-medium w-28 whitespace-nowrap">입력자 · 최종입력</th>
               <th className="px-2 py-2 w-32 text-center font-medium">작업</th>
             </tr>
           </thead>
@@ -778,6 +790,7 @@ export default function DepositTable({ category }: Props) {
                       className="w-full rounded border border-gray-200 px-1.5 py-0.5"
                     />
                   </td>
+                  <td className="px-2 py-1">{!isNew && <AuditStamp r={r} />}</td>
                   <td className="px-2 py-1 text-center whitespace-nowrap">
                     <div className="flex items-center justify-center gap-1">
                       <button
@@ -817,7 +830,7 @@ export default function DepositTable({ category }: Props) {
               <tr className="border-t-2 bg-gray-100 font-semibold">
                 <td colSpan={3} className="px-2 py-2 text-right">합계</td>
                 <td className="px-2 py-2 text-right text-blue-700">{fmt(totalAmt)}</td>
-                <td colSpan={3}></td>
+                <td colSpan={4}></td>
               </tr>
             </tfoot>
           )}

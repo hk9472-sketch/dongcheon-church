@@ -26,14 +26,22 @@ export async function GET(req: NextRequest) {
       where: { category, year },
     }),
   ]);
-  const amtMap = new Map(amounts.map((a) => [a.memberId, a.amount]));
-  const items = members.map((m) => ({
-    id: amounts.find((a) => a.memberId === m.id)?.id ?? 0,
-    memberId: m.id,
-    memberNo: m.memberNo,
-    name: m.name,
-    amount: amtMap.get(m.id) ?? 0,
-  }));
+  const amtMap = new Map(amounts.map((a) => [a.memberId, a]));
+  const items = members.map((m) => {
+    const a = amtMap.get(m.id);
+    return {
+      id: a?.id ?? 0,
+      memberId: m.id,
+      memberNo: m.memberNo,
+      name: m.name,
+      amount: a?.amount ?? 0,
+      // 입력자 · 최종입력 (월정액 레코드 기준, 레코드 없으면 null)
+      createdBy: a?.createdBy ?? null,
+      createdAt: a?.createdAt ?? null,
+      modifiedBy: a?.modifiedBy ?? null,
+      modifiedAt: a?.modifiedAt ?? null,
+    };
+  });
   return NextResponse.json({ items });
 }
 
@@ -66,8 +74,8 @@ export async function PUT(req: NextRequest) {
     where: {
       category_year_memberId: { category, year, memberId },
     },
-    create: { category, year, memberId, amount },
-    update: { amount },
+    create: { category, year, memberId, amount, createdBy: acc.user?.name ?? acc.user?.userId ?? "" },
+    update: { amount, modifiedBy: acc.user?.name ?? acc.user?.userId ?? "", modifiedAt: new Date() },
   });
   return NextResponse.json({ ok: true, item: saved });
 }

@@ -125,6 +125,9 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     data.description = description?.trim() || null;
   }
 
+  data.modifiedBy = access.user?.name ?? String(access.userId ?? "");
+  data.modifiedAt = new Date();
+
   const updated = await prisma.offeringEntry.update({
     where: { id: entryId },
     data,

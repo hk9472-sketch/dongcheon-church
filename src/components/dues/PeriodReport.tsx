@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import AuditStamp, { type AuditFields } from "@/components/accounting/AuditStamp";
+import LastInputBar from "@/components/accounting/LastInputBar";
 
-interface Deposit {
+interface Deposit extends AuditFields {
   id: number;
   date: string;
   memberId: number;
@@ -43,6 +45,8 @@ export default function PeriodReport({ category }: Props) {
   // 정렬 키 (사용자가 헤더 클릭으로 변경 가능)
   const [sortKey, setSortKey] = useState<"memberNo" | "name" | "date" | "installment" | "amount">("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  /** load 마다 증가 — LastInputBar 재조회용 */
+  const [loadSeq, setLoadSeq] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,6 +61,7 @@ export default function PeriodReport({ category }: Props) {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "조회 실패");
       setItems(data.items || []);
+      setLoadSeq((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "조회 실패");
     } finally {
@@ -144,6 +149,14 @@ export default function PeriodReport({ category }: Props) {
         </div>
       </div>
 
+      <LastInputBar
+        key={loadSeq}
+        scope="dues"
+        category={category}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+      />
+
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
         <table className="w-full text-sm">
           <thead className="border-b bg-gray-50 text-xs text-gray-600 sticky top-0">
@@ -179,12 +192,13 @@ export default function PeriodReport({ category }: Props) {
                 금액{sortArrow("amount")}
               </th>
               <th className="px-2 py-2 text-left font-medium">비고</th>
+              <th className="px-2 py-2 text-left font-medium w-28 whitespace-nowrap">입력자 · 최종입력</th>
             </tr>
           </thead>
           <tbody>
             {sorted.length === 0 && !loading && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-gray-400">
+                <td colSpan={7} className="px-3 py-6 text-center text-gray-400">
                   조회된 입금 없음
                 </td>
               </tr>
@@ -207,6 +221,9 @@ export default function PeriodReport({ category }: Props) {
                 <td className="px-2 py-1.5 text-xs text-gray-500">
                   {d.description || ""}
                 </td>
+                <td className="px-2 py-1">
+                  <AuditStamp r={d} />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -219,7 +236,7 @@ export default function PeriodReport({ category }: Props) {
                 <td className="px-2 py-2 text-right font-mono text-blue-800 bg-blue-50">
                   {fmt(totalAmount)}
                 </td>
-                <td></td>
+                <td colSpan={2}></td>
               </tr>
             </tfoot>
           )}

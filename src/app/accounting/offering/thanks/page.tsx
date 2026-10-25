@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAccountPerms } from "@/lib/useAccountPerms";
 import HelpButton from "@/components/HelpButton";
+import AuditStamp from "@/components/accounting/AuditStamp";
 
 interface BoardOption {
   id: number;
@@ -19,6 +20,11 @@ interface ThanksEntry {
   member: { id: number; name: string; groupName: string | null } | null;
   amount: number;
   description: string | null;
+  // 입력자 · 최종입력
+  createdBy?: string | null;
+  createdAt?: string | null;
+  modifiedBy?: string | null;
+  modifiedAt?: string | null;
 }
 
 function fmtAmount(n: number): string {
@@ -306,12 +312,13 @@ export default function ThanksOfferingPage() {
                     </>
                   )}
                   <th className="px-4 py-3 text-left font-medium text-indigo-800">감사연보내역</th>
+                  <th className="px-4 py-3 text-left font-medium text-indigo-800 w-28 print:hidden">입력자 · 최종입력</th>
                 </tr>
               </thead>
               <tbody>
                 {entries.length === 0 ? (
                   <tr>
-                    <td colSpan={hasMemberEdit ? 7 : 3} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={hasMemberEdit ? 8 : 4}className="px-4 py-8 text-center text-gray-400">
                       {dateFrom && dateTo ? "해당 기간에 감사연보 내역이 없습니다." : "조회 버튼을 눌러주세요."}
                     </td>
                   </tr>
@@ -331,6 +338,7 @@ export default function ThanksOfferingPage() {
                         </>
                       )}
                       <td className="px-4 py-2.5 text-gray-700 whitespace-pre-line align-top">{e.description || ""}</td>
+                      <td className="px-4 py-2.5 align-top print:hidden"><AuditStamp r={e} /></td>
                     </tr>
                   ))
                 )}
@@ -344,6 +352,7 @@ export default function ThanksOfferingPage() {
                     <td className="px-4 py-3 text-right text-indigo-800">
                       {fmtAmount(total)}
                     </td>
+                    <td className="px-4 py-3"></td>
                     <td className="px-4 py-3"></td>
                   </tr>
                 </tfoot>

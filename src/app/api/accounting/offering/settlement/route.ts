@@ -211,8 +211,8 @@ export async function POST(req: NextRequest) {
 
   const saved = await prisma.offeringSettlement.upsert({
     where: { date },
-    create: data,
-    update: data,
+    create: { ...data, createdBy: operatorName },
+    update: { ...data, modifiedBy: operatorName, modifiedAt: new Date() },
   });
 
   return NextResponse.json({

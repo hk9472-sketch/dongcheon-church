@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAccountPerms } from "@/lib/useAccountPerms";
 import HelpButton from "@/components/HelpButton";
 import EntryEditModal from "@/components/offering/EntryEditModal";
+import AuditStamp from "@/components/accounting/AuditStamp";
 
 /* ───── constants ───── */
 const OFFERING_TYPES = [
@@ -37,6 +38,10 @@ interface SavedEntry {
   amount: number;
   description: string | null;
   createdAt?: string;
+  // 입력자 · 최종입력
+  createdBy?: string | null;
+  modifiedBy?: string | null;
+  modifiedAt?: string | null;
 }
 
 // 전표번호 부여 — 비슷한 시각(±5초) + 같은 memberId 묶음 = 1전표.
@@ -672,13 +677,14 @@ export default function OfferingEntryPage() {
                 <th className="px-3 py-2 text-left font-medium">연보종류</th>
                 <th className="px-3 py-2 text-right font-medium">금액</th>
                 <th className="px-3 py-2 text-left font-medium">비고</th>
+                <th className="px-3 py-2 text-left font-medium w-28">입력자 · 최종입력</th>
                 <th className="px-3 py-2 w-12"></th>
               </tr>
             </thead>
             <tbody>
               {todayEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-gray-400">
+                  <td colSpan={hasMemberEdit ? 8 : 7} className="px-3 py-6 text-center text-gray-400">
                     입력된 내역이 없습니다.
                   </td>
                 </tr>
@@ -716,6 +722,7 @@ export default function OfferingEntryPage() {
                         {fmtAmount(e.amount)}
                       </td>
                       <td className="px-3 py-2 text-gray-500 whitespace-pre-line align-top">{e.description || ""}</td>
+                      <td className="px-3 py-2 align-top"><AuditStamp r={e} /></td>
                       <td className="px-3 py-2 text-center">
                         <button
                           type="button"
@@ -742,7 +749,7 @@ export default function OfferingEntryPage() {
                   <td className="px-3 py-2 text-right text-blue-700">
                     {fmtAmount(todayEntries.reduce((s, e) => s + e.amount, 0))}
                   </td>
-                  <td colSpan={2}></td>
+                  <td colSpan={3}></td>
                 </tr>
               </tfoot>
             )}

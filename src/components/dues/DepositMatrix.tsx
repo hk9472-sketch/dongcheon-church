@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { auditTitle } from "@/components/accounting/AuditStamp";
+import LastInputBar from "@/components/accounting/LastInputBar";
 
 interface Member {
   id: number;
@@ -16,6 +18,8 @@ interface Cell {
   checked: boolean;
   /** 입력된 금액 */
   amount: string;
+  /** 입금 완료 셀 마우스오버 — 입금일·금액·입력자·최종입력 */
+  paidTitle?: string;
 }
 
 interface Props {
@@ -41,6 +45,8 @@ export default function DepositMatrix({ category }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  /** load 마다 증가 — LastInputBar 재조회용 */
+  const [loadSeq, setLoadSeq] = useState(0);
 
   /** 회원 + 해당 연도 입금 내역 로드 */
   const load = useCallback(async () => {
@@ -69,8 +75,15 @@ export default function DepositMatrix({ category }: Props) {
       setMembers(ms);
 
       const paidMap = new Set<string>();
+      const paidTitleMap = new Map<string, string[]>();
       for (const d of deposits) {
-        paidMap.add(`${d.memberId}:${d.installment}`);
+        const key = `${d.memberId}:${d.installment}`;
+        paidMap.add(key);
+        const line =
+          `${String(d.date).slice(0, 10)} ${fmt(Number(d.amount) || 0)}원\n` + auditTitle(d);
+        const arr = paidTitleMap.get(key);
+        if (arr) arr.push(line);
+        else paidTitleMap.set(key, [line]);
       }
 
       // 초기엔 금액 비워두고, 체크할 때 monthlyAmount 자동 채움.
@@ -83,10 +96,12 @@ export default function DepositMatrix({ category }: Props) {
             paid: isPaid,
             checked: false,
             amount: "",
+            paidTitle: paidTitleMap.get(`${m.id}:${mo}`)?.join("\n\n"),
           };
         }
       }
       setMatrix(mat);
+      setLoadSeq((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "조회 실패");
     } finally {
@@ -351,6 +366,14 @@ export default function DepositMatrix({ category }: Props) {
         </button>
       </div>
 
+      <LastInputBar
+        key={loadSeq}
+        scope="dues"
+        category={category}
+        dateFrom={`${new Date(date).getFullYear()}-01-01`}
+        dateTo={`${new Date(date).getFullYear()}-12-31`}
+      />
+
       {loading ? (
         <div className="py-12 text-center text-gray-400">불러오는 중...</div>
       ) : (
@@ -417,7 +440,7 @@ export default function DepositMatrix({ category }: Props) {
                           <td
                             key={mo}
                             className="px-1 py-1 text-center bg-green-50 text-green-700"
-                            title="이미 입금됨"
+                            title={c.paidTitle ? `이미 입금됨\n${c.paidTitle}` : "이미 입금됨"}
                           >
                             <div className="text-base leading-none">◯</div>
                           </td>

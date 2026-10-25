@@ -155,6 +155,7 @@ export async function POST(req: NextRequest) {
     name: name.trim(),
     groupName: groupName?.trim() || null,
     familyId: familyId ?? null,
+    createdBy: access.user?.name ?? String(access.userId ?? ""),
   };
   if (id != null) {
     createData.id = parseInt(String(id), 10);

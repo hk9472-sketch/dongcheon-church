@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import HelpButton from "@/components/HelpButton";
+import LastInputBar from "@/components/accounting/LastInputBar";
 
 interface AccUnit {
   id: number;
@@ -245,6 +246,20 @@ export default function SettlementPage() {
 
       {loading && (
         <div className="flex items-center justify-center py-12 text-gray-400">불러오는 중...</div>
+      )}
+
+      {unitId && !loading && (
+        <LastInputBar
+          scope="ledger"
+          unitId={unitId}
+          dateFrom={viewMode === "monthly" ? `${year}-${String(selectedMonth).padStart(2, "0")}-01` : `${year}-01-01`}
+          dateTo={
+            viewMode === "monthly"
+              ? `${year}-${String(selectedMonth).padStart(2, "0")}-${String(new Date(year, selectedMonth, 0).getDate()).padStart(2, "0")}`
+              : `${year}-12-31`
+          }
+          className="mb-2 print:hidden"
+        />
       )}
 
       {/* 월별 결산 */}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAccountPerms } from "@/lib/useAccountPerms";
 import HelpButton from "@/components/HelpButton";
+import AuditStamp from "@/components/accounting/AuditStamp";
 
 /* ───── constants ───── */
 const OFFERING_TYPES = ["주일연보", "십일조연보", "감사연보", "특별연보", "오일연보", "절기연보"] as const;
@@ -21,6 +22,11 @@ interface EntryItem {
   offeringType: string;
   amount: number;
   description: string | null;
+  // 입력자 · 최종입력
+  createdBy?: string | null;
+  createdAt?: string | null;
+  modifiedBy?: string | null;
+  modifiedAt?: string | null;
 }
 
 /* ───── helpers ───── */
@@ -370,6 +376,7 @@ export default function OfferingListPage() {
                       <th className="px-4 py-2 text-left font-medium w-28">연보종류</th>
                       <th className="px-4 py-2 text-right font-medium w-32">금액</th>
                       <th className="px-4 py-2 text-left font-medium">비고</th>
+                      <th className="px-4 py-2 text-left font-medium w-28">입력자 · 최종입력</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -383,6 +390,7 @@ export default function OfferingListPage() {
                         <td className="px-4 py-2 text-gray-400">—</td>
                         <td className="px-4 py-2 text-right text-blue-700 font-medium">{fmtAmount(e.amount)}</td>
                         <td className="px-4 py-2 text-gray-500 whitespace-pre-line align-top">{e.offeringType === DESC_TYPE ? (e.description || "") : ""}</td>
+                        <td className="px-4 py-2 align-top"><AuditStamp r={e} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -406,12 +414,13 @@ export default function OfferingListPage() {
                   <th className="px-4 py-3 text-left font-medium w-28">연보종류</th>
                   <th className="px-4 py-3 text-right font-medium w-32">금액</th>
                   <th className="px-4 py-3 text-left font-medium">비고</th>
+                  <th className="px-4 py-3 text-left font-medium w-28">입력자 · 최종입력</th>
                 </tr>
               </thead>
               <tbody>
                 {entries.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={hasMemberEdit ? 7 : 6} className="px-4 py-8 text-center text-gray-400">
                       {viewTab === "member" && !selectedMemberId
                         ? "회원을 선택하세요."
                         : "조회된 내역이 없습니다."}
@@ -430,6 +439,7 @@ export default function OfferingListPage() {
                         {fmtAmount(e.amount)}
                       </td>
                       <td className="px-4 py-2 text-gray-500">{e.offeringType === DESC_TYPE ? (e.description || "") : ""}</td>
+                      <td className="px-4 py-2"><AuditStamp r={e} /></td>
                     </tr>
                   ))
                 )}
@@ -437,8 +447,9 @@ export default function OfferingListPage() {
               {entries.length > 0 && (
                 <tfoot>
                   <tr className="bg-gray-50 font-semibold border-t">
-                    <td colSpan={4} className="px-4 py-2.5 text-right text-gray-600">합계</td>
+                    <td colSpan={hasMemberEdit ? 4 : 3} className="px-4 py-2.5 text-right text-gray-600">합계</td>
                     <td className="px-4 py-2.5 text-right text-blue-700">{fmtAmount(total)}원</td>
+                    <td></td>
                     <td></td>
                   </tr>
                 </tfoot>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import HelpButton from "@/components/HelpButton";
+import AuditStamp, { type AuditFields } from "@/components/accounting/AuditStamp";
 
 // 한 행에 여러 연보 종류 동시 입력. 빈 칸(0)은 저장 안 함.
 // 종류별로 OfferingEntry 1건씩 분할 저장.
@@ -24,6 +25,7 @@ interface Row {
   status: RowStatus;
   message?: string;
   rowKey: string;                        // 입력 줄 키 — 저장 시 함께 보내 '같은 줄' 건을 묶어 복원
+  audit?: AuditFields;                   // 불러온 줄의 입력자 · 최종입력 (신규 줄은 없음)
 }
 
 // 입력 줄 고유 키 (영숫자/하이픈, 40자 이내)
@@ -74,6 +76,31 @@ function isBlankRow(r: Row): boolean {
 //   저장·불러오기·정렬·Enter 등 어떤 경로에서도 입력은 항상 첫 줄에서 시작.
 function withTopBlank(rows: Row[]): Row[] {
   return [blankRow(), ...rows.filter((r) => !isBlankRow(r))];
+}
+
+// 한 줄(최대 6건) 의 입력자 · 최종입력 집계
+//  - 입력자 = 가장 먼저 입력된 건의 createdBy
+//  - 최종입력 = 줄 안에서 가장 늦은 (modifiedAt ?? createdAt) — 같은 저장(5초 이내)이면 수정으로 보지 않음
+function mergeAudit(
+  row: Row,
+  e: { createdBy?: string | null; createdAt?: string; modifiedBy?: string | null; modifiedAt?: string | null },
+) {
+  const cAt = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+  const lastAt = e.modifiedAt ? new Date(e.modifiedAt).getTime() : cAt;
+  const lastBy = e.modifiedAt ? e.modifiedBy ?? e.createdBy ?? null : e.createdBy ?? null;
+  const a: AuditFields = row.audit ?? { createdBy: e.createdBy ?? null, createdAt: e.createdAt ?? null };
+  const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+  if (cAt && (!aCreated || cAt < aCreated)) {
+    a.createdBy = e.createdBy ?? null;
+    a.createdAt = e.createdAt ?? null;
+  }
+  const curCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+  const curLast = a.modifiedAt ? new Date(a.modifiedAt).getTime() : curCreated;
+  if (lastAt > curLast && lastAt - curCreated > 5000) {
+    a.modifiedBy = lastBy;
+    a.modifiedAt = new Date(lastAt).toISOString();
+  }
+  row.audit = a;
 }
 
 export default function MultiOfferingEntryPage() {
@@ -556,6 +583,9 @@ export default function MultiOfferingEntryPage() {
         description: string | null;
         rowKey?: string | null;
         createdAt?: string;
+        createdBy?: string | null;
+        modifiedBy?: string | null;
+        modifiedAt?: string | null;
       }> = await res.json();
 
       const typeKeys = new Set<string>(TYPES.map((t) => t.key));
@@ -629,6 +659,7 @@ export default function MultiOfferingEntryPage() {
         row.savedIds[e.offeringType] = e.id;
         if (!row.description && e.description) row.description = e.description;
         if (!minIdOf.has(row)) minIdOf.set(row, e.id);
+        mergeAudit(row, e);
       }
 
       // 개인번호 오름차순(무기명은 맨 앞), 같은 번호·무기명끼리는 입력한 순서 그대로
@@ -892,6 +923,7 @@ export default function MultiOfferingEntryPage() {
                 </th>
               ))}
               <th className="px-2 py-2 text-left font-medium">감사내역 <span className="text-gray-400 font-normal">(감사연보만)</span></th>
+              <th className="px-2 py-2 text-left font-medium w-28">입력자 · 최종입력</th>
               <th className="px-2 py-2 w-24 text-center font-medium">작업</th>
             </tr>
           </thead>
@@ -964,6 +996,10 @@ export default function MultiOfferingEntryPage() {
                       title="Shift+Enter 로 줄바꿈, Enter 는 다음 줄로 이동"
                     />
                   </td>
+                  {/* 입력자 · 최종입력 — 포커스 대상 아님 (cellRefs 컬럼 인덱스 영향 없음) */}
+                  <td className="px-2 py-1 align-top">
+                    {r.audit && <AuditStamp r={r.audit} />}
+                  </td>
                   <td className="px-2 py-1 text-center whitespace-nowrap">
                     <div className="flex items-center justify-center gap-1">
                       <button
@@ -1008,8 +1044,8 @@ export default function MultiOfferingEntryPage() {
                   {totalsPerType[t.key] > 0 ? fmt(totalsPerType[t.key]) : ""}
                 </td>
               ))}
-              {/* 비고 + 작업 칸 합쳐서 총계 표시 */}
-              <td colSpan={2} className="px-2 py-2 text-right">
+              {/* 비고 + 입력자 + 작업 칸 합쳐서 총계 표시 */}
+              <td colSpan={3} className="px-2 py-2 text-right">
                 <span className="text-gray-600 mr-2">총계</span>
                 <span className="text-indigo-800 font-mono text-sm">{fmt(grandTotal)}</span>
               </td>

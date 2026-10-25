@@ -1,12 +1,18 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import AuditStamp from "@/components/accounting/AuditStamp";
 
 interface Item {
   memberId: number;
   memberNo: number;
   name: string;
   groupName: string | null;
+  // 입력자 · 최종입력 (해당 번호 이력 행 기준)
+  createdBy?: string | null;
+  createdAt?: string | null;
+  modifiedBy?: string | null;
+  modifiedAt?: string | null;
 }
 
 interface Edit {
@@ -187,20 +193,21 @@ export default function MemberNumbersPage() {
               <th className="px-3 py-2 text-left font-medium">구역</th>
               <th className="px-3 py-2 text-right font-medium w-32">현재 번호</th>
               <th className="px-3 py-2 text-right font-medium w-32">새 번호</th>
+              <th className="px-3 py-2 text-left font-medium w-28">입력자 · 최종입력</th>
               <th className="px-3 py-2 w-20"></th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-gray-400">
+                <td colSpan={7} className="px-3 py-6 text-center text-gray-400">
                   불러오는 중...
                 </td>
               </tr>
             )}
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-gray-400">
+                <td colSpan={7} className="px-3 py-6 text-center text-gray-400">
                   결과 없음
                 </td>
               </tr>
@@ -237,6 +244,7 @@ export default function MemberNumbersPage() {
                       className="w-24 rounded border border-gray-300 px-2 py-1 text-right font-mono"
                     />
                   </td>
+                  <td className="px-3 py-2"><AuditStamp r={it} /></td>
                   <td className="px-3 py-2 text-center">
                     {dirty && (
                       <button

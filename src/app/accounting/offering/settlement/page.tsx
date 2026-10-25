@@ -8,6 +8,8 @@ import type {
 } from "@/lib/offeringAllocation";
 import { allocate as allocateFn } from "@/lib/offeringAllocation";
 import PostVoucherModal from "@/components/offering/PostVoucherModal";
+import LastInputBar from "@/components/accounting/LastInputBar";
+import { fmtStamp, type AuditFields } from "@/components/accounting/AuditStamp";
 
 interface Categories {
   amtTithe: number;
@@ -57,7 +59,8 @@ export default function OfferingSettlementPage() {
   const [date, setDate] = useState(today);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [savedAt, setSavedAt] = useState<string | null>(null);
+  // 저장된 결산의 입력자 · 최종저장 (createdBy / modifiedBy, modifiedAt ?? createdAt)
+  const [savedStamp, setSavedStamp] = useState<AuditFields | null>(null);
 
   const [categories, setCategories] = useState<Categories>(ZERO_CAT);
   const [sundaySchool, setSundaySchool] = useState(0); // 장년반계와 별도, 매수·분배 로직엔 미반영
@@ -184,7 +187,7 @@ export default function OfferingSettlementPage() {
     setLoading(true);
     setError(null);
     setAllocation(null);
-    setSavedAt(null);
+    setSavedStamp(null);
     try {
       const res = await fetch(`/api/accounting/offering/settlement?date=${date}`);
       const data = await res.json();
@@ -214,7 +217,7 @@ export default function OfferingSettlementPage() {
           w10: s.cnt10,
         });
         setAllocation(s.allocation);
-        setSavedAt(s.updatedAt || s.createdAt || null);
+        setSavedStamp(pickStamp(s));
       } else {
         setCategories(data.categories);
         setSundaySchool(0);
@@ -363,7 +366,7 @@ export default function OfferingSettlementPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "저장 실패");
       setAllocation(data.settlement.allocation);
-      setSavedAt(new Date().toISOString());
+      setSavedStamp(pickStamp(data.settlement));
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장 실패");
     } finally {
@@ -407,11 +410,19 @@ export default function OfferingSettlementPage() {
         </div>
       )}
 
-      {savedAt && (
+      {savedStamp && (
         <div className="rounded border border-green-200 bg-green-50 p-2 text-xs text-green-800">
-          마지막 저장: {new Date(savedAt).toLocaleString("ko-KR")}
+          결산 입력자: <strong>{savedStamp.createdBy || "-"}</strong>
+          {savedStamp.modifiedBy && savedStamp.modifiedBy !== savedStamp.createdBy && (
+            <span className="text-amber-700"> → {savedStamp.modifiedBy}</span>
+          )}
+          <span className="mx-2 text-green-300">|</span>
+          최종저장: <strong>{fmtStamp(savedStamp.modifiedAt ?? savedStamp.createdAt)}</strong>
         </div>
       )}
+
+      {/* 해당 일자 연보 입력의 최종입력 · 입력자 */}
+      <LastInputBar scope="offering" dateFrom={date} dateTo={date} className="px-1" />
 
       {/* 카테고리별 입력 금액 */}
       <section className="rounded-lg border bg-white shadow-sm">
@@ -813,6 +824,12 @@ export default function OfferingSettlementPage() {
       <div className="flex justify-end gap-2 sticky bottom-2 bg-white border rounded-lg shadow-md p-3">
         <span className="text-xs text-gray-500 self-center mr-auto">
           저장 후에도 언제든 다시 수정할 수 있습니다 (잠금 없음).
+          {savedStamp && (
+            <span className="ml-2 text-gray-600">
+              최종저장 {fmtStamp(savedStamp.modifiedAt ?? savedStamp.createdAt)} ·{" "}
+              {savedStamp.modifiedBy || savedStamp.createdBy || "-"}
+            </span>
+          )}
         </span>
         <button
           type="button"
@@ -846,6 +863,21 @@ export default function OfferingSettlementPage() {
       )}
     </div>
   );
+}
+
+// 결산 행 → 입력자 · 최종저장 필드만 추출
+function pickStamp(s: {
+  createdBy?: string | null;
+  createdAt?: string | null;
+  modifiedBy?: string | null;
+  modifiedAt?: string | null;
+}): AuditFields {
+  return {
+    createdBy: s.createdBy ?? null,
+    createdAt: s.createdAt ?? null,
+    modifiedBy: s.modifiedBy ?? null,
+    modifiedAt: s.modifiedAt ?? null,
+  };
 }
 
 function CatRow({

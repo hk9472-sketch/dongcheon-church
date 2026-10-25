@@ -465,6 +465,10 @@ async function handleDailyReport(
         description: string;
         counterpart: string;
         amount: number;
+        createdBy: string;
+        createdAt: Date;
+        modifiedBy: string | null;
+        modifiedAt: Date | null;
       }[];
     }
   > = {};
@@ -487,6 +491,10 @@ async function handleDailyReport(
         description: item.description || "",
         counterpart: item.counterpart || "",
         amount: item.amount,
+        createdBy: v.createdBy,
+        createdAt: v.createdAt,
+        modifiedBy: v.modifiedBy,
+        modifiedAt: v.modifiedAt,
       });
     }
   }

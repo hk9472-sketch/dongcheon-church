@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import HelpButton from "@/components/HelpButton";
+import LastInputBar from "@/components/accounting/LastInputBar";
 
 interface AccUnit {
   id: number;
@@ -174,6 +175,15 @@ export default function MonthlyReportPage() {
       {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
       {loading && <div className="flex items-center justify-center py-12 text-gray-400">불러오는 중...</div>}
 
+      {report && !loading && (
+        <LastInputBar
+          scope="ledger"
+          dateFrom={`${year}-01-01`}
+          dateTo={`${year}-${String(month).padStart(2, "0")}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`}
+          unitId={unitId}
+          className="mb-2 print:hidden"
+        />
+      )}
       {report && !loading && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
           <div className="hidden print:block text-center py-4">

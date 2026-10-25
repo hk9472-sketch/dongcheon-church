@@ -80,6 +80,11 @@ export async function GET(request: NextRequest) {
         address: true,
         phone: true,
         donorEmail: true,
+        // 입력자 · 최종입력
+        createdBy: true,
+        createdAt: true,
+        modifiedBy: true,
+        modifiedAt: true,
       },
     }),
   ]);
@@ -100,6 +105,10 @@ export async function GET(request: NextRequest) {
         address: m.address,
         phone: m.phone,
         donorEmail: m.donorEmail,
+        createdBy: m.createdBy,
+        createdAt: m.createdAt,
+        modifiedBy: m.modifiedBy,
+        modifiedAt: m.modifiedAt,
       };
     }),
   });
@@ -198,6 +207,8 @@ export async function PUT(request: NextRequest) {
       ...(address !== undefined ? { address: addressNorm } : {}),
       ...(phone !== undefined ? { phone: phoneNorm } : {}),
       ...(donorEmail !== undefined ? { donorEmail: emailNorm } : {}),
+      modifiedBy: access.user?.name ?? String(access.userId ?? ""),
+      modifiedAt: new Date(),
     },
   });
 

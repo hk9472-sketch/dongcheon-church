@@ -124,7 +124,14 @@ async function memberReport(category: string, year: number) {
 
   const amtMap = new Map(amounts.map((a) => [a.memberId, a.amount]));
 
-  type DepositLite = { date: string; amount: number };
+  type DepositLite = {
+    date: string;
+    amount: number;
+    createdBy: string | null;
+    createdAt: Date | null;
+    modifiedBy: string | null;
+    modifiedAt: Date | null;
+  };
   type Row = {
     memberId: number;
     memberNo: number;
@@ -160,6 +167,10 @@ async function memberReport(category: string, year: number) {
     r.byInstallmentDetails[d.installment].push({
       date: d.date.toISOString().slice(0, 10),
       amount: d.amount,
+      createdBy: d.createdBy ?? null,
+      createdAt: d.createdAt ?? null,
+      modifiedBy: d.modifiedBy ?? null,
+      modifiedAt: d.modifiedAt ?? null,
     });
     r.total += d.amount;
   }

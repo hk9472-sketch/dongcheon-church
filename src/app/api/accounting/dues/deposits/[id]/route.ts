@@ -46,6 +46,9 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   }
   if ("description" in body) data.description = body.description ?? null;
 
+  data.modifiedBy = acc.user?.name ?? acc.user?.userId ?? "";
+  data.modifiedAt = new Date();
+
   const updated = await prisma.monthlyDuesDeposit.update({
     where: { id },
     data,

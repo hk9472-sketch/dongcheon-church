@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAccountPerms } from "@/lib/useAccountPerms";
 import HelpButton from "@/components/HelpButton";
+import AuditStamp from "@/components/accounting/AuditStamp";
 
 interface DonorRow {
   id: number;
@@ -13,6 +14,11 @@ interface DonorRow {
   address: string | null;
   phone: string | null;
   donorEmail: string | null;
+  // 입력자 · 최종입력
+  createdBy?: string | null;
+  createdAt?: string | null;
+  modifiedBy?: string | null;
+  modifiedAt?: string | null;
 }
 
 interface EditForm {
@@ -181,15 +187,16 @@ export default function DonorInfoPage() {
                 <th className="px-3 py-2 text-left font-medium">주소</th>
                 <th className="px-3 py-2 text-left font-medium w-28">연락처</th>
                 <th className="px-3 py-2 text-left font-medium w-40">이메일</th>
+                <th className="px-3 py-2 text-left font-medium w-28">입력자 · 최종입력</th>
                 <th className="px-3 py-2 text-center font-medium w-20">관리</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading && (
-                <tr><td colSpan={8} className="py-8 text-center text-gray-400">불러오는 중...</td></tr>
+                <tr><td colSpan={9} className="py-8 text-center text-gray-400">불러오는 중...</td></tr>
               )}
               {!loading && rows.length === 0 && (
-                <tr><td colSpan={8} className="py-8 text-center text-gray-400">결과가 없습니다.</td></tr>
+                <tr><td colSpan={9} className="py-8 text-center text-gray-400">결과가 없습니다.</td></tr>
               )}
               {!loading && rows.map((r) => (
                 <tr key={r.id} className="hover:bg-gray-50">
@@ -202,6 +209,7 @@ export default function DonorInfoPage() {
                   <td className="px-3 py-2 text-gray-600 text-xs">{r.address || <span className="text-gray-300">-</span>}</td>
                   <td className="px-3 py-2 text-gray-600 text-xs">{r.phone || <span className="text-gray-300">-</span>}</td>
                   <td className="px-3 py-2 text-gray-600 text-xs truncate max-w-[160px]">{r.donorEmail || <span className="text-gray-300">-</span>}</td>
+                  <td className="px-3 py-2"><AuditStamp r={r} /></td>
                   <td className="px-3 py-2 text-center">
                     <button
                       onClick={() => openEdit(r.id)}

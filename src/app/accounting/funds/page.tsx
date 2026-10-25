@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import LastInputBar from "@/components/accounting/LastInputBar";
+import { fmtStamp } from "@/components/accounting/AuditStamp";
 
 interface AccUnit {
   id: number;
@@ -29,6 +31,8 @@ interface FundStatus {
     bookAmount: number;
     diff: number;
     memo: string | null;
+    createdBy: string;
+    createdAt: string;
   } | null;
 }
 
@@ -38,6 +42,7 @@ interface Transfer {
   amount: number;
   description: string | null;
   createdBy: string;
+  createdAt: string;
   fromFund: { id: number; name: string };
   toFund: { id: number; name: string };
 }
@@ -210,6 +215,9 @@ export default function FundStatusPage() {
         </div>
       )}
 
+      {unitId && (
+        <LastInputBar scope="ledger" unitId={unitId} dateFrom={`${date.slice(0, 4)}-01-01`} dateTo={date} className="mb-2" />
+      )}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto mb-6">
         <table className="w-full text-sm min-w-[860px]">
           <thead>
@@ -253,6 +261,9 @@ export default function FundStatusPage() {
                       <span className={r.check.diff === 0 ? "text-emerald-600 ml-1" : "text-red-600 font-semibold ml-1"}>
                         {r.check.diff === 0 ? "일치" : `차이 ${fmt(r.check.diff)}`}
                       </span>
+                      <div className="text-[11px] text-gray-400">
+                        입력 {r.check.createdBy} · {fmtStamp(r.check.createdAt, true)}
+                      </div>
                     </div>
                   ) : (
                     <span className="text-gray-400">기록 없음</span>
@@ -364,7 +375,9 @@ export default function FundStatusPage() {
                 </td>
                 <td className="px-4 py-2 text-right font-semibold">{fmt(t.amount)}</td>
                 <td className="px-4 py-2 text-gray-500">{t.description}</td>
-                <td className="px-4 py-2 text-xs text-gray-400">{t.createdBy}</td>
+                <td className="px-4 py-2 text-xs text-gray-400 whitespace-nowrap">
+                  {t.createdBy} · {fmtStamp(t.createdAt, true)}
+                </td>
                 <td className="px-4 py-2 text-right">
                   <button onClick={() => deleteTransfer(t.id)} className="text-xs text-red-500 hover:underline">
                     삭제

@@ -45,6 +45,11 @@ export async function GET(req: NextRequest) {
     groupName: mMap.get(r.memberId)?.groupName ?? null,
     validFrom: r.validFrom,
     validUntil: r.validUntil,
+    // 입력자 · 최종입력 (번호 이력 행)
+    createdBy: r.createdBy,
+    createdAt: r.createdAt,
+    modifiedBy: r.modifiedBy,
+    modifiedAt: r.modifiedAt,
   }));
   return NextResponse.json({ items });
 }
@@ -101,6 +106,6 @@ export async function POST(req: NextRequest) {
     noSet.set(c.memberNo, c.memberId);
   }
 
-  await applyBatchChange(dateStr, valid);
+  await applyBatchChange(dateStr, valid, acc.user?.name ?? String(acc.userId ?? ""));
   return NextResponse.json({ ok: true, applied: valid.length });
 }

@@ -106,7 +106,9 @@ export async function migrateInitialNumbers(): Promise<{ created: number }> {
 export async function applyBatchChange(
   effectiveDate: Date | string,
   changes: Array<{ memberId: number; memberNo: number }>,
+  operator?: string,
 ): Promise<void> {
+  const by = operator || null;
   const d = toDateOnly(effectiveDate);
   await prisma.$transaction(async (tx) => {
     for (const ch of changes) {
@@ -120,7 +122,7 @@ export async function applyBatchChange(
         // active row 닫기
         await tx.offeringMemberNumber.update({
           where: { id: active.id },
-          data: { validUntil: d },
+          data: { validUntil: d, modifiedBy: by, modifiedAt: new Date() },
         });
       }
       // 같은 (memberId, validFrom) 이미 있으면 update, 없으면 create
@@ -130,7 +132,7 @@ export async function applyBatchChange(
       if (existing) {
         await tx.offeringMemberNumber.update({
           where: { id: existing.id },
-          data: { memberNo: ch.memberNo, validUntil: null },
+          data: { memberNo: ch.memberNo, validUntil: null, modifiedBy: by, modifiedAt: new Date() },
         });
       } else {
         await tx.offeringMemberNumber.create({
@@ -139,6 +141,7 @@ export async function applyBatchChange(
             memberNo: ch.memberNo,
             validFrom: d,
             validUntil: null,
+            createdBy: by,
           },
         });
       }

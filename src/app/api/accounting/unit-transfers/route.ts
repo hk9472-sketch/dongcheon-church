@@ -99,6 +99,7 @@ export async function GET(request: NextRequest) {
       amount: t.amount,
       description: t.description,
       createdBy: t.createdBy,
+      createdAt: t.createdAt.toISOString(),
     })),
   });
 }

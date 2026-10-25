@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
   }
 
   const created = await prisma.monthlyDuesMember.create({
-    data: { category, memberNo, name, isActive: true },
+    data: { category, memberNo, name, isActive: true, createdBy: acc.user?.name ?? acc.user?.userId ?? "" },
   });
   return NextResponse.json({ ok: true, member: created });
 }

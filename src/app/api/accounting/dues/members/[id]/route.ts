@@ -58,6 +58,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     data: {
       ...(newName !== undefined ? { name: newName } : {}),
       ...(newNo !== undefined ? { memberNo: newNo } : {}),
+      modifiedBy: acc.user?.name ?? acc.user?.userId ?? "",
+      modifiedAt: new Date(),
     },
   });
   return NextResponse.json({ ok: true, member: updated });

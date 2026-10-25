@@ -113,6 +113,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   if (groupName !== undefined) data.groupName = groupName?.trim() || null;
   if (familyId !== undefined) data.familyId = familyId;
   if (isActive !== undefined) data.isActive = isActive;
+  data.modifiedBy = access.user?.name ?? String(access.userId ?? "");
+  data.modifiedAt = new Date();
 
   const updated = await prisma.offeringMember.update({
     where: { id: memberId },

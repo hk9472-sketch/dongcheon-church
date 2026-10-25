@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import AuditStamp, { type AuditFields } from "@/components/accounting/AuditStamp";
 
-interface DuesItem {
+interface DuesItem extends AuditFields {
   id: number;
   memberId: number;
   memberNo: number;
@@ -154,6 +155,15 @@ export default function DuesTable({ category }: Props) {
           originalName: r.name.trim(),
           status: "saved",
           message: nameChanged ? "이름·금액 저장됨" : "저장됨",
+          ...(data.item
+            ? {
+                id: data.item.id ?? next[idx].id,
+                createdBy: data.item.createdBy ?? null,
+                createdAt: data.item.createdAt ?? null,
+                modifiedBy: data.item.modifiedBy ?? null,
+                modifiedAt: data.item.modifiedAt ?? null,
+              }
+            : {}),
         };
         return next;
       });
@@ -464,13 +474,14 @@ export default function DuesTable({ category }: Props) {
               <th className="px-3 py-2 text-left font-medium w-24">고유번호</th>
               <th className="px-3 py-2 text-left font-medium">이름</th>
               <th className="px-3 py-2 text-right font-medium w-40">월정액</th>
+              <th className="px-3 py-2 text-left font-medium w-28 whitespace-nowrap">입력자 · 최종입력</th>
               <th className="px-3 py-2 w-32 text-center font-medium">작업</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && newRows.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-gray-400">
+                <td colSpan={5} className="px-3 py-6 text-center text-gray-400">
                   등록된 회원 없음
                 </td>
               </tr>
@@ -507,6 +518,7 @@ export default function DuesTable({ category }: Props) {
                     className="w-full rounded border border-gray-200 px-2 py-1 text-right font-mono"
                   />
                 </td>
+                <td className="px-3 py-1">{r.id > 0 && <AuditStamp r={r} />}</td>
                 <td className="px-3 py-2 text-center whitespace-nowrap">
                   <div className="flex items-center justify-center gap-1">
                     <button
@@ -578,6 +590,7 @@ export default function DuesTable({ category }: Props) {
                       className="w-full rounded border border-gray-200 px-2 py-1 text-right font-mono"
                     />
                   </td>
+                  <td></td>
                   <td className="px-3 py-2 text-center">
                     <button
                       type="button"
@@ -598,7 +611,7 @@ export default function DuesTable({ category }: Props) {
                 <td className="px-3 py-2 text-right text-blue-700">
                   {fmt(rows.reduce((s, r) => s + r.amount, 0))}
                 </td>
-                <td></td>
+                <td colSpan={2}></td>
               </tr>
             </tfoot>
           )}

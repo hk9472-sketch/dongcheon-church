@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import AuditStamp from "@/components/accounting/AuditStamp";
 
 const OFFERING_TYPES = [
   "주일연보",
@@ -20,6 +21,11 @@ interface Entry {
   offeringType: string;
   amount: string;
   description: string;
+  // 입력자 · 최종입력 (DB 에서 불러온 행만 — 신규 행은 비어 있음)
+  createdBy?: string | null;
+  createdAt?: string | null;
+  modifiedBy?: string | null;
+  modifiedAt?: string | null;
   // 상태
   status: "saved" | "dirty" | "saving" | "error" | "deleting";
   message?: string;
@@ -147,6 +153,10 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
         offeringType: string;
         amount: number;
         description: string | null;
+        createdBy?: string | null;
+        createdAt?: string | null;
+        modifiedBy?: string | null;
+        modifiedAt?: string | null;
       }>;
       const mapped: Entry[] = list.map((e) => ({
         id: e.id,
@@ -156,6 +166,10 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
         offeringType: e.offeringType,
         amount: String(e.amount),
         description: e.description ?? "",
+        createdBy: e.createdBy ?? null,
+        createdAt: e.createdAt ?? null,
+        modifiedBy: e.modifiedBy ?? null,
+        modifiedAt: e.modifiedAt ?? null,
         status: "saved",
       }));
       // 끝에 빈 행 1개 (신규 입력용)
@@ -352,7 +366,16 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
         if (!res.ok) throw new Error(data?.error || "저장 실패");
         setRows((prev) => {
           const n = [...prev];
-          n[idx] = { ...n[idx], status: "saved", message: "저장됨" };
+          n[idx] = {
+            ...n[idx],
+            // 수정 응답의 입력자 · 최종입력 반영
+            createdBy: data?.createdBy ?? n[idx].createdBy,
+            createdAt: data?.createdAt ?? n[idx].createdAt,
+            modifiedBy: data?.modifiedBy ?? n[idx].modifiedBy,
+            modifiedAt: data?.modifiedAt ?? n[idx].modifiedAt,
+            status: "saved",
+            message: "저장됨",
+          };
           return n;
         });
       }
@@ -699,13 +722,14 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
               )}
               <th className="px-2 py-2 text-right font-medium w-32">금액</th>
               <th className="px-2 py-2 text-left font-medium">비고</th>
+              <th className="px-2 py-2 text-left font-medium w-28">입력자 · 최종입력</th>
               <th className="px-2 py-2 w-24 text-center font-medium">작업</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={showTypeColumn ? 7 : 6} className="px-3 py-6 text-center text-gray-400">
+                <td colSpan={showTypeColumn ? 8 : 7} className="px-3 py-6 text-center text-gray-400">
                   조회된 내역 없음
                 </td>
               </tr>
@@ -800,6 +824,10 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
                         />
                       )}
                     </td>
+                    {/* 입력자 · 최종입력 — 포커스 대상 아님 (cellRefs 컬럼 인덱스 영향 없음) */}
+                    <td className="px-2 py-1 align-top">
+                      {!isNew && <AuditStamp r={r} />}
+                    </td>
                     <td className="px-2 py-1">
                       <div className="flex items-center justify-center gap-1">
                         {r.status === "saving" || r.status === "deleting" ? (
@@ -853,7 +881,7 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
                 <td className="px-2 py-2 text-right text-blue-700">
                   {fmt(totalAmount)}
                 </td>
-                <td colSpan={2}></td>
+                <td colSpan={3}></td>
               </tr>
             </tfoot>
           )}

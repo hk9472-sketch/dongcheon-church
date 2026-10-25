@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import HelpButton from "@/components/HelpButton";
+import AuditStamp from "@/components/accounting/AuditStamp";
 
 /* ───── types ───── */
 interface AccUnit {
@@ -41,6 +42,9 @@ interface VoucherData {
   totalAmount: number;
   isClosed: boolean;
   createdBy: string;
+  createdAt: string;
+  modifiedBy: string | null;
+  modifiedAt: string | null;
   items: VoucherItemData[];
 }
 
@@ -599,6 +603,7 @@ export default function VoucherListPage() {
                   <th className="px-3 py-2.5 text-right font-medium w-28">지출금액</th>
                   <th className="px-3 py-2.5 text-left font-medium">적요</th>
                   <th className="px-3 py-2.5 text-left font-medium w-24">거래처</th>
+                  <th className="px-3 py-2.5 text-left font-medium w-28">입력자 · 최종입력</th>
                 </tr>
               </thead>
               <tbody>
@@ -608,7 +613,7 @@ export default function VoucherListPage() {
                       전기이월 ({dateFrom} 이전)
                     </td>
                     <td className="px-3 py-2" colSpan={2} />
-                    <td className="px-3 py-2 text-gray-700" colSpan={2}>
+                    <td className="px-3 py-2 text-gray-700" colSpan={3}>
                       잔액 {fmtAmount(carryOver)}
                     </td>
                   </tr>
@@ -718,6 +723,13 @@ export default function VoucherListPage() {
                     <td className="px-3 py-2 text-gray-600">
                       {row.item.counterpart || ""}
                     </td>
+
+                    {/* 입력자 · 최종입력 (전표 단위) */}
+                    {row.isFirst && (
+                      <td className="px-3 py-2 align-top" rowSpan={row.rowSpan}>
+                        <AuditStamp r={row.voucher} />
+                      </td>
+                    )}
                   </tr>,
                   total && (
                     <tr key={`m-${total.ym}`} className="bg-amber-50 border-t-2 border-amber-200 font-semibold">
@@ -726,7 +738,7 @@ export default function VoucherListPage() {
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono text-blue-700">{fmtAmount(total.monthIncome)}</td>
                       <td className="px-3 py-1.5 text-right font-mono text-red-700">{fmtAmount(total.monthExpense)}</td>
-                      <td className="px-3 py-1.5 text-gray-600" colSpan={2}>
+                      <td className="px-3 py-1.5 text-gray-600" colSpan={3}>
                         차액 {fmtAmount(total.monthIncome - total.monthExpense)}
                       </td>
                     </tr>
@@ -741,7 +753,7 @@ export default function VoucherListPage() {
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono text-blue-800">{fmtAmount(total.cumIncome)}</td>
                       <td className="px-3 py-1.5 text-right font-mono text-red-800">{fmtAmount(total.cumExpense)}</td>
-                      <td className="px-3 py-1.5 text-gray-700" colSpan={2}>
+                      <td className="px-3 py-1.5 text-gray-700" colSpan={3}>
                         {carryOver !== null && prior
                           ? `잔액 ${fmtAmount(carryOver - prior.income + prior.expense + total.cumIncome - total.cumExpense)}`
                           : `차액 ${fmtAmount(total.cumIncome - total.cumExpense)}`}

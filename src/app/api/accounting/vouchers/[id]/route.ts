@@ -173,6 +173,8 @@ export async function PUT(
         ...(description !== undefined && { description: description || null }),
         ...fundData,
         totalAmount,
+        modifiedBy: access.user?.name ?? String(access.userId ?? ""),
+        modifiedAt: new Date(),
         ...(items &&
           Array.isArray(items) && {
             items: {

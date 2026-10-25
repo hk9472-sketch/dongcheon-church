@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import HelpButton from "@/components/HelpButton";
+import AuditStamp from "@/components/accounting/AuditStamp";
 
 /* ───── types ───── */
 interface OfferingMember {
@@ -12,6 +13,11 @@ interface OfferingMember {
   isActive: boolean;
   family: { id: number; name: string } | null;
   members: { id: number; name: string }[];
+  // 입력자 · 최종입력
+  createdBy?: string | null;
+  createdAt?: string | null;
+  modifiedBy?: string | null;
+  modifiedAt?: string | null;
 }
 
 /* ───── component ───── */
@@ -244,19 +250,20 @@ export default function OfferingMembersPage() {
                 <th className="px-4 py-3 text-left font-medium w-24">공동번호</th>
                 <th className="px-4 py-3 text-left font-medium">가족구성원</th>
                 <th className="px-4 py-3 text-center font-medium w-20">상태</th>
+                <th className="px-4 py-3 text-left font-medium w-28">입력자 · 최종입력</th>
                 <th className="px-4 py-3 text-center font-medium w-16">삭제</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                     로딩 중...
                   </td>
                 </tr>
               ) : members.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                     등록된 멤버가 없습니다.
                   </td>
                 </tr>
@@ -293,6 +300,7 @@ export default function OfferingMembersPage() {
                         {m.isActive ? "사용" : "미사용"}
                       </span>
                     </td>
+                    <td className="px-4 py-2.5"><AuditStamp r={m} /></td>
                     <td className="px-4 py-2.5 text-center">
                       <button
                         type="button"

@@ -70,8 +70,8 @@ export async function POST(req: NextRequest) {
     }
     await prisma.monthlyDuesAmount.upsert({
       where: { category_year_memberId: { category, year, memberId: p.memberId } },
-      create: { category, year, memberId: p.memberId, amount: p.amount },
-      update: { amount: p.amount },
+      create: { category, year, memberId: p.memberId, amount: p.amount, createdBy: acc.user?.name ?? acc.user?.userId ?? "" },
+      update: { amount: p.amount, modifiedBy: acc.user?.name ?? acc.user?.userId ?? "", modifiedAt: new Date() },
     });
     copied++;
   }

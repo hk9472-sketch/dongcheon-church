@@ -364,7 +364,11 @@ export async function POST(req: NextRequest) {
         } else {
           await tx.accVoucher.update({
             where: { id: v.id },
-            data: { totalAmount: remain.reduce((s, i) => s + i.amount, 0) },
+            data: {
+              totalAmount: remain.reduce((s, i) => s + i.amount, 0),
+              modifiedBy: acc.user?.name ?? acc.user?.userId ?? "",
+              modifiedAt: new Date(),
+            },
           });
         }
       }

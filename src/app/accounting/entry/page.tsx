@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HelpButton from "@/components/HelpButton";
+import { auditInline, auditTitle } from "@/components/accounting/AuditStamp";
 
 /* ───── types ───── */
 interface AccUnit {
@@ -45,6 +46,10 @@ interface SavedVoucher {
   description: string;
   totalAmount: number;
   isClosed: boolean;
+  createdBy: string;
+  createdAt: string;
+  modifiedBy: string | null;
+  modifiedAt: string | null;
   fundId: number | null;
   fund?: { id: number; name: string } | null;
   items: {
@@ -914,6 +919,11 @@ export default function VoucherEntryPage() {
                           `${it.account?.name || ""} ${fmtAmount(it.amount)}`
                       )
                       .join(", ")}
+                  </span>
+
+                  {/* 입력자 · 최종입력 */}
+                  <span className="shrink-0 text-[11px] text-gray-400" title={auditTitle(v)}>
+                    {auditInline(v)}
                   </span>
 
                   {/* total */}

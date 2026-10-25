@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import LastInputBar from "@/components/accounting/LastInputBar";
 
 interface UnitStatus {
   unitId: number;
@@ -153,6 +154,7 @@ export default function YearClosingPage() {
         </div>
       )}
 
+      <LastInputBar scope="ledger" dateFrom={`${year}-01-01`} dateTo={`${year}-12-31`} className="mb-2" />
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
         <table className="w-full text-sm min-w-[900px]">
           <thead>
