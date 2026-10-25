@@ -131,8 +131,10 @@ INSERT INTO acc_accounts (unitId, code, name, type, level, sortOrder, isActive, 
 -- ── 6) 통장 — 계좌번호는 추후 입력 (관리 화면) ──
 INSERT INTO acc_funds (unitId, name, kind, isDefault, sortOrder, isActive) VALUES
  (1,'일반회계 보통예금','보통',1,1,1),
+ (1,'일반회계 현금','현금',0,9,1),
  (2,'십일조 보통예금','보통',1,1,1),
  (2,'십일조 정기예금','정기',0,2,1),
+ (2,'십일조 현금','현금',0,9,1),
  (3,'건축 보통예금','보통',1,1,1),
  (4,'주일학교 보통예금','보통',1,1,1),
  (5,'전도 보통예금','보통',1,1,1);
