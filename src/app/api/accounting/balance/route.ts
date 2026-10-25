@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { checkAccAccess } from "@/lib/accountAuth";
+import { balanceLock } from "@/lib/accYear";
 
 /**
  * GET /api/accounting/balance?unitId=1&year=2026
@@ -107,13 +108,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // 전년도 연마감으로 생성됐거나 해당 연도가 마감된 이월금은 수정 불가
+  const lock = await balanceLock(unitId, year);
+  if (lock) {
+    return NextResponse.json({ error: lock }, { status: 409 });
+  }
+
   // balance 갱신 + 해당 연도의 마감된 월들 carryOver 재전파
   // (연초 잔액이 변경되면 모든 후속 마감의 이월잔액이 stale 해지므로)
   const balance = await prisma.$transaction(async (tx) => {
     const updated = await tx.accBalance.upsert({
       where: { unitId_year: { unitId, year } },
-      create: { unitId, year, amount },
-      update: { amount },
+      create: { unitId, year, amount, source: "manual" },
+      update: { amount, source: "manual" },
     });
 
     if (fundRows) {

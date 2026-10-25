@@ -1147,8 +1147,9 @@ model AccUnit {
   vouchers  AccVoucher[]
   closings  AccClosing[]
   balances  AccBalance[]
-  funds     AccFund[]
-  transfers AccTransfer[]
+  funds        AccFund[]
+  transfers    AccTransfer[]
+  yearClosings AccYearClosing[]
 
   @@map("acc_units")
 }
@@ -1332,9 +1333,27 @@ model AccBalance {
   unit      AccUnit  @relation(fields: [unitId], references: [id])
   year      Int
   amount    Int      @default(0)
+  source    String   @default("manual") @db.VarChar(10) // manual=직접 입력, closing=전년도 연마감으로 생성
 
   @@unique([unitId, year])
   @@map("acc_balances")
+}
+
+// 연마감 — 마감 시 1~12월 월마감 일괄 처리 + 통장별 기말잔액으로 다음 연도 이월금 생성
+model AccYearClosing {
+  id            Int      @id @default(autoincrement())
+  unitId        Int
+  unit          AccUnit  @relation(fields: [unitId], references: [id])
+  year          Int
+  openingAmount Int                                 // 연초 이월금
+  totalIncome   Int
+  totalExpense  Int
+  closingAmount Int                                 // 기말잔액 = 다음 연도 이월금
+  closedAt      DateTime @default(now())
+  closedBy      String   @db.VarChar(50)
+
+  @@unique([unitId, year])
+  @@map("acc_year_closings")
 }
 
 // ============================================================

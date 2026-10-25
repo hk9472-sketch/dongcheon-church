@@ -137,11 +137,6 @@ INSERT INTO acc_funds (unitId, name, kind, isDefault, sortOrder, isActive) VALUE
  (4,'주일학교 보통예금','보통',1,1,1),
  (5,'전도 보통예금','보통',1,1,1);
 
--- ── 7) 2026 연초 이월잔액 = 2025 결산서 잔액 (기본 통장에 배정) ──
-INSERT INTO acc_balances (unitId, year, amount) VALUES
- (1,2026,19999073),(2,2026,27322637),(3,2026,34382162),(4,2026,3567576),(5,2026,9436326)
-ON DUPLICATE KEY UPDATE amount=VALUES(amount);
-INSERT INTO acc_fund_balances (fundId, year, amount)
-SELECT f.id, 2026, b.amount FROM acc_funds f JOIN acc_balances b ON b.unitId=f.unitId AND b.year=2026
-WHERE f.isDefault=1
-ON DUPLICATE KEY UPDATE amount=VALUES(amount);
+-- ── 7) 이월금은 SQL 로 넣지 않음 — '연도별 이월금' 화면에서 시작 연도(2026) 통장별로 직접 입력.
+--     이후 연도는 [연마감] 시 통장별 기말잔액이 자동 이월된다.
+--     참고(2025 결산서 잔액): 십일조 27,322,637 / 일반 19,999,073 / 건축 34,382,162 / 전도 9,436,326 / 주일학교 3,567,576

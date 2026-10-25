@@ -262,6 +262,17 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
+  // 연마감된 연도의 월마감은 개별 취소 불가 (연마감 취소로만)
+  const yearClosed = await prisma.accYearClosing.findUnique({
+    where: { unitId_year: { unitId, year } },
+  });
+  if (yearClosed) {
+    return NextResponse.json(
+      { error: `${year}년은 연마감되어 있습니다. 연마감 화면에서 연마감을 먼저 취소하세요.` },
+      { status: 409 }
+    );
+  }
+
   // 다음 월이 마감되어 있으면 취소 불가
   const nextClosing = await prisma.accClosing.findUnique({
     where: {

@@ -71,6 +71,7 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
         const isLedgerPath = pathname.startsWith("/accounting/entry") ||
           pathname.startsWith("/accounting/vouchers") ||
           pathname.startsWith("/accounting/funds") ||
+          pathname.startsWith("/accounting/year-closing") ||
           pathname.startsWith("/accounting/report") ||
           pathname.startsWith("/accounting/settlement") ||
           pathname.startsWith("/accounting/closing") ||
@@ -265,7 +266,8 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
     { href: "/accounting/funds", label: "통장현황·이체" },
     { href: "/accounting/settlement", label: "결산현황" },
     { href: "/accounting/report/annual", label: "연간 결산서" },
-    { href: "/accounting/closing", label: "마감" },
+    { href: "/accounting/closing", label: "월마감" },
+    { href: "/accounting/year-closing", label: "연마감" },
   ];
 
   const offeringItems = [
@@ -302,7 +304,7 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
     { href: "/accounting/settings/account-mapping", label: "계정과목 매핑" },
     { href: "/accounting/settings/units", label: "회계단위" },
     { href: "/accounting/settings/funds", label: "통장관리" },
-    { href: "/accounting/settings/balance", label: "이월잔액" },
+    { href: "/accounting/settings/balance", label: "연도별 이월금" },
     { href: "/accounting/settings/journal-import", label: "분개장 가져오기" },
   ];
 
