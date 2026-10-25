@@ -28,8 +28,13 @@ async function calculateCarryOverBefore(
   unitId: number,
   beforeDate: Date
 ): Promise<number> {
-  // unitId=0 (전체) 인 경우 연초이월·마감 데이터 합산이 의미 없음 → 0 반환
-  if (!unitId) return 0;
+  // unitId=0 (전체) → 회계단위별 이월잔액의 합
+  if (!unitId) {
+    const units = await prisma.accUnit.findMany({ where: { isActive: true }, select: { id: true } });
+    let sum = 0;
+    for (const u of units) sum += await calculateCarryOverBefore(u.id, beforeDate);
+    return sum;
+  }
 
   const year = beforeDate.getUTCFullYear();
   const targetMonth = beforeDate.getUTCMonth() + 1;
@@ -79,6 +84,29 @@ async function calculateCarryOverBefore(
   }
 
   return carryOver;
+}
+
+/**
+ * 연초 누계 — before 가 속한 해의 1월 1일 ~ before(미포함) 계정별 합계.
+ * 수기장부처럼 '누계'를 항상 1월부터 이어 보이게 하는 데 사용 (unitId=0 이면 전체).
+ */
+async function ytdBefore(unitId: number, before: Date) {
+  const yearStart = toDateOnly(`${before.getUTCFullYear()}-01-01`);
+  const byAccount = new Map<number, number>();
+  let income = 0;
+  let expense = 0;
+  if (before > yearStart) {
+    const items = await prisma.accVoucherItem.findMany({
+      where: { voucher: { ...(unitId ? { unitId } : {}), date: { gte: yearStart, lt: before } } },
+      select: { accountId: true, amount: true, voucher: { select: { type: true } } },
+    });
+    for (const it of items) {
+      byAccount.set(it.accountId, (byAccount.get(it.accountId) ?? 0) + it.amount);
+      if (it.voucher.type === "D") income += it.amount;
+      else expense += it.amount;
+    }
+  }
+  return { byAccount, income, expense };
 }
 
 /**
@@ -211,9 +239,30 @@ async function handleMonthlyReport(
     accountTotals[key].amount += item.amount;
   }
 
-  const items = Object.values(accountTotals).sort((a, b) =>
-    a.code.localeCompare(b.code)
-  );
+  // 누계(1월 ~ 이 달 말) — 이 달에 없지만 누계가 있는 계정도 표시
+  const ytd = await ytdBefore(unitId, nextMonth);
+  const missing = Array.from(ytd.byAccount.keys()).filter((id) => !accountTotals[id]);
+  if (missing.length > 0) {
+    const accs = await prisma.accAccount.findMany({
+      where: { id: { in: missing } },
+      select: { id: true, code: true, name: true, type: true, parentId: true, level: true },
+    });
+    for (const a of accs) {
+      accountTotals[a.id] = {
+        accountId: a.id,
+        code: a.code,
+        name: a.name,
+        type: a.type,
+        parentId: a.parentId,
+        level: a.level,
+        amount: 0,
+      };
+    }
+  }
+
+  const items = Object.values(accountTotals)
+    .map((i) => ({ ...i, cumAmount: ytd.byAccount.get(i.accountId) ?? 0 }))
+    .sort((a, b) => a.code.localeCompare(b.code));
 
   // 수입/지출 소계
   const totalIncome = items
@@ -225,14 +274,24 @@ async function handleMonthlyReport(
 
   const carryOver = await calculateCarryOver(unitId, year, month);
 
+  // 연초이월 — 이월잔액(AccBalance) 직접 조회. 누계 기준 차월이월과 비교해 마감·전표 불일치 검증용
+  const yearBalances = await prisma.accBalance.findMany({
+    where: { year, ...(unitId ? { unitId } : { unit: { isActive: true } }) },
+    select: { amount: true },
+  });
+  const yearCarry = yearBalances.reduce((s, b) => s + b.amount, 0);
+
   return NextResponse.json({
     reportType: "monthly",
     year,
     month,
     carryOver,
+    yearCarry,
     items,
     totalIncome,
     totalExpense,
+    cumIncome: ytd.income,
+    cumExpense: ytd.expense,
     balance: carryOver + totalIncome - totalExpense,
   });
 }
@@ -266,6 +325,7 @@ async function handleAccountReport(
       account: {
         select: { id: true, code: true, name: true, type: true, parentId: true, level: true },
       },
+      voucher: { select: { date: true } },
     },
   });
 
@@ -280,8 +340,15 @@ async function handleAccountReport(
       level: number;
       amount: number;
       count: number;
+      byMonth: Record<string, number>;
     }
   > = {};
+
+  // 조회 기간에 걸친 월 목록 (YYYY-MM)
+  const months: string[] = [];
+  for (let d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1)); d < to; d.setUTCMonth(d.getUTCMonth() + 1)) {
+    months.push(d.toISOString().slice(0, 7));
+  }
 
   for (const item of voucherItems) {
     const key = item.accountId;
@@ -295,15 +362,20 @@ async function handleAccountReport(
         level: item.account.level,
         amount: 0,
         count: 0,
+        byMonth: {},
       };
     }
+    const ym = item.voucher.date.toISOString().slice(0, 7);
     accountTotals[key].amount += item.amount;
     accountTotals[key].count += 1;
+    accountTotals[key].byMonth[ym] = (accountTotals[key].byMonth[ym] ?? 0) + item.amount;
   }
 
-  const items = Object.values(accountTotals).sort((a, b) =>
-    a.code.localeCompare(b.code)
-  );
+  // 연초 누계 (1월 1일 ~ 조회 종료일) = 조회 시작 전 누계 + 기간 합계
+  const prior = await ytdBefore(unitId, from);
+  const items = Object.values(accountTotals)
+    .map((i) => ({ ...i, cumAmount: (prior.byAccount.get(i.accountId) ?? 0) + i.amount }))
+    .sort((a, b) => a.code.localeCompare(b.code));
 
   const totalIncome = items
     .filter((i) => i.type === "D")
@@ -320,9 +392,12 @@ async function handleAccountReport(
     dateFrom,
     dateTo,
     carryOver,
+    months,
     items,
     totalIncome,
     totalExpense,
+    priorIncome: prior.income,
+    priorExpense: prior.expense,
     balance: carryOver + totalIncome - totalExpense,
   });
 }
@@ -426,9 +501,13 @@ async function handleDailyReport(
   // 기간 시작일 직전까지의 이월잔액 (dateFrom이 월 중간이어도 정확히 반영)
   const carryOver = await calculateCarryOverBefore(unitId, from);
 
+  const prior = await ytdBefore(unitId, from);
+
   return NextResponse.json({
     reportType: "daily",
     carryOver,
+    priorIncome: prior.income,
+    priorExpense: prior.expense,
     days,
     totalIncome,
     totalExpense,

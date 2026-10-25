@@ -29,7 +29,19 @@ interface DailyRow {
 
 interface DailyReport {
   carryOver: number;
+  priorIncome: number; // 연초 ~ 조회 시작 전 수입 (누계 기준)
+  priorExpense: number;
   days: DailyRow[];
+}
+
+/** 수기장부식 월계·누계 — 각 월 마지막 일자 뒤에 표시 */
+interface MonthTotal {
+  ym: string;
+  income: number;
+  expense: number;
+  cumIncome: number;
+  cumExpense: number;
+  balance: number;
 }
 
 function fmt(n: number) {
@@ -100,7 +112,7 @@ export default function DailyReportPage() {
           details: d.details || [],
         };
       });
-      setReport({ carryOver, days });
+      setReport({ carryOver, priorIncome: data.priorIncome ?? 0, priorExpense: data.priorExpense ?? 0, days });
       setExpandedDates(new Set());
     } catch (err: any) {
       setError(err.message);
@@ -113,6 +125,30 @@ export default function DailyReportPage() {
   useEffect(() => {
     fetchReport();
   }, [unitId, dateFrom, dateTo, fetchReport]);
+
+  // 월계·누계 (누계 = 1월 1일부터)
+  const monthTotals = new Map<string, MonthTotal>(); // 그 달 마지막 일자 → 합계
+  if (report) {
+    let cumIncome = report.priorIncome;
+    let cumExpense = report.priorExpense;
+    let mIncome = 0;
+    let mExpense = 0;
+    report.days.forEach((day, i) => {
+      const ym = day.date.slice(0, 7);
+      mIncome += day.incomeTotal;
+      mExpense += day.expenseTotal;
+      cumIncome += day.incomeTotal;
+      cumExpense += day.expenseTotal;
+      const next = report.days[i + 1];
+      if (!next || next.date.slice(0, 7) !== ym) {
+        monthTotals.set(day.date, { ym, income: mIncome, expense: mExpense, cumIncome, cumExpense, balance: day.balance });
+        mIncome = 0;
+        mExpense = 0;
+      }
+    });
+  }
+  const periodIncome = report?.days.reduce((s, d) => s + d.incomeTotal, 0) ?? 0;
+  const periodExpense = report?.days.reduce((s, d) => s + d.expenseTotal, 0) ?? 0;
 
   const toggleDate = (date: string) => {
     setExpandedDates((prev) => {
@@ -267,11 +303,42 @@ export default function DailyReportPage() {
                           <td className="px-4 py-1.5"></td>
                         </tr>
                       ))}
+                      {monthTotals.has(day.date) && (() => {
+                        const t = monthTotals.get(day.date)!;
+                        return (
+                          <>
+                            <tr className="bg-amber-50 border-t-2 border-amber-200 font-semibold">
+                              <td className="px-4 py-2 text-amber-900">{Number(t.ym.slice(5, 7))}월 월계</td>
+                              <td className="px-4 py-2 text-right text-blue-700">{fmt(t.income)}</td>
+                              <td className="px-4 py-2 text-right text-red-600">{fmt(t.expense)}</td>
+                              <td className="px-4 py-2 text-right text-gray-500 text-xs">차액 {fmt(t.income - t.expense)}</td>
+                            </tr>
+                            <tr className="bg-amber-100/60 border-b-2 border-amber-300 font-semibold">
+                              <td className="px-4 py-2 text-amber-900">
+                                누계 <span className="text-xs font-normal">(1월~{Number(t.ym.slice(5, 7))}월)</span>
+                              </td>
+                              <td className="px-4 py-2 text-right text-blue-800">{fmt(t.cumIncome)}</td>
+                              <td className="px-4 py-2 text-right text-red-700">{fmt(t.cumExpense)}</td>
+                              <td className="px-4 py-2 text-right">{fmt(t.balance)}</td>
+                            </tr>
+                          </>
+                        );
+                      })()}
                     </Fragment>
                   );
                 })
               )}
             </tbody>
+            {report.days.length > 0 && (
+              <tfoot>
+                <tr className="border-t-2 border-gray-400 bg-teal-50 font-bold">
+                  <td className="px-4 py-3 text-teal-900">조회기간 합계</td>
+                  <td className="px-4 py-3 text-right text-blue-700">{fmt(periodIncome)}</td>
+                  <td className="px-4 py-3 text-right text-red-600">{fmt(periodExpense)}</td>
+                  <td className="px-4 py-3 text-right">{fmt(report.carryOver + periodIncome - periodExpense)}</td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       )}

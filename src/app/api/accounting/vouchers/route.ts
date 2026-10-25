@@ -63,6 +63,7 @@ export async function GET(request: NextRequest) {
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
   const accountId = searchParams.get("accountId");
+  const accountName = searchParams.get("accountName");
   const fundId = searchParams.get("fundId");
   const keyword = searchParams.get("keyword");
 
@@ -90,6 +91,20 @@ export async function GET(request: NextRequest) {
     where.items = {
       some: { accountId: parseInt(accountId, 10) },
     };
+  }
+
+  // accountName 필터: 계정명·코드 부분일치 항목이 있는 전표
+  if (accountName) {
+    where.AND = [
+      ...(where.AND || []),
+      {
+        items: {
+          some: {
+            account: { OR: [{ name: { contains: accountName } }, { code: { startsWith: accountName } }] },
+          },
+        },
+      },
+    ];
   }
 
   // fundId 필터: 기본 통장이면 fundId=null 전표도 포함

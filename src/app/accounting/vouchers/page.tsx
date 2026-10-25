@@ -95,6 +95,10 @@ export default function VoucherListPage() {
   // results
   const [vouchers, setVouchers] = useState<VoucherData[]>([]);
   const [loading, setLoading] = useState(false);
+  // 전기이월 — 회계단위 1개 선택 + 다른 필터 없음일 때만 의미 있음 (null = 표시 안 함)
+  const [carryOver, setCarryOver] = useState<number | null>(null);
+  // 연초 ~ 조회 시작 전 수입/지출 — 누계를 1월부터 이어 보이게 (carryOver 와 같은 조건에서만)
+  const [prior, setPrior] = useState<{ income: number; expense: number } | null>(null);
 
   // accounts for edit modal
   const [allAccounts, setAllAccounts] = useState<AccAccount[]>([]);
@@ -132,14 +136,36 @@ export default function VoucherListPage() {
     if (keyword) params.set("keyword", keyword);
     if (accountKeyword) params.set("accountName", accountKeyword);
 
-    fetch(`/api/accounting/vouchers?${params}`)
-      .then((r) => r.json())
-      .then((d) => {
+    const withCarry = !!filterUnitId && !!dateFrom && !filterType && !keyword && !accountKeyword;
+    const carryReq = withCarry
+      ? fetch(
+          `/api/accounting/report?reportType=account&unitId=${filterUnitId}&dateFrom=${dateFrom}&dateTo=${dateTo || dateFrom}`,
+        )
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) =>
+            d && typeof d.carryOver === "number"
+              ? { carry: d.carryOver as number, income: (d.priorIncome ?? 0) as number, expense: (d.priorExpense ?? 0) as number }
+              : null,
+          )
+          .catch(() => null)
+      : Promise.resolve(null);
+
+    Promise.all([
+      fetch(`/api/accounting/vouchers?${params}`).then((r) => r.json()),
+      carryReq,
+    ])
+      .then(([d, carry]) => {
         if (Array.isArray(d)) setVouchers(d);
         else if (d.vouchers) setVouchers(d.vouchers);
         else setVouchers([]);
+        setCarryOver(carry ? carry.carry : null);
+        setPrior(carry ? { income: carry.income, expense: carry.expense } : null);
       })
-      .catch(() => setVouchers([]))
+      .catch(() => {
+        setVouchers([]);
+        setCarryOver(null);
+        setPrior(null);
+      })
       .finally(() => setLoading(false));
   }, [dateFrom, dateTo, filterUnitId, filterType, keyword, accountKeyword]);
 
@@ -187,6 +213,32 @@ export default function VoucherListPage() {
     }
     return result;
   }, [vouchers]);
+
+  /* ---- 월계·누계 — 각 월 마지막 전표 뒤에 삽입 (전표는 일자순 정렬로 옴) ---- */
+  type TotalRow = { ym: string; monthIncome: number; monthExpense: number; cumIncome: number; cumExpense: number };
+  const monthTotals = useMemo(() => {
+    const after = new Map<number, TotalRow>(); // 그 달 마지막 voucherId → 합계
+    let cumIncome = prior?.income ?? 0;
+    let cumExpense = prior?.expense ?? 0;
+    for (let i = 0; i < vouchers.length; i++) {
+      const v = vouchers[i];
+      const ym = v.date.slice(0, 7);
+      if (v.type === "D") cumIncome += v.totalAmount;
+      else cumExpense += v.totalAmount;
+      const next = vouchers[i + 1];
+      if (!next || next.date.slice(0, 7) !== ym) {
+        const inMonth = vouchers.filter((x) => x.date.slice(0, 7) === ym);
+        after.set(v.id, {
+          ym,
+          monthIncome: inMonth.filter((x) => x.type === "D").reduce((s, x) => s + x.totalAmount, 0),
+          monthExpense: inMonth.filter((x) => x.type !== "D").reduce((s, x) => s + x.totalAmount, 0),
+          cumIncome,
+          cumExpense,
+        });
+      }
+    }
+    return after;
+  }, [vouchers, prior]);
 
   /* ---- CSV export ---- */
   function exportCSV() {
@@ -502,7 +554,7 @@ export default function VoucherListPage() {
         </span>
         <span className="text-gray-400">=</span>
         <span>
-          잔액{" "}
+          {carryOver !== null ? "기간 차액" : "잔액"}{" "}
           <span
             className={`font-bold ${
               summary.balance >= 0 ? "text-emerald-700" : "text-red-700"
@@ -511,6 +563,12 @@ export default function VoucherListPage() {
             {fmtAmount(summary.balance)}
           </span>
         </span>
+        {carryOver !== null && (
+          <span>
+            · 전기이월 <span className="font-bold">{fmtAmount(carryOver)}</span> → 잔액{" "}
+            <span className="font-bold text-emerald-700">{fmtAmount(carryOver + summary.balance)}</span>
+          </span>
+        )}
         <span className="text-gray-400 ml-auto">
           전표 {vouchers.length}건
         </span>
@@ -544,7 +602,24 @@ export default function VoucherListPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, idx) => (
+                {carryOver !== null && (
+                  <tr className="bg-gray-50 border-b border-gray-200 font-semibold">
+                    <td className="px-3 py-2 text-gray-600" colSpan={3}>
+                      전기이월 ({dateFrom} 이전)
+                    </td>
+                    <td className="px-3 py-2" colSpan={2} />
+                    <td className="px-3 py-2 text-gray-700" colSpan={2}>
+                      잔액 {fmtAmount(carryOver)}
+                    </td>
+                  </tr>
+                )}
+                {rows.map((row, idx) => {
+                  const total =
+                    idx === rows.length - 1 || rows[idx + 1].voucherId !== row.voucherId
+                      ? monthTotals.get(row.voucherId)
+                      : undefined;
+                  const span = filterUnitId ? 3 : 4;
+                  return [
                   <tr
                     key={`${row.voucherId}-${row.item.id}`}
                     className={`border-b border-gray-50 hover:bg-teal-50/40 transition-colors ${
@@ -643,8 +718,38 @@ export default function VoucherListPage() {
                     <td className="px-3 py-2 text-gray-600">
                       {row.item.counterpart || ""}
                     </td>
-                  </tr>
-                ))}
+                  </tr>,
+                  total && (
+                    <tr key={`m-${total.ym}`} className="bg-amber-50 border-t-2 border-amber-200 font-semibold">
+                      <td className="px-3 py-1.5 text-amber-900" colSpan={span}>
+                        {Number(total.ym.slice(5, 7))}월 월계
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono text-blue-700">{fmtAmount(total.monthIncome)}</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-red-700">{fmtAmount(total.monthExpense)}</td>
+                      <td className="px-3 py-1.5 text-gray-600" colSpan={2}>
+                        차액 {fmtAmount(total.monthIncome - total.monthExpense)}
+                      </td>
+                    </tr>
+                  ),
+                  total && (
+                    <tr key={`c-${total.ym}`} className="bg-amber-100/60 border-b-2 border-amber-300 font-semibold">
+                      <td className="px-3 py-1.5 text-amber-900" colSpan={span}>
+                        누계{" "}
+                        <span className="text-xs font-normal text-amber-700">
+                          {prior ? `(1월~${Number(total.ym.slice(5, 7))}월)` : `(조회기간 ${dateFrom}~)`}
+                        </span>
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono text-blue-800">{fmtAmount(total.cumIncome)}</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-red-800">{fmtAmount(total.cumExpense)}</td>
+                      <td className="px-3 py-1.5 text-gray-700" colSpan={2}>
+                        {carryOver !== null && prior
+                          ? `잔액 ${fmtAmount(carryOver - prior.income + prior.expense + total.cumIncome - total.cumExpense)}`
+                          : `차액 ${fmtAmount(total.cumIncome - total.cumExpense)}`}
+                      </td>
+                    </tr>
+                  ),
+                  ];
+                })}
               </tbody>
             </table>
           </div>

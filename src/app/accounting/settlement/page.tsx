@@ -14,6 +14,7 @@ interface AccountRow {
   accountCode: string;
   accountName: string;
   amount: number;
+  cumAmount: number; // 누계 (1월 ~ 해당 월)
 }
 
 interface MonthlyData {
@@ -23,6 +24,8 @@ interface MonthlyData {
   expenseItems: AccountRow[];
   incomeTotal: number;
   expenseTotal: number;
+  cumIncome: number;
+  cumExpense: number;
   monthBalance: number;
   nextCarryOver: number;
 }
@@ -70,10 +73,10 @@ export default function SettlementPage() {
       // API 응답을 프론트엔드 형식으로 변환
       const items = data.items || [];
       const incomeItems = items.filter((i: any) => i.type === "D").map((i: any) => ({
-        accountId: i.accountId, accountCode: i.code, accountName: i.name, amount: i.amount,
+        accountId: i.accountId, accountCode: i.code, accountName: i.name, amount: i.amount, cumAmount: i.cumAmount ?? i.amount,
       }));
       const expenseItems = items.filter((i: any) => i.type === "C").map((i: any) => ({
-        accountId: i.accountId, accountCode: i.code, accountName: i.name, amount: i.amount,
+        accountId: i.accountId, accountCode: i.code, accountName: i.name, amount: i.amount, cumAmount: i.cumAmount ?? i.amount,
       }));
       const incomeTotal = data.totalIncome ?? 0;
       const expenseTotal = data.totalExpense ?? 0;
@@ -86,6 +89,8 @@ export default function SettlementPage() {
         expenseItems,
         incomeTotal,
         expenseTotal,
+        cumIncome: data.cumIncome ?? incomeTotal,
+        cumExpense: data.cumExpense ?? expenseTotal,
         monthBalance: incomeTotal - expenseTotal,
         nextCarryOver: carryOver + incomeTotal - expenseTotal,
       });
@@ -121,13 +126,15 @@ export default function SettlementPage() {
             month: m,
             carryOver,
             incomeItems: allItems.filter((i: any) => i.type === "D").map((i: any) => ({
-              accountId: i.accountId, accountCode: i.code, accountName: i.name, amount: i.amount,
+              accountId: i.accountId, accountCode: i.code, accountName: i.name, amount: i.amount, cumAmount: i.cumAmount ?? i.amount,
             })),
             expenseItems: allItems.filter((i: any) => i.type === "C").map((i: any) => ({
-              accountId: i.accountId, accountCode: i.code, accountName: i.name, amount: i.amount,
+              accountId: i.accountId, accountCode: i.code, accountName: i.name, amount: i.amount, cumAmount: i.cumAmount ?? i.amount,
             })),
             incomeTotal,
             expenseTotal,
+            cumIncome: data.cumIncome ?? 0,
+            cumExpense: data.cumExpense ?? 0,
             monthBalance: incomeTotal - expenseTotal,
             nextCarryOver: carryOver + incomeTotal - expenseTotal,
           });
@@ -256,6 +263,7 @@ export default function SettlementPage() {
                 <th className="px-4 py-3 text-left font-medium text-teal-800">구분</th>
                 <th className="px-4 py-3 text-right font-medium text-teal-800 w-32">수입금액</th>
                 <th className="px-4 py-3 text-right font-medium text-teal-800 w-32">지출금액</th>
+                <th className="px-4 py-3 text-right font-medium text-amber-800 w-36 bg-amber-50">누계 (1~{selectedMonth}월)</th>
               </tr>
             </thead>
             <tbody>
@@ -265,23 +273,25 @@ export default function SettlementPage() {
                 <td className="px-4 py-3 font-bold text-gray-700">전기이월</td>
                 <td className="px-4 py-3 text-right font-bold">{fmt(monthlyData.carryOver)}</td>
                 <td className="px-4 py-3"></td>
+                <td className="px-4 py-3 bg-amber-50/40"></td>
               </tr>
 
               {/* 수입 */}
               <tr className="border-b border-gray-100 bg-blue-50/50">
-                <td className="px-4 py-2 font-bold text-blue-700" colSpan={4}>[수입 내역]</td>
+                <td className="px-4 py-2 font-bold text-blue-700" colSpan={5}>[수입 내역]</td>
               </tr>
               {monthlyData.incomeItems.map((item) => (
                 <tr key={item.accountId} className="border-b border-gray-100">
                   <td className="px-4 py-2 text-gray-400 text-xs">{item.accountCode}</td>
                   <td className="px-4 py-2 text-blue-700">{item.accountName}</td>
-                  <td className="px-4 py-2 text-right text-blue-700">{fmt(item.amount)}</td>
+                  <td className="px-4 py-2 text-right text-blue-700">{item.amount ? fmt(item.amount) : "-"}</td>
                   <td className="px-4 py-2"></td>
+                  <td className="px-4 py-2 text-right text-blue-900 bg-amber-50/40">{fmt(item.cumAmount)}</td>
                 </tr>
               ))}
               {monthlyData.incomeItems.length === 0 && (
                 <tr className="border-b border-gray-100">
-                  <td className="px-4 py-2 text-center text-gray-400" colSpan={4}>수입 내역 없음</td>
+                  <td className="px-4 py-2 text-center text-gray-400" colSpan={5}>수입 내역 없음</td>
                 </tr>
               )}
               <tr className="border-b border-gray-200 bg-blue-50 font-bold">
@@ -289,23 +299,25 @@ export default function SettlementPage() {
                 <td className="px-4 py-3 text-blue-800">수입합계</td>
                 <td className="px-4 py-3 text-right text-blue-800">{fmt(monthlyData.incomeTotal)}</td>
                 <td className="px-4 py-3"></td>
+                <td className="px-4 py-3 text-right text-blue-900 bg-amber-50">{fmt(monthlyData.cumIncome)}</td>
               </tr>
 
               {/* 지출 */}
               <tr className="border-b border-gray-100 bg-red-50/50">
-                <td className="px-4 py-2 font-bold text-red-700" colSpan={4}>[지출 내역]</td>
+                <td className="px-4 py-2 font-bold text-red-700" colSpan={5}>[지출 내역]</td>
               </tr>
               {monthlyData.expenseItems.map((item) => (
                 <tr key={item.accountId} className="border-b border-gray-100">
                   <td className="px-4 py-2 text-gray-400 text-xs">{item.accountCode}</td>
                   <td className="px-4 py-2 text-red-600">{item.accountName}</td>
                   <td className="px-4 py-2"></td>
-                  <td className="px-4 py-2 text-right text-red-600">{fmt(item.amount)}</td>
+                  <td className="px-4 py-2 text-right text-red-600">{item.amount ? fmt(item.amount) : "-"}</td>
+                  <td className="px-4 py-2 text-right text-red-800 bg-amber-50/40">{fmt(item.cumAmount)}</td>
                 </tr>
               ))}
               {monthlyData.expenseItems.length === 0 && (
                 <tr className="border-b border-gray-100">
-                  <td className="px-4 py-2 text-center text-gray-400" colSpan={4}>지출 내역 없음</td>
+                  <td className="px-4 py-2 text-center text-gray-400" colSpan={5}>지출 내역 없음</td>
                 </tr>
               )}
               <tr className="border-b border-gray-200 bg-red-50 font-bold">
@@ -313,6 +325,7 @@ export default function SettlementPage() {
                 <td className="px-4 py-3 text-red-800">지출합계</td>
                 <td className="px-4 py-3"></td>
                 <td className="px-4 py-3 text-right text-red-800">{fmt(monthlyData.expenseTotal)}</td>
+                <td className="px-4 py-3 text-right text-red-900 bg-amber-50">{fmt(monthlyData.cumExpense)}</td>
               </tr>
 
               {/* 당월잔액 → 수입금액 */}
@@ -321,6 +334,7 @@ export default function SettlementPage() {
                 <td className="px-4 py-3 font-bold">잔액 (수입 - 지출)</td>
                 <td className="px-4 py-3 text-right font-bold">{fmt(monthlyData.monthBalance)}</td>
                 <td className="px-4 py-3"></td>
+                <td className="px-4 py-3 text-right font-bold bg-amber-50/40">{fmt(monthlyData.cumIncome - monthlyData.cumExpense)}</td>
               </tr>
 
               {/* 차기이월 → 수입금액 */}
@@ -330,6 +344,7 @@ export default function SettlementPage() {
                 <td className="px-4 py-4 text-right font-bold text-emerald-800 text-base">
                   {fmt(monthlyData.nextCarryOver)}
                 </td>
+                <td className="px-4 py-4"></td>
                 <td className="px-4 py-4"></td>
               </tr>
             </tbody>
@@ -347,13 +362,15 @@ export default function SettlementPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[700px]">
+            <table className="w-full text-sm min-w-[900px]">
               <thead>
                 <tr className="bg-teal-50 border-b border-gray-200">
                   <th className="px-3 py-3 text-center font-medium text-teal-800 w-16">월</th>
                   <th className="px-3 py-3 text-right font-medium text-teal-800">전기이월</th>
                   <th className="px-3 py-3 text-right font-medium text-teal-800">수입</th>
                   <th className="px-3 py-3 text-right font-medium text-teal-800">지출</th>
+                  <th className="px-3 py-3 text-right font-medium text-amber-800 bg-amber-50">수입 누계</th>
+                  <th className="px-3 py-3 text-right font-medium text-amber-800 bg-amber-50">지출 누계</th>
                   <th className="px-3 py-3 text-right font-medium text-teal-800">잔액</th>
                   <th className="px-3 py-3 text-right font-medium text-teal-800">차기이월</th>
                 </tr>
@@ -361,7 +378,7 @@ export default function SettlementPage() {
               <tbody>
                 {annualData.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                       데이터가 없습니다.
                     </td>
                   </tr>
@@ -372,6 +389,8 @@ export default function SettlementPage() {
                       <td className="px-3 py-2.5 text-right text-gray-600">{fmt(d.carryOver)}</td>
                       <td className="px-3 py-2.5 text-right text-blue-700">{fmt(d.incomeTotal)}</td>
                       <td className="px-3 py-2.5 text-right text-red-600">{fmt(d.expenseTotal)}</td>
+                      <td className="px-3 py-2.5 text-right text-blue-900 bg-amber-50/50">{fmt(d.cumIncome)}</td>
+                      <td className="px-3 py-2.5 text-right text-red-800 bg-amber-50/50">{fmt(d.cumExpense)}</td>
                       <td className="px-3 py-2.5 text-right">{fmt(d.monthBalance)}</td>
                       <td className="px-3 py-2.5 text-right font-medium text-emerald-700">{fmt(d.nextCarryOver)}</td>
                     </tr>
@@ -387,6 +406,8 @@ export default function SettlementPage() {
                     </td>
                     <td className="px-3 py-3 text-right text-blue-700">{fmt(annualIncomeTotal)}</td>
                     <td className="px-3 py-3 text-right text-red-600">{fmt(annualExpenseTotal)}</td>
+                    <td className="px-3 py-3 bg-amber-50" />
+                    <td className="px-3 py-3 bg-amber-50" />
                     <td className="px-3 py-3 text-right">{fmt(annualIncomeTotal - annualExpenseTotal)}</td>
                     <td className="px-3 py-3 text-right text-emerald-800">
                       {annualData.length > 0 ? fmt(annualData[annualData.length - 1].nextCarryOver) : "-"}

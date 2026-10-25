@@ -13,21 +13,23 @@ interface AccountRow {
   accountId: number;
   accountCode: string;
   accountName: string;
-  amount: number;
+  amount: number; // 당월
+  cumAmount: number; // 누계 (1월 ~ 당월)
 }
 
 interface MonthlyReport {
-  carryOver: number;
+  carryOver: number; // 전월이월 (당월 1일 기준)
+  yearCarry: number; // 연초이월
   incomeItems: AccountRow[];
   expenseItems: AccountRow[];
   incomeTotal: number;
   expenseTotal: number;
-  monthBalance: number;
-  nextCarryOver: number;
+  cumIncome: number;
+  cumExpense: number;
 }
 
 function fmt(n: number) {
-  return n.toLocaleString("ko-KR") + "원";
+  return n.toLocaleString("ko-KR");
 }
 
 export default function MonthlyReportPage() {
@@ -43,7 +45,7 @@ export default function MonthlyReportPage() {
     fetch("/api/accounting/units")
       .then((r) => r.json())
       .then((d) => {
-        const list = (d.units || d || []).filter((u: any) => u.isActive);
+        const list = (d.units || d || []).filter((u: { isActive: boolean }) => u.isActive);
         setUnits(list);
         // 기본값 = "전체" (unitId="" 유지). 첫 단위로 자동 선택하지 않음.
       });
@@ -63,29 +65,34 @@ export default function MonthlyReportPage() {
       if (!res.ok) throw new Error("데이터를 불러오지 못했습니다.");
       const data = await res.json();
 
-      // API 응답을 프론트엔드 형식으로 변환
-      const items = data.items || [];
-      const incomeItems = items.filter((i: any) => i.type === "D").map((i: any) => ({
-        accountId: i.accountId, accountCode: i.code, accountName: i.name, amount: i.amount,
-      }));
-      const expenseItems = items.filter((i: any) => i.type === "C").map((i: any) => ({
-        accountId: i.accountId, accountCode: i.code, accountName: i.name, amount: i.amount,
-      }));
+      type Item = { accountId: number; code: string; name: string; type: string; amount: number; cumAmount?: number };
+      const toRow = (i: Item): AccountRow => ({
+        accountId: i.accountId,
+        accountCode: i.code,
+        accountName: i.name,
+        amount: i.amount,
+        cumAmount: i.cumAmount ?? i.amount,
+      });
+      const items: Item[] = data.items || [];
       const incomeTotal = data.totalIncome ?? 0;
       const expenseTotal = data.totalExpense ?? 0;
+      const cumIncome = data.cumIncome ?? incomeTotal;
+      const cumExpense = data.cumExpense ?? expenseTotal;
       const carryOver = data.carryOver ?? 0;
 
       setReport({
         carryOver,
-        incomeItems,
-        expenseItems,
+        // 연초이월은 이월잔액 원장값 (전월이월과 독립 — 차월이월 두 값 비교로 검증)
+        yearCarry: data.yearCarry ?? carryOver - (cumIncome - incomeTotal) + (cumExpense - expenseTotal),
+        incomeItems: items.filter((i) => i.type === "D").map(toRow),
+        expenseItems: items.filter((i) => i.type === "C").map(toRow),
         incomeTotal,
         expenseTotal,
-        monthBalance: incomeTotal - expenseTotal,
-        nextCarryOver: carryOver + incomeTotal - expenseTotal,
+        cumIncome,
+        cumExpense,
       });
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "조회 실패");
       setReport(null);
     } finally {
       setLoading(false);
@@ -98,10 +105,16 @@ export default function MonthlyReportPage() {
 
   const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i);
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
+  const unitLabel = (unitId ? units.find((u) => String(u.id) === unitId)?.name : "전체") || "전체";
+
+  const th = "px-4 py-3 text-right font-medium text-teal-800 w-36";
+  const td = "px-4 py-2 text-right font-mono";
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">월별 수입지출 보고서 <HelpButton slug="accounting-report-monthly" /></h1>
+      <h1 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+        월별 수입지출 보고서 <HelpButton slug="accounting-report-monthly" />
+      </h1>
 
       {/* 필터 */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6 print:hidden">
@@ -115,7 +128,9 @@ export default function MonthlyReportPage() {
             >
               <option value="">전체</option>
               {units.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
               ))}
             </select>
           </div>
@@ -127,7 +142,9 @@ export default function MonthlyReportPage() {
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
             >
               {years.map((y) => (
-                <option key={y} value={y}>{y}년</option>
+                <option key={y} value={y}>
+                  {y}년
+                </option>
               ))}
             </select>
           </div>
@@ -139,7 +156,9 @@ export default function MonthlyReportPage() {
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
             >
               {months.map((m) => (
-                <option key={m} value={m}>{m}월</option>
+                <option key={m} value={m}>
+                  {m}월
+                </option>
               ))}
             </select>
           </div>
@@ -152,105 +171,111 @@ export default function MonthlyReportPage() {
         </div>
       </div>
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
-      )}
+      {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+      {loading && <div className="flex items-center justify-center py-12 text-gray-400">불러오는 중...</div>}
 
-      {loading && (
-        <div className="flex items-center justify-center py-12 text-gray-400">불러오는 중...</div>
-      )}
-
-      {/* 보고서 */}
       {report && !loading && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          {/* 제목 (인쇄용) */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
           <div className="hidden print:block text-center py-4">
             <h2 className="text-lg font-bold">
-              {(unitId ? units.find((u) => String(u.id) === unitId)?.name : "전체") || "전체"} - {year}년 {month}월 수입지출 보고서
+              {unitLabel} - {year}년 {month}월 수입지출 보고서
             </h2>
           </div>
 
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[560px]">
             <thead>
               <tr className="bg-teal-50 border-b border-gray-200">
                 <th className="px-4 py-3 text-left font-medium text-teal-800 w-20">코드</th>
                 <th className="px-4 py-3 text-left font-medium text-teal-800">구분</th>
-                <th className="px-4 py-3 text-right font-medium text-teal-800 w-32">수입금액</th>
-                <th className="px-4 py-3 text-right font-medium text-teal-800 w-32">지출금액</th>
+                <th className={th}>당월 ({month}월)</th>
+                <th className={th}>누계 (1~{month}월)</th>
               </tr>
             </thead>
             <tbody>
-              {/* 전기이월 → 수입금액 칸 */}
               <tr className="border-b border-gray-200 bg-gray-50 font-medium">
-                <td className="px-4 py-3"></td>
-                <td className="px-4 py-3">전기이월</td>
-                <td className="px-4 py-3 text-right">{fmt(report.carryOver)}</td>
-                <td className="px-4 py-3"></td>
+                <td className="px-4 py-3" />
+                <td className="px-4 py-3">이월금</td>
+                <td className={td}>
+                  {fmt(report.carryOver)}
+                  <div className="text-[11px] font-sans text-gray-400">전월이월</div>
+                </td>
+                <td className={td}>
+                  {fmt(report.yearCarry)}
+                  <div className="text-[11px] font-sans text-gray-400">연초이월</div>
+                </td>
               </tr>
 
-              {/* 수입 */}
               <tr className="border-b border-gray-200 bg-blue-50">
-                <td className="px-4 py-2.5 font-bold text-blue-700" colSpan={4}>[수입]</td>
+                <td className="px-4 py-2.5 font-bold text-blue-700" colSpan={4}>
+                  [수입]
+                </td>
               </tr>
               {report.incomeItems.map((item) => (
                 <tr key={item.accountId} className="border-b border-gray-100">
                   <td className="px-4 py-2 text-gray-500">{item.accountCode}</td>
                   <td className="px-4 py-2 text-blue-700">{item.accountName}</td>
-                  <td className="px-4 py-2 text-right text-blue-700">{fmt(item.amount)}</td>
-                  <td className="px-4 py-2"></td>
+                  <td className={`${td} text-blue-700`}>{item.amount ? fmt(item.amount) : "-"}</td>
+                  <td className={`${td} text-blue-900`}>{fmt(item.cumAmount)}</td>
                 </tr>
               ))}
               {report.incomeItems.length === 0 && (
                 <tr className="border-b border-gray-100">
-                  <td className="px-4 py-2 text-gray-400 text-center" colSpan={4}>수입 내역 없음</td>
+                  <td className="px-4 py-2 text-gray-400 text-center" colSpan={4}>
+                    수입 내역 없음
+                  </td>
                 </tr>
               )}
-              <tr className="border-b border-gray-200 bg-blue-50 font-medium">
-                <td className="px-4 py-2.5"></td>
+              <tr className="border-b border-gray-200 bg-blue-50 font-semibold">
+                <td className="px-4 py-2.5" />
                 <td className="px-4 py-2.5">수입 합계</td>
-                <td className="px-4 py-2.5 text-right text-blue-700">{fmt(report.incomeTotal)}</td>
-                <td className="px-4 py-2.5"></td>
+                <td className={`${td} text-blue-700`}>{fmt(report.incomeTotal)}</td>
+                <td className={`${td} text-blue-900`}>{fmt(report.cumIncome)}</td>
               </tr>
 
-              {/* 지출 */}
               <tr className="border-b border-gray-200 bg-red-50">
-                <td className="px-4 py-2.5 font-bold text-red-700" colSpan={4}>[지출]</td>
+                <td className="px-4 py-2.5 font-bold text-red-700" colSpan={4}>
+                  [지출]
+                </td>
               </tr>
               {report.expenseItems.map((item) => (
                 <tr key={item.accountId} className="border-b border-gray-100">
                   <td className="px-4 py-2 text-gray-500">{item.accountCode}</td>
                   <td className="px-4 py-2 text-red-600">{item.accountName}</td>
-                  <td className="px-4 py-2"></td>
-                  <td className="px-4 py-2 text-right text-red-600">{fmt(item.amount)}</td>
+                  <td className={`${td} text-red-600`}>{item.amount ? fmt(item.amount) : "-"}</td>
+                  <td className={`${td} text-red-800`}>{fmt(item.cumAmount)}</td>
                 </tr>
               ))}
               {report.expenseItems.length === 0 && (
                 <tr className="border-b border-gray-100">
-                  <td className="px-4 py-2 text-gray-400 text-center" colSpan={4}>지출 내역 없음</td>
+                  <td className="px-4 py-2 text-gray-400 text-center" colSpan={4}>
+                    지출 내역 없음
+                  </td>
                 </tr>
               )}
-              <tr className="border-b border-gray-200 bg-red-50 font-medium">
-                <td className="px-4 py-2.5"></td>
+              <tr className="border-b border-gray-200 bg-red-50 font-semibold">
+                <td className="px-4 py-2.5" />
                 <td className="px-4 py-2.5">지출 합계</td>
-                <td className="px-4 py-2.5"></td>
-                <td className="px-4 py-2.5 text-right text-red-600">{fmt(report.expenseTotal)}</td>
+                <td className={`${td} text-red-600`}>{fmt(report.expenseTotal)}</td>
+                <td className={`${td} text-red-800`}>{fmt(report.cumExpense)}</td>
               </tr>
 
-              {/* 당월잔액 → 수입금액 칸 */}
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <td className="px-4 py-3"></td>
-                <td className="px-4 py-3 font-medium">당월잔액 (수입 - 지출)</td>
-                <td className="px-4 py-3 text-right font-medium">{fmt(report.monthBalance)}</td>
-                <td className="px-4 py-3"></td>
+              <tr className="border-b border-gray-200 bg-gray-50 font-medium">
+                <td className="px-4 py-3" />
+                <td className="px-4 py-3">차액 (수입 − 지출)</td>
+                <td className={td}>{fmt(report.incomeTotal - report.expenseTotal)}</td>
+                <td className={td}>{fmt(report.cumIncome - report.cumExpense)}</td>
               </tr>
-              {/* 차월이월 → 수입금액 칸 */}
               <tr className="bg-emerald-50">
-                <td className="px-4 py-3"></td>
-                <td className="px-4 py-3 font-bold text-emerald-800">차월이월</td>
-                <td className="px-4 py-3 text-right font-bold text-emerald-800">
-                  {fmt(report.nextCarryOver)}
+                <td className="px-4 py-3" />
+                <td className="px-4 py-3 font-bold text-emerald-800">
+                  차월이월 <span className="text-xs font-normal text-emerald-600">(두 값이 같아야 정상)</span>
                 </td>
-                <td className="px-4 py-3"></td>
+                <td className={`${td} font-bold text-emerald-800`}>
+                  {fmt(report.carryOver + report.incomeTotal - report.expenseTotal)}
+                </td>
+                <td className={`${td} font-bold text-emerald-800`}>
+                  {fmt(report.yearCarry + report.cumIncome - report.cumExpense)}
+                </td>
               </tr>
             </tbody>
           </table>
