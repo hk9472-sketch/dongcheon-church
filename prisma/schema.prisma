@@ -1147,8 +1147,85 @@ model AccUnit {
   vouchers  AccVoucher[]
   closings  AccClosing[]
   balances  AccBalance[]
+  funds     AccFund[]
+  transfers AccTransfer[]
 
   @@map("acc_units")
+}
+
+// ============================================================
+// 회계 - 통장(자금계좌). 회계단위마다 1개 이상, isDefault 1개.
+//   전표 fundId 가 null 이면 그 단위의 기본 통장으로 간주.
+//   계좌번호는 확인되는 대로 관리 화면에서 입력 (초기엔 비워 둠).
+// ============================================================
+model AccFund {
+  id          Int      @id @default(autoincrement())
+  unitId      Int
+  unit        AccUnit  @relation(fields: [unitId], references: [id])
+  name        String   @db.VarChar(50)
+  kind        String   @default("보통") @db.VarChar(10) // 보통/정기/현금/기타
+  bankName    String?  @db.VarChar(50)
+  accountNo   String?  @db.VarChar(50)
+  isDefault   Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  description String?  @db.VarChar(200)
+  createdAt   DateTime @default(now())
+
+  vouchers     AccVoucher[]
+  balances     AccFundBalance[]
+  transfersOut AccTransfer[]  @relation("TransferFrom")
+  transfersIn  AccTransfer[]  @relation("TransferTo")
+  checks       AccFundCheck[]
+
+  @@index([unitId])
+  @@map("acc_funds")
+}
+
+// 통장별 연초 이월잔액. 저장 시 단위 합계가 AccBalance 로 동기화된다.
+model AccFundBalance {
+  id     Int     @id @default(autoincrement())
+  fundId Int
+  fund   AccFund @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  year   Int
+  amount Int     @default(0)
+
+  @@unique([fundId, year])
+  @@map("acc_fund_balances")
+}
+
+// 통장 간 이체 (같은 회계단위 안). 수입/지출이 아니므로 결산 수지에는 영향 없음.
+model AccTransfer {
+  id          Int      @id @default(autoincrement())
+  unitId      Int
+  unit        AccUnit  @relation(fields: [unitId], references: [id])
+  date        DateTime @db.Date
+  fromFundId  Int
+  fromFund    AccFund  @relation("TransferFrom", fields: [fromFundId], references: [id])
+  toFundId    Int
+  toFund      AccFund  @relation("TransferTo", fields: [toFundId], references: [id])
+  amount      Int
+  description String?  @db.VarChar(200)
+  createdBy   String   @db.VarChar(50)
+  createdAt   DateTime @default(now())
+
+  @@index([unitId, date])
+  @@map("acc_transfers")
+}
+
+// 통장 대사 — 특정 일자의 실제 통장 잔액 기록 (장부 잔액과 비교)
+model AccFundCheck {
+  id           Int      @id @default(autoincrement())
+  fundId       Int
+  fund         AccFund  @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  date         DateTime @db.Date
+  actualAmount Int
+  memo         String?  @db.VarChar(200)
+  createdBy    String   @db.VarChar(50)
+  createdAt    DateTime @default(now())
+
+  @@unique([fundId, date])
+  @@map("acc_fund_checks")
 }
 
 // ============================================================
@@ -1168,6 +1245,8 @@ model AccAccount {
   sortOrder   Int      @default(0)
   isActive    Boolean  @default(true)
   description String?  @db.VarChar(200)
+  reportName   String?  @db.VarChar(100)            // 결산서 표기명 (없으면 name)
+  reportDetail Boolean  @default(false)             // 상위 계정: 결산서에서 하위 계정을 펼쳐 표시 (false=합계 한 줄)
 
   voucherItems AccVoucherItem[]
 
@@ -1190,12 +1269,16 @@ model AccVoucher {
   description String?  @db.VarChar(200)
   totalAmount Int      @default(0)
   isClosed    Boolean  @default(false)
+  fundId      Int?                                 // 입출금 통장 (null = 단위 기본 통장)
+  fund        AccFund? @relation(fields: [fundId], references: [id])
+  externalRef String?  @db.VarChar(60)             // 외부 분개장 가져오기 원본 키 (중복 방지)
   createdBy   String   @db.VarChar(50)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   items       AccVoucherItem[]
 
+  @@unique([unitId, externalRef])
   @@unique([unitId, voucherNo])
   @@index([unitId, date])
   @@index([date])

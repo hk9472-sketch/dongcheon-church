@@ -20,6 +20,8 @@ interface AccAccount {
   sortOrder: number;
   description: string;
   isActive: boolean;
+  reportName: string | null;
+  reportDetail: boolean;
   children?: AccAccount[];
 }
 
@@ -43,6 +45,8 @@ export default function AccAccountsPage() {
     sortOrder: 0,
     description: "",
     isActive: true,
+    reportName: "",
+    reportDetail: false,
   };
   const [form, setForm] = useState(emptyForm);
 
@@ -129,6 +133,8 @@ export default function AccAccountsPage() {
       sortOrder: account.sortOrder,
       description: account.description || "",
       isActive: account.isActive,
+      reportName: account.reportName || "",
+      reportDetail: !!account.reportDetail,
     });
     setError("");
   };
@@ -526,6 +532,30 @@ export default function AccAccountsPage() {
                   rows={2}
                   placeholder="선택 사항"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">결산서 표기명</label>
+                <input
+                  type="text"
+                  value={form.reportName}
+                  onChange={(e) => setForm({ ...form, reportName: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  placeholder="비우면 계정명으로 표시"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="reportDetailAccount"
+                  checked={form.reportDetail}
+                  onChange={(e) => setForm({ ...form, reportDetail: e.target.checked })}
+                  className="w-4 h-4 text-teal-600 rounded border-gray-300 focus:ring-teal-500"
+                />
+                <label htmlFor="reportDetailAccount" className="text-sm text-gray-600">
+                  결산서에서 하위 계정 펼쳐 표시 <span className="text-xs text-gray-400">(끄면 합계 한 줄)</span>
+                </label>
               </div>
 
               <div className="flex items-center gap-2">

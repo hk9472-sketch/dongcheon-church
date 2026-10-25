@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReauthForm from "@/components/ReauthForm";
 
 export default function AccountingLayout({ children }: { children: React.ReactNode }) {
@@ -17,6 +17,10 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
   const [hasMemberEdit, setHasMemberEdit] = useState(false);
   const [reauthed, setReauthed] = useState(false);
   const [reauthChecked, setReauthChecked] = useState(false);
+  // 작업 중 세션 만료 감지 — 화면을 떠나지 않고 안내만 띄워 입력 내용을 보존
+  const [sessionLost, setSessionLost] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const authorizedRef = useRef(false);
 
   // 사이드바 섹션 접기/펼치기 상태 — localStorage 에 저장돼 새 페이지에서도 유지
   type SectionKey = "ledger" | "offering" | "dues";
@@ -40,7 +44,11 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
 
   useEffect(() => {
     fetch("/api/auth/me")
-      .then((r) => r.json())
+      .then((r) => {
+        // 503 = 서버 일시 오류 → 로그인 화면으로 보내지 않음 (아래 catch 에서 처리)
+        if (!r.ok) throw new Error("transient");
+        return r.json();
+      })
       .then((d) => {
         const u = d.user;
         if (!u) {
@@ -62,6 +70,7 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
         // 경로별 접근 제어
         const isLedgerPath = pathname.startsWith("/accounting/entry") ||
           pathname.startsWith("/accounting/vouchers") ||
+          pathname.startsWith("/accounting/funds") ||
           pathname.startsWith("/accounting/report") ||
           pathname.startsWith("/accounting/settlement") ||
           pathname.startsWith("/accounting/closing") ||
@@ -79,6 +88,8 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
         if (isDuesPath && !dues) { router.replace(firstAvailable); return; }
 
         setAuthorized(true);
+        authorizedRef.current = true;
+        setLoadError(false);
         setIsAdmin(admin);
         setHasLedger(ledger);
         setHasOffering(offering);
@@ -99,18 +110,136 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
             .catch(() => setReauthChecked(true));
         }
       })
-      .catch(() => router.replace(`/auth/login?redirect=${encodeURIComponent(pathname)}`))
+      .catch(() => {
+        // 이미 사용 중인 화면이면 그대로 둔다(메뉴 이동 중 일시 오류). 첫 진입이면 재시도 안내.
+        if (!authorizedRef.current) setLoadError(true);
+      })
       .finally(() => setLoading(false));
   }, [router, pathname]);
 
-  // 세션 heartbeat — 회계 화면을 열어둔 채 오래 입력해도 세션이 끊기지 않게
-  // 10분마다 /api/auth/me 호출(서버가 sliding 으로 세션·쿠키 연장).
-  useEffect(() => {
-    const t = setInterval(() => {
-      fetch("/api/auth/me").catch(() => {});
-    }, 10 * 60 * 1000);
-    return () => clearInterval(t);
+  // 세션 확인 — 응답이 정상(200)인데 user 가 없을 때만 '만료'로 판단 (503 등은 보류)
+  const lastPingRef = useRef(0);
+  const pingSession = useCallback(async (force = false) => {
+    if (!force && Date.now() - lastPingRef.current < 30_000) return;
+    lastPingRef.current = Date.now();
+    try {
+      const r = await fetch("/api/auth/me");
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d.user) setSessionLost(false);
+      else if (authorizedRef.current) setSessionLost(true);
+    } catch {
+      /* 네트워크 오류는 무시 */
+    }
   }, []);
+
+  // 세션 heartbeat — 회계 화면을 열어둔 채 오래 입력해도 세션이 끊기지 않게
+  // 10분마다 + 탭 복귀/포커스 시 /api/auth/me 호출(서버가 sliding 으로 세션·쿠키 연장).
+  // 절전·다른 사이트 이용 후 돌아오면 타이머가 멈춰 있었을 수 있으므로 복귀 즉시 한 번 확인.
+  useEffect(() => {
+    const t = setInterval(() => pingSession(true), 10 * 60 * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") pingSession();
+    };
+    const onFocus = () => pingSession();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [pingSession]);
+
+  // 행정 화면의 모든 API 호출에서 401(세션 만료) 감지 → 안내 창. 페이지 상태는 그대로 유지되므로
+  // 새 창에서 로그인한 뒤 같은 화면에서 [저장]을 다시 누르면 된다.
+  useEffect(() => {
+    const orig = window.fetch;
+    const wrapped: typeof window.fetch = async (input, init) => {
+      const res = await orig(input, init);
+      try {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url;
+        const path = new URL(url, window.location.origin);
+        if (
+          res.status === 401 &&
+          path.origin === window.location.origin &&
+          path.pathname.startsWith("/api/") &&
+          !path.pathname.startsWith("/api/auth/")
+        ) {
+          setSessionLost(true);
+        }
+      } catch {
+        /* URL 해석 실패는 무시 */
+      }
+      return res;
+    };
+    window.fetch = wrapped;
+    // 새 창 로그인 완료 알림 (/auth/login-done 이 opener 로 postMessage)
+    const onMsg = (e: MessageEvent) => {
+      if (e.origin === window.location.origin && e.data?.type === "dc-login-done") pingSession(true);
+    };
+    window.addEventListener("message", onMsg);
+    return () => {
+      if (window.fetch === wrapped) window.fetch = orig;
+      window.removeEventListener("message", onMsg);
+    };
+  }, [pingSession]);
+
+  const sessionModal = sessionLost && (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4 print:hidden">
+      <div className="w-full max-w-sm rounded-lg bg-white shadow-xl p-5 space-y-3">
+        <h2 className="text-base font-bold text-gray-900">로그인이 만료되었습니다</h2>
+        <p className="text-sm text-gray-600">
+          입력하던 내용은 <strong>이 화면에 그대로 남아 있습니다.</strong> 새 창에서 로그인한 뒤 이 창으로
+          돌아와 <strong>[로그인 확인]</strong>을 누르고, 저장을 다시 하세요.
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              window.open(
+                `/auth/login?redirect=${encodeURIComponent("/auth/login-done")}`,
+                "dcLogin",
+                "width=480,height=680",
+              )
+            }
+            className="flex-1 rounded bg-teal-600 px-3 py-2 text-sm text-white hover:bg-teal-700"
+          >
+            새 창에서 로그인
+          </button>
+          <button
+            type="button"
+            onClick={() => pingSession(true)}
+            className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
+          >
+            로그인 확인
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => setSessionLost(false)}
+          className="w-full text-xs text-gray-400 hover:text-gray-600"
+        >
+          닫기 (저장은 로그인 후에만 됩니다)
+        </button>
+      </div>
+    </div>
+  );
+
+  if (loadError && !authorized) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-24 text-gray-500">
+        서버 응답이 지연되고 있습니다.
+        <button
+          onClick={() => window.location.reload()}
+          className="rounded bg-teal-600 px-4 py-2 text-sm text-white hover:bg-teal-700"
+        >
+          다시 시도
+        </button>
+      </div>
+    );
+  }
 
   if (loading || !reauthChecked) {
     return (
@@ -133,7 +262,9 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
     { href: "/accounting/report/monthly", label: "월별 수입지출" },
     { href: "/accounting/report/account", label: "계정별 현황" },
     { href: "/accounting/report/daily", label: "일자별 현황" },
+    { href: "/accounting/funds", label: "통장현황·이체" },
     { href: "/accounting/settlement", label: "결산현황" },
+    { href: "/accounting/report/annual", label: "연간 결산서" },
     { href: "/accounting/closing", label: "마감" },
   ];
 
@@ -170,7 +301,9 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
     { href: "/accounting/settings/accounts", label: "계정과목" },
     { href: "/accounting/settings/account-mapping", label: "계정과목 매핑" },
     { href: "/accounting/settings/units", label: "회계단위" },
+    { href: "/accounting/settings/funds", label: "통장관리" },
     { href: "/accounting/settings/balance", label: "이월잔액" },
+    { href: "/accounting/settings/journal-import", label: "분개장 가져오기" },
   ];
 
   // 관리번호/기부자정보/소속증명서 메뉴는 memberEdit 권한이 있을 때만
@@ -193,6 +326,7 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
 
   return (
     <div>
+      {sessionModal}
       {/* 모바일 탭 (인쇄 시 숨김) */}
       <div className="lg:hidden print:hidden mb-4">
         <div className="flex overflow-x-auto gap-1 pb-2 border-b border-gray-200">

@@ -30,7 +30,7 @@ export async function PUT(
   }
 
   const body = await request.json();
-  const { code, name, type, parentId, level, sortOrder, isActive, description } = body;
+  const { code, name, type, parentId, level, sortOrder, isActive, description, reportName, reportDetail } = body;
 
   // 코드 변경 시 중복 검사
   if (code && code !== existing.code) {
@@ -73,6 +73,8 @@ export async function PUT(
       ...(sortOrder !== undefined && { sortOrder }),
       ...(isActive !== undefined && { isActive }),
       ...(description !== undefined && { description: description || null }),
+      ...(reportName !== undefined && { reportName: String(reportName || "").trim() || null }),
+      ...(reportDetail !== undefined && { reportDetail: !!reportDetail }),
     },
   });
 

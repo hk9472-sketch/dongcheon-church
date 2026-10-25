@@ -26,11 +26,28 @@ export async function GET(request: NextRequest) {
   const unitId = parseInt(unitIdStr, 10);
   const year = parseInt(yearStr, 10);
 
-  const balance = await prisma.accBalance.findUnique({
-    where: { unitId_year: { unitId, year } },
-  });
+  const [balance, funds] = await Promise.all([
+    prisma.accBalance.findUnique({ where: { unitId_year: { unitId, year } } }),
+    prisma.accFund.findMany({
+      where: { unitId },
+      orderBy: [{ isDefault: "desc" }, { sortOrder: "asc" }, { id: "asc" }],
+      include: { balances: { where: { year } } },
+    }),
+  ]);
 
-  return NextResponse.json(balance || { unitId, year, amount: 0 });
+  return NextResponse.json({
+    ...(balance || { unitId, year, amount: 0 }),
+    exists: !!balance,
+    // 통장별 연초잔액 — 합계가 단위 이월잔액(amount)과 같게 유지된다
+    funds: funds.map((f) => ({
+      fundId: f.id,
+      name: f.name,
+      kind: f.kind,
+      isDefault: f.isDefault,
+      isActive: f.isActive,
+      amount: f.balances[0]?.amount ?? 0,
+    })),
+  });
 }
 
 /**
@@ -44,7 +61,19 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { unitId, year, amount } = body;
+  const { unitId, year } = body;
+  let { amount } = body;
+  // funds: [{ fundId, amount }] — 통장별 연초잔액. 주어지면 단위 이월잔액 = 합계.
+  const fundRows: Array<{ fundId: number; amount: number }> | null = Array.isArray(body.funds)
+    ? body.funds
+    : null;
+
+  if (fundRows) {
+    if (fundRows.some((f) => !Number.isInteger(f.fundId) || !Number.isInteger(f.amount))) {
+      return NextResponse.json({ error: "통장별 금액이 올바르지 않습니다." }, { status: 400 });
+    }
+    amount = fundRows.reduce((s, f) => s + f.amount, 0);
+  }
 
   if (!unitId || !year || amount === undefined) {
     return NextResponse.json(
@@ -58,6 +87,15 @@ export async function POST(request: NextRequest) {
       { error: "amount는 숫자여야 합니다." },
       { status: 400 }
     );
+  }
+
+  if (fundRows && fundRows.length > 0) {
+    const owned = await prisma.accFund.count({
+      where: { id: { in: fundRows.map((f) => f.fundId) }, unitId },
+    });
+    if (owned !== fundRows.length) {
+      return NextResponse.json({ error: "다른 회계단위의 통장이 포함되어 있습니다." }, { status: 400 });
+    }
   }
 
   // 회계단위 존재 확인
@@ -77,6 +115,16 @@ export async function POST(request: NextRequest) {
       create: { unitId, year, amount },
       update: { amount },
     });
+
+    if (fundRows) {
+      for (const f of fundRows) {
+        await tx.accFundBalance.upsert({
+          where: { fundId_year: { fundId: f.fundId, year } },
+          create: { fundId: f.fundId, year, amount: f.amount },
+          update: { amount: f.amount },
+        });
+      }
+    }
 
     // 해당 연도의 연속 마감된 월들 carryOver 체인 재계산
     // (month=1 부터 첫 미마감 전까지)

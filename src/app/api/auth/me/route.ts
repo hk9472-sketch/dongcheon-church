@@ -71,6 +71,7 @@ export async function GET(request: NextRequest) {
 
     return response;
   } catch {
-    return NextResponse.json({ user: null });
+    // DB 일시 오류는 '비로그인'과 구분 — 503. (호출측이 user:null 로 보고 화면을 떠나 입력을 잃지 않게)
+    return NextResponse.json({ user: null, error: "일시적인 서버 오류" }, { status: 503 });
   }
 }

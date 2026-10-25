@@ -4,7 +4,10 @@ import prisma from "@/lib/db";
 import { checkAccAccess } from "@/lib/accountAuth";
 
 // POST /api/accounting/offering/settlement/post-voucher
-// body: { date, sundaySchool, seasonType }
+// body: { date, sundaySchool, seasonType, include?, force? }
+//   include: 반영할 종류 키 배열 (tithe/sunday/thanks/special/oil/season/sundaySchool). 생략 시 전부.
+//   같은 일자에 이미 자동반영된 '같은 계정' 항목이 있으면 409(needsConfirm). force 면 그 항목만 지우고
+//   새로 반영 — 따로 반영해 둔 다른 종류 항목은 건드리지 않는다.
 //   해당 일자의 OfferingEntry 합계 + 주일학교를 회계단위별로 분리해서 수입(D) 전표 생성.
 //   카테고리 → 회계단위 매핑 (이름 후보 첫 매치):
 //     · 십일조연보       → 회계단위 "십일조회계"
@@ -45,8 +48,9 @@ export async function POST(req: NextRequest) {
     date?: string;
     sundaySchool?: number;
     seasonType?: SeasonType;
-    /** true 면 기존 자동생성 전표 삭제 후 새로 생성. false/미지정이면 기존 발견 시 409 로 안내. */
+    /** true 면 기존 자동반영 항목(선택 종류만) 삭제 후 새로 생성. false/미지정이면 기존 발견 시 409 로 안내. */
     force?: boolean;
+    include?: string[];
   };
   try {
     body = await req.json();
@@ -120,12 +124,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // 반영할 종류 — 생략 시 전부
+  const include = Array.isArray(body.include) ? new Set(body.include.map(String)) : null;
+  const picked = (k: string) => !include || include.has(k);
+  if (include && include.size === 0) {
+    return NextResponse.json({ error: "반영할 종류를 1개 이상 선택하세요." }, { status: 400 });
+  }
+
   const sundaySchool =
-    typeof body.sundaySchool === "number" && body.sundaySchool >= 0
+    typeof body.sundaySchool === "number" && body.sundaySchool >= 0 && picked("sundaySchool")
       ? Math.floor(body.sundaySchool)
       : 0;
 
-  const seasonAmount = sums["절기연보"];
+  const seasonAmount = picked("season") ? sums["절기연보"] : 0;
   let seasonType: SeasonType | null = null;
   if (seasonAmount > 0) {
     if (
@@ -214,7 +225,7 @@ export async function POST(req: NextRequest) {
   for (const k of ["tithe", "sunday", "thanks", "special", "oil"] as const) {
     const cat = CAT_MAPS[k];
     const amt = sums[cat.label];
-    if (amt > 0) {
+    if (amt > 0 && picked(k)) {
       plans.push({
         offeringKey: k,
         label: cat.label,
@@ -308,38 +319,55 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 기존 자동생성 전표 검사 (description="연보 결산 자동 반영" + 같은 일자 + 영향 단위)
+  // 기존 자동반영 항목 검사 — 같은 일자·같은 계정(선택한 종류)만 충돌로 본다
   const affectedUnitIds = Array.from(byUnit.keys());
+  const pickedAccountIds = new Set(
+    Array.from(byUnit.values()).flatMap((items) => items.map((i) => i.accountId)),
+  );
   const existingAuto = await prisma.accVoucher.findMany({
     where: {
       unitId: { in: affectedUnitIds },
       date: dayStart,
       description: "연보 결산 자동 반영",
     },
-    include: { unit: { select: { name: true } } },
+    include: { unit: { select: { name: true } }, items: true },
   });
+  const conflicts = existingAuto
+    .map((v) => ({ v, items: v.items.filter((i) => pickedAccountIds.has(i.accountId)) }))
+    .filter((c) => c.items.length > 0);
 
-  if (existingAuto.length > 0 && !body.force) {
-    // 덮어쓰기 확인 필요 — 기존 전표 정보 반환
+  if (conflicts.length > 0 && !body.force) {
     return NextResponse.json(
       {
         needsConfirm: true,
-        existing: existingAuto.map((v) => ({
+        existing: conflicts.map(({ v, items }) => ({
           unitName: v.unit.name,
           voucherNo: v.voucherNo,
-          totalAmount: v.totalAmount,
+          totalAmount: items.reduce((s, i) => s + i.amount, 0),
+          labels: items.map((i) => i.description || "").filter(Boolean),
           createdAt: v.createdAt,
         })),
-        message: `이 일자에 이미 자동생성된 결산 전표가 ${existingAuto.length}건 있습니다. 덮어쓸까요?`,
+        message: `이 일자에 같은 종류로 자동반영된 항목이 있습니다. 덮어쓸까요?`,
       },
       { status: 409 },
     );
   }
 
-  // force 모드 — 기존 자동전표 삭제 (CASCADE 로 items 도 같이 삭제)
-  if (existingAuto.length > 0) {
-    await prisma.accVoucher.deleteMany({
-      where: { id: { in: existingAuto.map((v) => v.id) } },
+  // force — 충돌 항목만 삭제, 남은 항목 없으면 전표 삭제, 있으면 합계 재계산
+  if (conflicts.length > 0) {
+    await prisma.$transaction(async (tx) => {
+      for (const { v, items } of conflicts) {
+        await tx.accVoucherItem.deleteMany({ where: { id: { in: items.map((i) => i.id) } } });
+        const remain = v.items.filter((i) => !items.some((x) => x.id === i.id));
+        if (remain.length === 0) {
+          await tx.accVoucher.delete({ where: { id: v.id } });
+        } else {
+          await tx.accVoucher.update({
+            where: { id: v.id },
+            data: { totalAmount: remain.reduce((s, i) => s + i.amount, 0) },
+          });
+        }
+      }
     });
   }
 

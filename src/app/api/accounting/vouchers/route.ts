@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/db";
 import { checkAccAccess } from "@/lib/accountAuth";
+import { resolveVoucherFund } from "@/lib/accFund";
 
 /**
  * 날짜 문자열(YYYY-MM-DD)을 UTC 자정 Date로 변환
@@ -62,6 +63,7 @@ export async function GET(request: NextRequest) {
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
   const accountId = searchParams.get("accountId");
+  const fundId = searchParams.get("fundId");
   const keyword = searchParams.get("keyword");
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -90,6 +92,17 @@ export async function GET(request: NextRequest) {
     };
   }
 
+  // fundId 필터: 기본 통장이면 fundId=null 전표도 포함
+  if (fundId) {
+    const fid = parseInt(fundId, 10);
+    const fund = await prisma.accFund.findUnique({ where: { id: fid } });
+    if (fund?.isDefault) {
+      where.AND = [...(where.AND || []), { OR: [{ fundId: fid }, { fundId: null, unitId: fund.unitId }] }];
+    } else {
+      where.fundId = fid;
+    }
+  }
+
   // keyword 검색: description 또는 items의 description/counterpart
   if (keyword) {
     where.OR = [
@@ -111,6 +124,7 @@ export async function GET(request: NextRequest) {
     where,
     include: {
       unit: { select: { id: true, code: true, name: true } },
+      fund: { select: { id: true, name: true } },
       items: {
         include: {
           account: {
@@ -155,7 +169,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { unitId, type, date, description, items } = body;
+  const { unitId, type, date, description, items, fundId } = body;
 
   if (!unitId || !type || !date || !items || !Array.isArray(items) || items.length === 0) {
     return NextResponse.json(
@@ -171,24 +185,30 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 항목 유효성: amount는 0보다 커야 함
+  // 항목 유효성: amount ≠ 0 (음수 = 환급·차감)
   const validItems = items.filter(
     (item: { accountId?: number; amount?: number }) =>
       typeof item.amount === "number" &&
-      item.amount > 0 &&
+      Number.isInteger(item.amount) &&
+      item.amount !== 0 &&
       typeof item.accountId === "number"
   );
   if (validItems.length === 0) {
     return NextResponse.json(
-      { error: "유효한 항목이 없습니다. 금액은 0보다 커야 합니다." },
+      { error: "유효한 항목이 없습니다. 금액을 입력하세요." },
       { status: 400 }
     );
   }
   if (validItems.length !== items.length) {
     return NextResponse.json(
-      { error: "모든 항목의 금액은 0보다 커야 합니다." },
+      { error: "모든 항목에 0이 아닌 금액을 입력하세요." },
       { status: 400 }
     );
+  }
+
+  const fundRes = await resolveVoucherFund(unitId, fundId);
+  if (!fundRes.ok) {
+    return NextResponse.json({ error: fundRes.error }, { status: 400 });
   }
 
   const voucherDate = toDateOnly(date);
@@ -230,6 +250,7 @@ export async function POST(request: NextRequest) {
             date: voucherDate,
             description: description || null,
             totalAmount,
+            fundId: fundRes.fundId,
             createdBy,
             items: {
               create: validItems.map(

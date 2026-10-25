@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { checkAccAccess } from "@/lib/accountAuth";
+import { resolveVoucherFund } from "@/lib/accFund";
 
 /**
  * 날짜 문자열(YYYY-MM-DD)을 UTC 자정 Date로 변환
@@ -41,6 +42,7 @@ export async function GET(
         orderBy: { seq: "asc" },
       },
       unit: { select: { id: true, code: true, name: true } },
+      fund: { select: { id: true, name: true } },
     },
   });
 
@@ -86,7 +88,15 @@ export async function PUT(
   }
 
   const body = await request.json();
-  const { type, date, description, items } = body;
+  const { type, date, description, items, fundId } = body;
+
+  // 통장 변경 (미지정이면 유지, null/"" 이면 기본 통장)
+  let fundData: { fundId: number | null } | Record<string, never> = {};
+  if (fundId !== undefined) {
+    const f = await resolveVoucherFund(existing.unitId, fundId);
+    if (!f.ok) return NextResponse.json({ error: f.error }, { status: 400 });
+    fundData = { fundId: f.fundId };
+  }
 
   // 항목 배열이 주어졌으면 비어있으면 안 됨 (데이터 손상 방지)
   if (items !== undefined) {
@@ -96,16 +106,17 @@ export async function PUT(
         { status: 400 }
       );
     }
-    // amount > 0 검증
+    // amount ≠ 0 검증 (음수 = 환급·차감)
     const invalid = items.find(
       (item: { amount?: number; accountId?: number }) =>
         typeof item.amount !== "number" ||
-        item.amount <= 0 ||
+        !Number.isInteger(item.amount) ||
+        item.amount === 0 ||
         typeof item.accountId !== "number"
     );
     if (invalid) {
       return NextResponse.json(
-        { error: "모든 항목은 유효한 accountId와 0보다 큰 금액을 가져야 합니다." },
+        { error: "모든 항목은 유효한 계정과 0이 아닌 금액을 가져야 합니다." },
         { status: 400 }
       );
     }
@@ -149,6 +160,7 @@ export async function PUT(
         ...(type !== undefined && { type }),
         ...(date !== undefined && { date: toDateOnly(date) }),
         ...(description !== undefined && { description: description || null }),
+        ...fundData,
         totalAmount,
         ...(items &&
           Array.isArray(items) && {
@@ -182,6 +194,7 @@ export async function PUT(
           },
           orderBy: { seq: "asc" },
         },
+        fund: { select: { id: true, name: true } },
       },
     });
 

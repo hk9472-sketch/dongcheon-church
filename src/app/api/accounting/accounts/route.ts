@@ -38,6 +38,8 @@ export async function GET(request: NextRequest) {
       sortOrder: true,
       isActive: true,
       description: true,
+      reportName: true,
+      reportDetail: true,
     },
   });
 
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { unitId, code, name, type, parentId, level, sortOrder, description } = body;
+  const { unitId, code, name, type, parentId, level, sortOrder, description, reportName, reportDetail } = body;
 
   if (!unitId || !code || !name || !type) {
     return NextResponse.json(
@@ -106,6 +108,8 @@ export async function POST(request: NextRequest) {
       level: level ?? 0,
       sortOrder: sortOrder ?? 0,
       description: description || null,
+      reportName: String(reportName || "").trim() || null,
+      reportDetail: !!reportDetail,
     },
   });
 

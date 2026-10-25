@@ -43,6 +43,16 @@ export default function PostVoucherModal({
   onSuccess,
 }: Props) {
   const [seasonType, setSeasonType] = useState<SeasonType | "">("");
+  // 반영할 종류 — 기본 전부 선택, 체크 해제한 종류는 이번에 넘기지 않음
+  const [picked, setPicked] = useState<Record<string, boolean>>({
+    tithe: true,
+    sunday: true,
+    thanks: true,
+    special: true,
+    oil: true,
+    season: true,
+    sundaySchool: true,
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,6 +73,7 @@ export default function PostVoucherModal({
         date,
         sundaySchool,
         seasonType: seasonType || undefined,
+        include: selected.map((r) => r.key),
         force,
       }),
     });
@@ -72,7 +83,11 @@ export default function PostVoucherModal({
 
   const submit = async () => {
     setError(null);
-    if (seasonAmount > 0 && !seasonType) {
+    if (selected.length === 0) {
+      setError("반영할 종류를 1개 이상 선택하세요.");
+      return;
+    }
+    if (seasonAmount > 0 && picked.season && !seasonType) {
       setError("절기 금액이 있어 종류(부활/맥추/추수/성탄)를 선택해야 합니다.");
       return;
     }
@@ -86,13 +101,17 @@ export default function PostVoucherModal({
           unitName: string;
           voucherNo: string;
           totalAmount: number;
+          labels?: string[];
         }>;
         const list = existing
-          .map((e) => `· ${e.unitName} ${e.voucherNo} (${fmt(e.totalAmount)}원)`)
+          .map(
+            (e) =>
+              `- ${e.unitName} ${e.voucherNo} ${(e.labels || []).join(", ")} (${fmt(e.totalAmount)}원)`,
+          )
           .join("\n");
         const ok = confirm(
-          `이 일자에 이미 자동생성된 결산 전표가 ${existing.length}건 있습니다.\n\n${list}\n\n` +
-            `덮어쓰면 위 전표를 삭제하고 현재 데이터로 새로 생성합니다.\n계속하시겠습니까?`,
+          `이 일자에 선택한 종류로 이미 반영된 항목이 있습니다.\n\n${list}\n\n` +
+            `덮어쓰면 위 항목만 지우고 현재 데이터로 다시 반영합니다.\n(선택하지 않은 종류는 그대로 둡니다)\n계속하시겠습니까?`,
         );
         if (!ok) {
           setBusy(false);
@@ -130,20 +149,22 @@ export default function PostVoucherModal({
   };
 
   // 단위별 그룹핑 (미리보기)
-  type Row = { unit: string; label: string; amount: number };
+  type Row = { key: string; unit: string; label: string; amount: number };
   const all: Row[] = [
-    { unit: TITHE_UNIT, label: "십일조연보", amount: totals.tithe },
-    { unit: GEN_UNIT, label: "주일연보", amount: totals.sunday },
-    { unit: GEN_UNIT, label: "감사연보", amount: totals.thanks },
-    { unit: GEN_UNIT, label: "특별연보", amount: totals.special },
-    { unit: GEN_UNIT, label: "오일연보", amount: totals.oil },
+    { key: "tithe", unit: TITHE_UNIT, label: "십일조연보", amount: totals.tithe },
+    { key: "sunday", unit: GEN_UNIT, label: "주일연보", amount: totals.sunday },
+    { key: "thanks", unit: GEN_UNIT, label: "감사연보", amount: totals.thanks },
+    { key: "special", unit: GEN_UNIT, label: "특별연보", amount: totals.special },
+    { key: "oil", unit: GEN_UNIT, label: "오일연보", amount: totals.oil },
     {
+      key: "season",
       unit: GEN_UNIT,
       label: seasonType ? `절기 (${seasonType})` : "절기연보",
       amount: totals.season,
     },
-    { unit: SS_UNIT, label: "주일학교", amount: totals.sundaySchool },
+    { key: "sundaySchool", unit: SS_UNIT, label: "주일학교", amount: totals.sundaySchool },
   ].filter((r) => r.amount > 0);
+  const selected = all.filter((r) => picked[r.key]);
 
   // 단위별 묶기
   const grouped: Record<string, Row[]> = {};
@@ -175,7 +196,7 @@ export default function PostVoucherModal({
         )}
 
         <div className="space-y-3 px-5 py-3 text-sm">
-          {seasonAmount > 0 && (
+          {seasonAmount > 0 && picked.season && (
             <div>
               <label className="block text-xs text-gray-500 mb-1">
                 절기 종류 (절기 금액 {fmt(seasonAmount)}원)
@@ -204,14 +225,14 @@ export default function PostVoucherModal({
             </div>
           )}
           <div className="rounded border border-gray-200 bg-gray-50 p-2">
-            <div className="text-xs text-gray-500 mb-1">반영될 전표 (회계단위별 분리)</div>
+            <div className="text-xs text-gray-500 mb-1">반영될 전표 (회계단위별 분리) — 체크한 종류만 넘깁니다</div>
             {unitNames.length === 0 ? (
               <div className="text-xs text-gray-400">반영할 금액 없음</div>
             ) : (
               <div className="space-y-2">
                 {unitNames.map((unit) => {
                   const rows = grouped[unit];
-                  const sum = rows.reduce((s, r) => s + r.amount, 0);
+                  const sum = rows.filter((r) => picked[r.key]).reduce((s, r) => s + r.amount, 0);
                   return (
                     <div key={unit} className="border border-gray-300 rounded bg-white">
                       <div className="px-2 py-1 bg-blue-50 border-b text-xs font-semibold text-blue-800">
@@ -219,9 +240,20 @@ export default function PostVoucherModal({
                       </div>
                       <table className="w-full text-xs">
                         <tbody>
-                          {rows.map((r, i) => (
-                            <tr key={i}>
-                              <td className="px-2 py-0.5">{r.label}</td>
+                          {rows.map((r) => (
+                            <tr key={r.key} className={picked[r.key] ? "" : "text-gray-400 line-through"}>
+                              <td className="px-2 py-0.5">
+                                <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!picked[r.key]}
+                                    onChange={(e) =>
+                                      setPicked((p) => ({ ...p, [r.key]: e.target.checked }))
+                                    }
+                                  />
+                                  {r.label}
+                                </label>
+                              </td>
                               <td className="px-2 py-0.5 text-right font-mono">
                                 {fmt(r.amount)}
                               </td>
@@ -259,7 +291,7 @@ export default function PostVoucherModal({
           <button
             type="button"
             onClick={submit}
-            disabled={busy || all.length === 0}
+            disabled={busy || selected.length === 0}
             className="rounded bg-emerald-600 px-4 py-1.5 text-sm text-white hover:bg-emerald-700 disabled:opacity-50"
           >
             전표 반영

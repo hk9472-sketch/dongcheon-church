@@ -20,6 +20,14 @@ interface AccAccount {
   isActive: boolean;
 }
 
+interface AccFund {
+  id: number;
+  name: string;
+  kind: string;
+  isDefault: boolean;
+  isActive: boolean;
+}
+
 interface VoucherItem {
   key: string; // client-side key
   accountId: number | null;
@@ -36,6 +44,8 @@ interface SavedVoucher {
   description: string;
   totalAmount: number;
   isClosed: boolean;
+  fundId: number | null;
+  fund?: { id: number; name: string } | null;
   items: {
     id: number;
     seq: number;
@@ -82,6 +92,8 @@ export default function VoucherEntryPage() {
   const [units, setUnits] = useState<AccUnit[]>([]);
   const [unitId, setUnitId] = useState<number | null>(null);
   const [accounts, setAccounts] = useState<AccAccount[]>([]);
+  const [funds, setFunds] = useState<AccFund[]>([]);
+  const [fundId, setFundId] = useState<number | null>(null); // null = 기본 통장
   const [date, setDate] = useState(todayKST());
   const [voucherNo, setVoucherNo] = useState("");
   const [headerDesc, setHeaderDesc] = useState("");
@@ -139,6 +151,19 @@ export default function VoucherEntryPage() {
         if (Array.isArray(d)) setAccounts(d);
       })
       .catch(() => setAccounts([]));
+  }, [unitId]);
+
+  /* ---- fetch funds (통장) when unit changes ---- */
+  useEffect(() => {
+    if (!unitId) return;
+    fetch(`/api/accounting/funds?unitId=${unitId}`)
+      .then((r) => r.json())
+      .then((d: AccFund[]) => {
+        const list = Array.isArray(d) ? d.filter((f) => f.isActive) : [];
+        setFunds(list);
+        setFundId(list.find((f) => f.isDefault)?.id ?? list[0]?.id ?? null);
+      })
+      .catch(() => setFunds([]));
   }, [unitId]);
 
   /* ---- 전표번호는 서버 저장 시점에 발급 — 사전 조회 없음 (동시 입력 충돌 방지) ---- */
@@ -266,6 +291,7 @@ export default function VoucherEntryPage() {
   /* ---- reset form ---- */
   function resetForm() {
     setEditingId(null);
+    setFundId(funds.find((f) => f.isDefault)?.id ?? funds[0]?.id ?? null);
     setHeaderDesc("");
     setVoucherNo("");
     setItems([emptyItem()]);
@@ -279,6 +305,7 @@ export default function VoucherEntryPage() {
     setDate(v.date.slice(0, 10));
     setVoucherNo(v.voucherNo);
     setHeaderDesc(v.description || "");
+    setFundId(v.fundId ?? funds.find((f) => f.isDefault)?.id ?? null);
     setItems(
       v.items.map((it) => ({
         key: nextKey(),
@@ -298,7 +325,8 @@ export default function VoucherEntryPage() {
   /* ---- save (create or update) ---- */
   async function handleSave() {
     if (!unitId) return;
-    const validItems = items.filter((it) => it.accountId && parseAmount(it.amount) > 0);
+    // 금액 0 이 아닌 행 (음수 = 환급·차감)
+    const validItems = items.filter((it) => it.accountId && parseAmount(it.amount) !== 0);
     if (validItems.length === 0) {
       setMessage({ type: "err", text: "최소 1개 이상의 항목을 입력하세요." });
       return;
@@ -312,6 +340,7 @@ export default function VoucherEntryPage() {
       type: tab,
       date,
       description: headerDesc,
+      fundId,
       items: validItems.map((it, i) => ({
         seq: i + 1,
         accountId: it.accountId,
@@ -384,14 +413,14 @@ export default function VoucherEntryPage() {
   /* ---- amount blur formatting ---- */
   function handleAmountBlur(key: string, raw: string) {
     const n = parseAmount(raw);
-    if (n > 0) {
+    if (n !== 0) {
       updateItem(key, "amount", fmtAmount(n));
     }
   }
 
   function handleAmountFocus(key: string, raw: string) {
     const n = parseAmount(raw);
-    updateItem(key, "amount", n > 0 ? String(n) : "");
+    updateItem(key, "amount", n !== 0 ? String(n) : "");
   }
 
   /* ────── 엑셀 템플릿 다운로드 (CSV, UTF-8 BOM — 엑셀에서 바로 열림) ────── */
@@ -591,7 +620,7 @@ export default function VoucherEntryPage() {
         )}
 
         {/* header fields — 입력 순서: 전표일자 → 회계단위 → 전표적요 → 전표번호 */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {/* 전표일자 */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -621,6 +650,26 @@ export default function VoucherEntryPage() {
               {units.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 통장 */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              통장
+            </label>
+            <select
+              value={fundId ?? ""}
+              onChange={(e) => setFundId(e.target.value ? Number(e.target.value) : null)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+            >
+              {funds.length === 0 && <option value="">기본 (통장 미등록)</option>}
+              {funds.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                  {f.isDefault ? " (기본)" : ""}
                 </option>
               ))}
             </select>
@@ -709,7 +758,7 @@ export default function VoucherEntryPage() {
                       onBlur={() => handleAmountBlur(it.key, it.amount)}
                       onFocus={() => handleAmountFocus(it.key, it.amount)}
                       onKeyDown={(e) => handleCellKeyDown(e, rowIdx, 1)}
-                      placeholder="0"
+                      placeholder="0 (환급은 -)"
                       className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm text-right focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                     />
                   </td>
@@ -850,6 +899,10 @@ export default function VoucherEntryPage() {
                   <span className="text-sm font-mono text-gray-600">
                     {v.voucherNo}
                   </span>
+
+                  {v.fund && (
+                    <span className="shrink-0 text-xs text-gray-400">{v.fund.name}</span>
+                  )}
 
                   {/* items summary */}
                   <span className="text-sm text-gray-500 truncate flex-1">

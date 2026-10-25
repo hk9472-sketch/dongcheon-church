@@ -101,13 +101,19 @@ export default function Header() {
   useEffect(() => {
     const recheck = () => {
       fetch("/api/auth/me")
-        .then((r) => r.json())
+        .then((r) => {
+          // 503(서버 일시 오류)는 판단 보류 — 로그아웃으로 오인해 화면을 떠나면 입력이 사라진다
+          if (!r.ok) throw new Error("transient");
+          return r.json();
+        })
         .then((d) => {
           const u = d.user || null;
           setUser(u);
           if (!u) {
             const path = window.location.pathname;
-            const protectedPrefixes = ["/admin", "/council", "/accounting"];
+            // 행정실(/accounting)은 이동시키지 않음 — 자체 레이아웃이 '다시 로그인' 안내를 띄워
+            // 입력 중인 내용을 보존한 채 로그인만 새 창에서 하게 한다.
+            const protectedPrefixes = ["/admin", "/council"];
             if (protectedPrefixes.some((p) => path.startsWith(p))) {
               router.push("/");
             }
