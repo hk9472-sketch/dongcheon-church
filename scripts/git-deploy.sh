@@ -32,6 +32,9 @@ set -e
 # 저장소 루트로 이동 (스크립트가 어디서 호출되든 안전)
 cd "$(dirname "$0")/.."
 
+# git 출력이 화면을 넘으면 페이저(less, ':' 프롬프트)에서 멈추는 문제 방지
+export GIT_PAGER=cat PAGER=cat
+
 if [ ! -d .git ]; then
   echo "ERROR: 여기는 git 저장소가 아닙니다. ~/pkistdc 에서 git init + remote add 먼저 진행하세요."
   exit 1
