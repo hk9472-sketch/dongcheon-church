@@ -306,7 +306,7 @@ export default function FundStatusPage() {
         <h2 className="text-sm font-bold text-gray-700 mb-3">통장 간 이체 등록</h2>
         <p className="text-xs text-gray-500 mb-3">
           같은 회계단위 안의 통장 사이 이동(예: 보통예금 → 정기예금)입니다. 수입·지출로 잡히지 않습니다.
-          다른 회계단위로 보내는 돈은 지출·수입 전표로 입력하세요.
+          다른 회계로 보내는 돈(대여·상환·지원)은 [회계 간 대체]에서 입력하세요.
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <input type="date" value={tDate} onChange={(e) => setTDate(e.target.value)} className={sel} />

@@ -71,6 +71,7 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
         const isLedgerPath = pathname.startsWith("/accounting/entry") ||
           pathname.startsWith("/accounting/vouchers") ||
           pathname.startsWith("/accounting/funds") ||
+          pathname.startsWith("/accounting/unit-transfers") ||
           pathname.startsWith("/accounting/year-closing") ||
           pathname.startsWith("/accounting/report") ||
           pathname.startsWith("/accounting/settlement") ||
@@ -264,6 +265,7 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
     { href: "/accounting/report/account", label: "계정별 현황" },
     { href: "/accounting/report/daily", label: "일자별 현황" },
     { href: "/accounting/funds", label: "통장현황·이체" },
+    { href: "/accounting/unit-transfers", label: "회계 간 대체" },
     { href: "/accounting/settlement", label: "결산현황" },
     { href: "/accounting/report/annual", label: "연간 결산서" },
     { href: "/accounting/closing", label: "월마감" },

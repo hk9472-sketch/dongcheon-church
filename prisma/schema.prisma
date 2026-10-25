@@ -1214,6 +1214,29 @@ model AccTransfer {
   @@map("acc_transfers")
 }
 
+// 회계 간 대체 — 다른 회계단위 통장으로 보내는 돈 (대여/상환/지원).
+//   저장 시 보낸 회계에 '타회계대체출금'(지출), 받은 회계에 '타회계대체입금'(수입) 전표가 쌍으로 생성된다.
+//   → 회계별 잔액·월/연마감은 기존 로직 그대로, 결산서에서는 대체를 별도 줄로 표시.
+//   대여 − 상환 = 회계 간 미상환 잔액.
+model AccUnitTransfer {
+  id            Int      @id @default(autoincrement())
+  date          DateTime @db.Date
+  kind          String   @db.VarChar(10)           // 대여 / 상환 / 지원
+  fromUnitId    Int
+  fromFundId    Int
+  toUnitId      Int
+  toFundId      Int
+  amount        Int
+  description   String?  @db.VarChar(200)
+  fromVoucherId Int      @unique
+  toVoucherId   Int      @unique
+  createdBy     String   @db.VarChar(50)
+  createdAt     DateTime @default(now())
+
+  @@index([date])
+  @@map("acc_unit_transfers")
+}
+
 // 통장 대사 — 특정 일자의 실제 통장 잔액 기록 (장부 잔액과 비교)
 model AccFundCheck {
   id           Int      @id @default(autoincrement())
@@ -1248,6 +1271,7 @@ model AccAccount {
   description String?  @db.VarChar(200)
   reportName   String?  @db.VarChar(100)            // 결산서 표기명 (없으면 name)
   reportDetail Boolean  @default(false)             // 상위 계정: 결산서에서 하위 계정을 펼쳐 표시 (false=합계 한 줄)
+  isTransfer   Boolean  @default(false)             // 회계 간 대체 전용 계정 (자동 생성·전표입력 목록 제외·결산서 별도 표시)
 
   voucherItems AccVoucherItem[]
 

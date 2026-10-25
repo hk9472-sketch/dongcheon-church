@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
   });
   if (funds.length !== 2 || funds.some((f) => f.unitId !== unitId)) {
     return NextResponse.json(
-      { error: "두 통장 모두 같은 회계단위에 속해야 합니다. (다른 회계단위로 보내는 돈은 지출·수입 전표로 처리)" },
+      { error: "두 통장 모두 같은 회계단위에 속해야 합니다. (다른 회계로 보내는 돈은 [회계 간 대체]에서 처리)" },
       { status: 400 },
     );
   }

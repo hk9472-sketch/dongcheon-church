@@ -18,6 +18,7 @@ interface AccAccount {
   parentId: number | null;
   level: number;
   isActive: boolean;
+  isTransfer?: boolean;
 }
 
 interface AccFund {
@@ -192,7 +193,8 @@ export default function VoucherEntryPage() {
       accounts.filter((a) => a.parentId !== null).map((a) => a.parentId)
     );
     return accounts.filter(
-      (a) => a.type === tab && a.isActive && !parentIds.has(a.id)
+      // 회계 간 대체 전용 계정은 직접 입력 대상이 아님
+      (a) => a.type === tab && a.isActive && !a.isTransfer && !parentIds.has(a.id)
     );
   }, [accounts, tab]);
 

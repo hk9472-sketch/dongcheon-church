@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
       description: true,
       reportName: true,
       reportDetail: true,
+      isTransfer: true,
     },
   });
 

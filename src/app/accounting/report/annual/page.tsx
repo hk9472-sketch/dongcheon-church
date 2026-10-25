@@ -14,6 +14,10 @@ interface UnitReport {
   carryOver: number;
   income: number;
   expense: number;
+  transferIn: number;
+  transferOut: number;
+  transfersIn: { label: string; amount: number }[];
+  transfersOut: { label: string; amount: number }[];
   balance: number;
   incomeLines: Line[];
   expenseLines: Line[];
@@ -29,7 +33,20 @@ interface Report {
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
 /** 수입/지출 내역 표 한쪽 — 그룹(reportDetail)은 왼쪽 세로 라벨 + 하위 줄 */
-function SideTable({ title, lines, total }: { title: string; lines: Line[]; total: number }) {
+function SideTable({
+  title,
+  lines,
+  total,
+  sumLabel,
+  transfers,
+}: {
+  title: string;
+  lines: Line[];
+  total: number;
+  sumLabel: string;
+  transfers: { label: string; amount: number }[];
+}) {
+  const transferSum = transfers.reduce((s, t) => s + t.amount, 0);
   return (
     <table className="w-full text-sm border border-gray-400 border-collapse">
       <thead>
@@ -75,10 +92,26 @@ function SideTable({ title, lines, total }: { title: string; lines: Line[]; tota
         )}
         <tr className="font-semibold bg-gray-50">
           <td colSpan={2} className="border border-gray-400 px-2 py-1 text-center">
-            계
+            {transfers.length > 0 ? sumLabel : "계"}
           </td>
           <td className="border border-gray-400 px-2 py-1 text-right font-mono">{fmt(total)}</td>
         </tr>
+        {transfers.map((t) => (
+          <tr key={t.label}>
+            <td colSpan={2} className="border border-gray-400 px-2 py-1 text-center">
+              {t.label}
+            </td>
+            <td className="border border-gray-400 px-2 py-1 text-right font-mono">{fmt(t.amount)}</td>
+          </tr>
+        ))}
+        {transfers.length > 0 && (
+          <tr className="font-semibold bg-gray-50">
+            <td colSpan={2} className="border border-gray-400 px-2 py-1 text-center">
+              총합계
+            </td>
+            <td className="border border-gray-400 px-2 py-1 text-right font-mono">{fmt(total + transferSum)}</td>
+          </tr>
+        )}
       </tbody>
     </table>
   );
@@ -202,19 +235,27 @@ export default function AnnualReportPage() {
                       ["전년이월", "carryOver"],
                       ["총수입", "income"],
                       ["총지출", "expense"],
+                      ["회계간 대체(순)", "transferNet"],
                       ["잔액", "balance"],
                     ] as const
-                  ).map(([label, key]) => (
-                    <tr key={key} className={key === "balance" ? "font-semibold" : ""}>
-                      <td className="border border-gray-400 px-2 py-1 text-center bg-gray-50">{label}</td>
-                      {data.units.map((u) => (
-                        <td key={u.unitId} className="border border-gray-400 px-2 py-1 text-right font-mono">
-                          {fmt(u[key])}
-                        </td>
-                      ))}
-                      <td className="border border-gray-400 px-2 py-1 text-right font-mono">{fmt(data.total[key])}</td>
-                    </tr>
-                  ))}
+                  )
+                    .filter(([, key]) => key !== "transferNet" || data.units.some((u) => u.transferIn || u.transferOut))
+                    .map(([label, key]) => {
+                      const val = (u: UnitReport) => (key === "transferNet" ? u.transferIn - u.transferOut : u[key]);
+                      return (
+                        <tr key={key} className={key === "balance" ? "font-semibold" : ""}>
+                          <td className="border border-gray-400 px-2 py-1 text-center bg-gray-50">{label}</td>
+                          {data.units.map((u) => (
+                            <td key={u.unitId} className="border border-gray-400 px-2 py-1 text-right font-mono">
+                              {fmt(val(u))}
+                            </td>
+                          ))}
+                          <td className="border border-gray-400 px-2 py-1 text-right font-mono">
+                            {fmt(key === "transferNet" ? 0 : data.total[key])}
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
@@ -231,20 +272,32 @@ export default function AnnualReportPage() {
                   <span className="text-right font-mono">{fmt(u.carryOver)}</span>
                   <span>{data.year}년 총수입</span>
                   <span className="text-right font-mono">{fmt(u.income)}</span>
+                  {u.transferIn > 0 && (
+                    <>
+                      <span>타회계 대체 입금</span>
+                      <span className="text-right font-mono">{fmt(u.transferIn)}</span>
+                    </>
+                  )}
                   <span className="font-semibold">총계</span>
-                  <span className="text-right font-mono font-semibold">{fmt(u.carryOver + u.income)}</span>
+                  <span className="text-right font-mono font-semibold">{fmt(u.carryOver + u.income + u.transferIn)}</span>
                 </div>
                 <div className="grid grid-cols-[auto_auto] gap-x-6 gap-y-1 w-fit self-end">
                   <span>총지출</span>
                   <span className="text-right font-mono">{fmt(u.expense)}</span>
+                  {u.transferOut > 0 && (
+                    <>
+                      <span>타회계 대체 출금</span>
+                      <span className="text-right font-mono">{fmt(u.transferOut)}</span>
+                    </>
+                  )}
                   <span className="font-semibold">잔액</span>
                   <span className="text-right font-mono font-semibold">{fmt(u.balance)}</span>
                 </div>
               </div>
               <div className="text-sm font-medium mb-1">수입지출 내역</div>
               <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-0 md:gap-0">
-                <SideTable title="수 입 내 역" lines={u.incomeLines} total={u.income} />
-                <SideTable title="지 출 내 역" lines={u.expenseLines} total={u.expense} />
+                <SideTable title="수 입 내 역" lines={u.incomeLines} total={u.income} sumLabel="수입 합계" transfers={u.transfersIn} />
+                <SideTable title="지 출 내 역" lines={u.expenseLines} total={u.expense} sumLabel="지출 합계" transfers={u.transfersOut} />
               </div>
               {u.funds.length > 0 && (
                 <div className="mt-2 text-xs text-gray-600">

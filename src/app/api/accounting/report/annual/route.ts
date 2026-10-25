@@ -22,6 +22,7 @@ interface Acc {
   sortOrder: number;
   reportName: string | null;
   reportDetail: boolean;
+  isTransfer: boolean;
 }
 
 interface ReportLine {
@@ -42,7 +43,8 @@ function buildLines(accounts: Acc[], sums: Map<number, number>, type: "D" | "C")
   const label = (a: Acc) => a.reportName || a.name;
 
   const lines: ReportLine[] = [];
-  for (const root of accounts.filter((a) => !a.parentId && a.type === type).sort(order)) {
+  // 회계 간 대체 전용 계정은 수입/지출 내역이 아니라 별도 '대체' 줄로 표시
+  for (const root of accounts.filter((a) => !a.parentId && a.type === type && !a.isTransfer).sort(order)) {
     const amount = total(root);
     if (amount === 0) continue;
     const children = kids.get(root.id);
@@ -76,7 +78,7 @@ export async function GET(request: NextRequest) {
   const from = toDateOnly(`${year}-01-01`);
   const to = toNextDay(dateTo);
 
-  const [units, accounts, balances, itemSums] = await Promise.all([
+  const [units, accounts, balances, itemSums, unitTransfers] = await Promise.all([
     prisma.accUnit.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
     prisma.accAccount.findMany({
       select: {
@@ -89,6 +91,7 @@ export async function GET(request: NextRequest) {
         sortOrder: true,
         reportName: true,
         reportDetail: true,
+        isTransfer: true,
       },
     }),
     prisma.accBalance.findMany({ where: { year } }),
@@ -97,7 +100,9 @@ export async function GET(request: NextRequest) {
       where: { voucher: { date: { gte: from, lt: to } } },
       _sum: { amount: true },
     }),
+    prisma.accUnitTransfer.findMany({ where: { date: { gte: from, lt: to } } }),
   ]);
+  const unitNameMap = new Map(units.map((u) => [u.id, u.name]));
 
   const sums = new Map(itemSums.map((r) => [r.accountId, r._sum.amount ?? 0]));
   const balanceMap = new Map(balances.map((b) => [b.unitId, b.amount]));
@@ -110,6 +115,21 @@ export async function GET(request: NextRequest) {
     const income = incomeLines.reduce((s, l) => s + l.amount, 0);
     const expense = expenseLines.reduce((s, l) => s + l.amount, 0);
     const carryOver = balanceMap.get(u.id) ?? 0;
+
+    // 회계 간 대체 — (구분, 상대 회계) 별 합계
+    const group = (rows: typeof unitTransfers, side: "in" | "out") => {
+      const m = new Map<string, number>();
+      for (const t of rows) {
+        const other = unitNameMap.get(side === "in" ? t.fromUnitId : t.toUnitId) ?? "?";
+        const label = `${t.kind} ${side === "in" ? "입금" : "출금"} (${other})`;
+        m.set(label, (m.get(label) ?? 0) + t.amount);
+      }
+      return Array.from(m, ([label, amount]) => ({ label, amount }));
+    };
+    const transfersIn = group(unitTransfers.filter((t) => t.toUnitId === u.id), "in");
+    const transfersOut = group(unitTransfers.filter((t) => t.fromUnitId === u.id), "out");
+    const transferIn = transfersIn.reduce((s, t) => s + t.amount, 0);
+    const transferOut = transfersOut.reduce((s, t) => s + t.amount, 0);
     const funds = (await computeFundBalances(u.id, year, dateTo))
       .filter((f) => f.isActive || f.balance !== 0)
       .map((f) => ({ fundId: f.fundId, name: f.name, kind: f.kind, balance: f.balance }));
@@ -119,7 +139,11 @@ export async function GET(request: NextRequest) {
       carryOver,
       income,
       expense,
-      balance: carryOver + income - expense,
+      transferIn,
+      transferOut,
+      transfersIn,
+      transfersOut,
+      balance: carryOver + income + transferIn - expense - transferOut,
       incomeLines,
       expenseLines,
       funds,

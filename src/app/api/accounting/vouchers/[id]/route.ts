@@ -79,6 +79,17 @@ export async function PUT(
     return NextResponse.json({ error: "전표를 찾을 수 없습니다." }, { status: 404 });
   }
 
+  // 회계 간 대체로 생성된 전표는 대체 화면에서만 삭제
+  const linked = await prisma.accUnitTransfer.findFirst({
+    where: { OR: [{ fromVoucherId: voucherId }, { toVoucherId: voucherId }] },
+  });
+  if (linked) {
+    return NextResponse.json(
+      { error: "회계 간 대체로 생성된 전표입니다. [회계 간 대체] 화면에서 삭제 후 다시 등록하세요." },
+      { status: 409 }
+    );
+  }
+
   // 마감 확인
   if (existing.isClosed) {
     return NextResponse.json(
@@ -228,6 +239,17 @@ export async function DELETE(
   });
   if (!existing) {
     return NextResponse.json({ error: "전표를 찾을 수 없습니다." }, { status: 404 });
+  }
+
+  // 회계 간 대체로 생성된 전표는 대체 화면에서만 삭제
+  const linked = await prisma.accUnitTransfer.findFirst({
+    where: { OR: [{ fromVoucherId: voucherId }, { toVoucherId: voucherId }] },
+  });
+  if (linked) {
+    return NextResponse.json(
+      { error: "회계 간 대체로 생성된 전표입니다. [회계 간 대체] 화면에서 삭제 후 다시 등록하세요." },
+      { status: 409 }
+    );
   }
 
   if (existing.isClosed) {
