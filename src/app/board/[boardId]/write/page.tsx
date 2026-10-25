@@ -19,6 +19,16 @@ const TipTapEditor = dynamic(() => import("@/components/board/TipTapEditor"), {
   ),
 });
 
+// 임시저장 비교용 — HTML 을 순수 텍스트로 (미디어 태그는 내용으로 간주)
+function plainText(html: string): string {
+  if (!html) return "";
+  const media = /<(img|video|audio|iframe)\b/i.test(html) ? "[media]" : "";
+  return (html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim() + media).trim();
+}
+
+// 글쓰기 임시저장 보관 기간 — 이보다 오래된 건 복구를 묻지 않음
+const WRITE_DRAFT_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+
 // ============================================================
 // 글쓰기/수정/답글 페이지 (제로보드 write.php 대체)
 // URL: /board/[boardId]/write?mode=write|reply|modify&no=123
@@ -207,6 +217,87 @@ function WriteForm({ boardId }: { boardId: string }) {
     }
   }, [loading, mode]);
 
+  // ============ 작성 중 내용 임시저장 (다른 사이트 다녀와도 복구) ============
+  //  · 제목/본문을 localStorage 에 자동 보관(0.8초 디바운스)
+  //  · 다시 들어오면 '작성 중이던 내용이 있습니다' 배너 → 복구/버리기
+  //  · 등록 성공 시 삭제, 3일 지난 건 묻지 않음
+  const draftKey = `boardDraft.v1:${boardId}:${mode}:${parentNo || "new"}`;
+  const [pendingDraft, setPendingDraft] = useState<{ subject: string; content: string; at: number } | null>(null);
+  const draftCheckedRef = useRef(false);
+  const initialRef = useRef<{ subject: string; content: string }>({ subject: "", content: "" });
+
+  // 로드(수정/답글 원문 불러오기) 끝난 뒤 1회 — 남아 있는 임시저장 확인
+  useEffect(() => {
+    if (loading || draftCheckedRef.current) return;
+    draftCheckedRef.current = true;
+    initialRef.current = { subject, content };
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const d = JSON.parse(raw) as { subject?: string; content?: string; at?: number } | null;
+      const fresh = typeof d?.at === "number" && Date.now() - d.at < WRITE_DRAFT_TTL_MS;
+      const dSubject = (d?.subject || "").trim();
+      const dText = plainText(d?.content || "");
+      const differs = dSubject !== subject.trim() || dText !== plainText(content);
+      if (d && fresh && differs && (dSubject || dText)) {
+        // 브라우저가 백그라운드 탭을 내렸다가(메모리 절약·모바일) 다시 불러온 경우,
+        // 또는 새로고침인 경우 → 묻지 않고 자동 복원(사용자는 끊김을 못 느낌).
+        // 그 외(새로 진입) → 배너로 불러오기/버리기 선택.
+        const navEntry = performance.getEntriesByType("navigation")[0] as
+          | PerformanceNavigationTiming
+          | undefined;
+        const wasDiscarded = (document as Document & { wasDiscarded?: boolean }).wasDiscarded === true;
+        if (wasDiscarded || navEntry?.type === "reload") {
+          setSubject(d.subject || "");
+          setContent(d.content || "");
+        } else {
+          setPendingDraft({ subject: d.subject || "", content: d.content || "", at: d.at as number });
+        }
+      } else {
+        localStorage.removeItem(draftKey);
+      }
+    } catch {
+      /* ignore */
+    }
+    // 로드 완료 시점 1회만
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
+  // 변경 시 자동 보관 — 원문(또는 빈 상태)에서 바뀐 게 있을 때만
+  useEffect(() => {
+    if (loading || !draftCheckedRef.current || pendingDraft || submitting) return;
+    const t = setTimeout(() => {
+      try {
+        const changed =
+          subject.trim() !== initialRef.current.subject.trim() ||
+          plainText(content) !== plainText(initialRef.current.content);
+        if (changed && (subject.trim() || plainText(content))) {
+          localStorage.setItem(draftKey, JSON.stringify({ at: Date.now(), subject, content }));
+        } else {
+          localStorage.removeItem(draftKey);
+        }
+      } catch {
+        /* ignore quota */
+      }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [subject, content, loading, pendingDraft, submitting, draftKey]);
+
+  function restoreDraft() {
+    if (!pendingDraft) return;
+    setSubject(pendingDraft.subject);
+    setContent(pendingDraft.content);
+    setPendingDraft(null);
+  }
+  function discardDraft() {
+    try {
+      localStorage.removeItem(draftKey);
+    } catch {
+      /* ignore */
+    }
+    setPendingDraft(null);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
@@ -267,6 +358,11 @@ function WriteForm({ boardId }: { boardId: string }) {
 
       if (res.ok) {
         const data = await res.json();
+        try {
+          localStorage.removeItem(draftKey); // 등록 완료 → 임시저장 삭제
+        } catch {
+          /* ignore */
+        }
         router.push(`/board/${boardId}/${data.postId}`);
         router.refresh();
       } else {
@@ -318,6 +414,34 @@ function WriteForm({ boardId }: { boardId: string }) {
       <BoardGuideBox text={guideText} />
 
       <form onSubmit={handleSubmit} className="space-y-4" style={{ fontFamily: "var(--skin-write-font)", fontSize: "var(--skin-write-font-size)", color: "var(--skin-write-font-color)" }}>
+        {/* 작성 중이던 내용 복구 배너 */}
+        {pendingDraft && (
+          <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-300 rounded-lg">
+            <span className="text-sm text-amber-800">
+              작성 중이던 내용이 있습니다
+              {pendingDraft.subject.trim() && <> — <strong>{pendingDraft.subject.trim().slice(0, 30)}</strong></>}
+              <span className="ml-1 text-xs text-amber-600">
+                ({new Date(pendingDraft.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} 저장)
+              </span>
+            </span>
+            <div className="ml-auto flex gap-2">
+              <button
+                type="button"
+                onClick={restoreDraft}
+                className="px-3 py-1.5 text-sm bg-amber-600 text-white rounded hover:bg-amber-700 font-semibold"
+              >
+                불러오기
+              </button>
+              <button
+                type="button"
+                onClick={discardDraft}
+                className="px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded hover:bg-gray-100"
+              >
+                버리기
+              </button>
+            </div>
+          </div>
+        )}
         {/* ─── 작성자 정보 섹션 ─── */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden" style={{ border: "1px solid var(--skin-write-border-color)" }}>
           <div className="px-5 py-3 bg-gray-50" style={{ borderBottom: "1px solid var(--skin-write-border-color)" }}>

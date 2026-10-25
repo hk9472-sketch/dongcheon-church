@@ -42,9 +42,8 @@ export default function LivePage() {
       {/* 영상 영역 */}
       <div className="bg-black rounded-lg overflow-hidden shadow-lg">
         {embedUrl ? (
-          <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
-            <LiveYoutubePlayer embedUrl={embedUrl} />
-          </div>
+          // 16:9 영상 박스 + 하단 소리 조절 바는 컴포넌트가 함께 렌더
+          <LiveYoutubePlayer embedUrl={embedUrl} />
         ) : (
           <div className="flex flex-col items-center justify-center h-64 text-gray-400 px-4 text-center">
             {youtubeUrl ? (
