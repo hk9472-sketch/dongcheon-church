@@ -41,6 +41,22 @@ function blankRow(): Row {
   };
 }
 
+// 입력 대기용 빈 줄인지 (내용·저장ID 모두 없음)
+function isBlankRow(r: Row): boolean {
+  return (
+    r.memberNo.trim() === "" &&
+    (r.description || "").trim() === "" &&
+    Object.keys(r.savedIds).length === 0 &&
+    !TYPES.some((t) => (parseInt(r.amounts[t.key] || "0", 10) || 0) > 0)
+  );
+}
+
+// ★ 불변식: 0번 줄 = 입력 대기 빈 줄 '하나'. 그 외 빈 줄은 정리.
+//   저장·불러오기·정렬·Enter 등 어떤 경로에서도 입력은 항상 첫 줄에서 시작.
+function withTopBlank(rows: Row[]): Row[] {
+  return [blankRow(), ...rows.filter((r) => !isBlankRow(r))];
+}
+
 export default function MultiOfferingEntryPage() {
   const [date, setDate] = useState(todayStr());
   const [rows, setRows] = useState<Row[]>([blankRow()]);
@@ -288,13 +304,13 @@ export default function MultiOfferingEntryPage() {
           status: "saved",
           message: summary || "저장됨",
         };
-        if (!savingAllRef.current && idx === n.length - 1) n.push(blankRow());
-        return n;
+        // 저장 후에도 입력 대기는 항상 첫 줄
+        return savingAllRef.current ? n : withTopBlank(n);
       });
       if (!savingAllRef.current) {
         setTimeout(() => {
-          cellRefs.current[idx + 1]?.[0]?.focus();
-          cellRefs.current[idx + 1]?.[0]?.select();
+          cellRefs.current[0]?.[0]?.focus();
+          cellRefs.current[0]?.[0]?.select();
         }, 0);
       }
     } catch (e) {
@@ -422,9 +438,12 @@ export default function MultiOfferingEntryPage() {
             row.message = "일괄 저장됨";
           }
         });
-        if (next[next.length - 1]?.status === "saved") next.push(blankRow());
-        return next;
+        // 저장 후 입력 대기는 항상 첫 줄
+        return withTopBlank(next);
       });
+      setTimeout(() => {
+        cellRefs.current[0]?.[0]?.focus();
+      }, 0);
 
       setError(null);
       // localStorage draft 정리
@@ -451,7 +470,7 @@ export default function MultiOfferingEntryPage() {
   const recoverDraft = () => {
     if (!pendingDraft) return;
     setDate(pendingDraft.date);
-    setRows(pendingDraft.rows.length > 0 ? pendingDraft.rows : [blankRow()]);
+    setRows(withTopBlank(pendingDraft.rows));
     setPendingDraft(null);
     setLoadMsg(null);
   };
@@ -553,8 +572,7 @@ export default function MultiOfferingEntryPage() {
         setRows([blankRow()]);
         setLoadMsg(`${date} 에 저장된 연보가 없습니다.`);
       } else {
-        loaded.push(blankRow()); // 끝에 새 입력용 빈 행
-        setRows(loaded);
+        setRows(withTopBlank(loaded)); // 새 입력용 빈 행은 맨 위
         setLoadMsg(
           `${date} 연보 ${list.length - skipped}건 불러옴` +
             (skipped > 0 ? ` (매트릭스 외 종류 ${skipped}건은 제외 — 목록/수정 화면에서 확인)` : ""),
@@ -569,7 +587,7 @@ export default function MultiOfferingEntryPage() {
     }
   };
 
-  // 현재 입력된 행을 개인번호별/입력순서별로 재정렬 (빈 행은 맨 끝 유지)
+  // 현재 입력된 행을 개인번호별/입력순서별로 재정렬 (입력용 빈 행은 맨 위 유지)
   const applySort = (by: "member" | "input") => {
     setSortBy(by);
     setRows((prev) => {
@@ -592,7 +610,7 @@ export default function MultiOfferingEntryPage() {
         return minId(a) - minId(b); // 입력순서 (저장 id 기준)
       });
       cellRefs.current = [];
-      return [...sorted, blankRow()];
+      return [blankRow(), ...sorted];
     });
   };
 
@@ -634,24 +652,15 @@ export default function MultiOfferingEntryPage() {
         e.key === "Send" ||
         e.keyCode === 13);
     if (isEnter) {
-      // Enter: 새 입력 줄을 '현재 위치'에 끼워 넣고(방금 입력한 줄은 아래로 밀림) 같은 화면 위치에 포커스 유지.
-      //  → 줄이 아래로 길어지며 생기던 페이지 스크롤/입력칸 요동 제거(새 줄이 사실상 '위'에 생기는 효과).
+      // Enter: 입력은 항상 첫 줄에서 — 방금 입력한 줄은 바로 아래로 내려가고 첫 줄에 새 빈 줄.
+      //  → 어느 줄에서 Enter 를 쳐도 입력 대기는 첫 줄로 복귀(스크롤/요동 없음).
       e.preventDefault();
-      setRows((p) => {
-        const n = [...p];
-        n.splice(row, 0, blankRow());
-        return n;
-      });
-      setTimeout(() => focusCell(row, 0), 0);
+      setRows((p) => withTopBlank(p));
+      setTimeout(() => focusCell(0, 0), 0);
     } else if (e.key === "ArrowDown") {
-      // ↓: 같은 컬럼 다음 행 (세로 이동)
+      // ↓: 같은 컬럼 다음 행 (세로 이동). 마지막 줄이면 그대로(아래로 새 줄 만들지 않음)
       e.preventDefault();
-      if (row === rows.length - 1) {
-        setRows((p) => [...p, blankRow()]);
-        setTimeout(() => focusCell(row + 1, col), 0);
-      } else {
-        focusCell(row + 1, col);
-      }
+      if (row < rows.length - 1) focusCell(row + 1, col);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       focusCell(row - 1, col);
@@ -670,7 +679,11 @@ export default function MultiOfferingEntryPage() {
     }
   };
 
-  const addRow = () => setRows((p) => [...p, blankRow()]);
+  // 줄 추가 = 첫 줄 입력 대기로 이동(빈 줄은 항상 맨 위 하나)
+  const addRow = () => {
+    setRows((p) => withTopBlank(p));
+    setTimeout(() => focusCell(0, 0), 0);
+  };
   const removeRow = (idx: number) => {
     if (rows.length === 1) return;
     setRows((p) => p.filter((_, i) => i !== idx));
