@@ -60,12 +60,12 @@ export default function LivePage() {
         )}
       </div>
 
-      {/* YouTube 채널 바로가기 — "Watch on YouTube" 공식 패턴.
+      {/* YouTube 채널 바로가기 — 공식 아이콘 + 'YouTube' 텍스트.
           Branding guidelines 준수:
            · 흰 배경 위 YouTube Red(#FF0000) 정확한 비율 (28x20)
            · 흰색 play 삼각형, 색상·비율·회전 변형 없음
            · clear space = 로고 박스 높이의 1/2 이상 (좌우 padding 12px, 로고 20px → 충분)
-           · 정해진 phrasing "Watch on YouTube"
+           · 'YouTube' 는 일반 텍스트(주변과 같은 글꼴)로 표기 — 로고 워드마크 흉내 금지
           ref: https://www.youtube.com/howyoutubeworks/resources/brand-resources/ */}
       {youtubeUrl && (
         <div className="flex flex-col sm:flex-row items-center gap-3">
@@ -74,7 +74,7 @@ export default function LivePage() {
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2.5 px-3.5 py-2 bg-white border-2 border-gray-900 hover:bg-gray-50 text-gray-900 text-sm font-bold rounded-md transition-colors"
-            aria-label="Watch on YouTube"
+            aria-label="YouTube 채널에서 보기"
           >
             {/* 공식 YouTube 로고 SVG — 색상/비율 변경 금지 (#FF0000 + #FFFFFF) */}
             <svg
@@ -91,7 +91,7 @@ export default function LivePage() {
               />
               <polygon fill="#FFFFFF" points="11.2,14.3 18.3,10 11.2,5.7" />
             </svg>
-            <span>Watch on YouTube</span>
+            <span>YouTube</span>
           </a>
           <p className="text-xs text-gray-400">
             실시간 방송이 보이지 않으면 YouTube 채널에서 직접 확인해 주세요.
