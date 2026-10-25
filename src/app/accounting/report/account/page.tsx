@@ -27,6 +27,8 @@ interface AccountReport {
   expenseTotal: number;
   priorIncome: number;
   priorExpense: number;
+  cumIncome: number; // 연누계 (종료일 연도 1월 1일 ~ 종료일)
+  cumExpense: number;
 }
 
 function fmt(n: number) {
@@ -101,6 +103,8 @@ export default function AccountReportPage() {
         expenseTotal: data.totalExpense ?? 0,
         priorIncome: data.priorIncome ?? 0,
         priorExpense: data.priorExpense ?? 0,
+        cumIncome: data.cumIncome ?? (data.totalIncome ?? 0) + (data.priorIncome ?? 0),
+        cumExpense: data.cumExpense ?? (data.totalExpense ?? 0) + (data.priorExpense ?? 0),
       });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "조회 실패");
@@ -182,7 +186,7 @@ export default function AccountReportPage() {
           </button>
         </div>
         <p className="mt-2 text-xs text-gray-400">
-          월별 금액 · 조회기간 합계 · 누계(1월 1일 ~ 종료일)를 함께 표시합니다.
+          월별 금액 · 조회기간 합계 · 누계(종료일이 속한 해 1월 1일 ~ 종료일, 연누계)를 함께 표시합니다.
         </p>
       </div>
 
@@ -228,7 +232,7 @@ export default function AccountReportPage() {
                   const rows = report.items.filter((i) => i.type === t);
                   const color = t === "D" ? "text-blue-700" : "text-red-600";
                   const total = t === "D" ? report.incomeTotal : report.expenseTotal;
-                  const cum = total + (t === "D" ? report.priorIncome : report.priorExpense);
+                  const cum = t === "D" ? report.cumIncome : report.cumExpense;
                   return [
                     <tr key={`h${t}`} className={t === "D" ? "bg-blue-50" : "bg-red-50"}>
                       <td colSpan={colCount} className={`px-3 py-2 font-bold ${color}`}>
@@ -276,7 +280,7 @@ export default function AccountReportPage() {
                     {fmt(report.incomeTotal - report.expenseTotal)}
                   </td>
                   <td className="px-3 py-2.5 text-right font-mono text-emerald-800 bg-amber-50">
-                    {fmt(report.incomeTotal + report.priorIncome - report.expenseTotal - report.priorExpense)}
+                    {fmt(report.cumIncome - report.cumExpense)}
                   </td>
                 </tr>
               )}

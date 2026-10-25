@@ -152,6 +152,25 @@ export async function GET(request: NextRequest) {
     orderBy: [{ date: "asc" }, { voucherNo: "asc" }],
   });
 
+  // 연누계용 — 같은 필터로 (시작일 연도 1월 1일 ~ 시작일 전) 수입/지출 합계
+  let priorIncome = 0;
+  let priorExpense = 0;
+  if (dateFrom) {
+    const yearStart = toDateOnly(`${dateFrom.slice(0, 4)}-01-01`);
+    const start = toDateOnly(dateFrom);
+    if (start > yearStart) {
+      const prior = await prisma.accVoucher.groupBy({
+        by: ["type"],
+        where: { ...where, date: { gte: yearStart, lt: start } },
+        _sum: { totalAmount: true },
+      });
+      for (const p of prior) {
+        if (p.type === "D") priorIncome += p._sum.totalAmount ?? 0;
+        else priorExpense += p._sum.totalAmount ?? 0;
+      }
+    }
+  }
+
   // 합계 계산
   let totalIncome = 0;
   let totalExpense = 0;
@@ -168,6 +187,8 @@ export async function GET(request: NextRequest) {
     summary: {
       totalIncome,
       totalExpense,
+      priorIncome,
+      priorExpense,
       count: vouchers.length,
     },
   });

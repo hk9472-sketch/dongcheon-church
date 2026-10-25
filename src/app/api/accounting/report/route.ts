@@ -87,11 +87,12 @@ async function calculateCarryOverBefore(
 }
 
 /**
- * 연초 누계 — before 가 속한 해의 1월 1일 ~ before(미포함) 계정별 합계.
- * 수기장부처럼 '누계'를 항상 1월부터 이어 보이게 하는 데 사용 (unitId=0 이면 전체).
+ * 연누계 — year 년 1월 1일 ~ before(미포함) 계정별 합계 (unitId=0 이면 전체).
+ * 누계는 항상 그 해 1월부터 (해가 바뀌면 다시 시작). year 생략 시 before 의 연도.
+ * ★ 12월 말 기준처럼 before 가 다음 해 1월 1일이면 반드시 year 를 넘길 것.
  */
-async function ytdBefore(unitId: number, before: Date) {
-  const yearStart = toDateOnly(`${before.getUTCFullYear()}-01-01`);
+async function ytdBefore(unitId: number, before: Date, year = before.getUTCFullYear()) {
+  const yearStart = toDateOnly(`${year}-01-01`);
   const byAccount = new Map<number, number>();
   let income = 0;
   let expense = 0;
@@ -240,7 +241,7 @@ async function handleMonthlyReport(
   }
 
   // 누계(1월 ~ 이 달 말) — 이 달에 없지만 누계가 있는 계정도 표시
-  const ytd = await ytdBefore(unitId, nextMonth);
+  const ytd = await ytdBefore(unitId, nextMonth, year);
   const missing = Array.from(ytd.byAccount.keys()).filter((id) => !accountTotals[id]);
   if (missing.length > 0) {
     const accs = await prisma.accAccount.findMany({
@@ -371,10 +372,11 @@ async function handleAccountReport(
     accountTotals[key].byMonth[ym] = (accountTotals[key].byMonth[ym] ?? 0) + item.amount;
   }
 
-  // 연초 누계 (1월 1일 ~ 조회 종료일) = 조회 시작 전 누계 + 기간 합계
+  // 연누계 = 종료일이 속한 해 1월 1일 ~ 종료일 (기간이 해를 넘겨도 그 해 기준)
   const prior = await ytdBefore(unitId, from);
+  const ytdTo = await ytdBefore(unitId, to, parseInt(dateTo.slice(0, 4), 10));
   const items = Object.values(accountTotals)
-    .map((i) => ({ ...i, cumAmount: (prior.byAccount.get(i.accountId) ?? 0) + i.amount }))
+    .map((i) => ({ ...i, cumAmount: ytdTo.byAccount.get(i.accountId) ?? 0 }))
     .sort((a, b) => a.code.localeCompare(b.code));
 
   const totalIncome = items
@@ -398,6 +400,8 @@ async function handleAccountReport(
     totalExpense,
     priorIncome: prior.income,
     priorExpense: prior.expense,
+    cumIncome: ytdTo.income,
+    cumExpense: ytdTo.expense,
     balance: carryOver + totalIncome - totalExpense,
   });
 }

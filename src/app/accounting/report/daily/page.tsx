@@ -141,6 +141,11 @@ export default function DailyReportPage() {
     let mExpense = 0;
     report.days.forEach((day, i) => {
       const ym = day.date.slice(0, 7);
+      // 연누계 — 조회기간이 해를 넘기면 1월 1일부터 다시 누적
+      if (i > 0 && report.days[i - 1].date.slice(0, 4) !== day.date.slice(0, 4)) {
+        cumIncome = 0;
+        cumExpense = 0;
+      }
       mIncome += day.incomeTotal;
       mExpense += day.expenseTotal;
       cumIncome += day.incomeTotal;

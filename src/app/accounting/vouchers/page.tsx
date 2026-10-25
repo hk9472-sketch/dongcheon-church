@@ -163,7 +163,12 @@ export default function VoucherListPage() {
         else if (d.vouchers) setVouchers(d.vouchers);
         else setVouchers([]);
         setCarryOver(carry ? carry.carry : null);
-        setPrior(carry ? { income: carry.income, expense: carry.expense } : null);
+        // 연누계 기준 — 전표 API 가 같은 필터로 계산한 (1월 1일 ~ 시작일 전) 합계
+        setPrior(
+          d && d.summary
+            ? { income: d.summary.priorIncome ?? 0, expense: d.summary.priorExpense ?? 0 }
+            : null,
+        );
       })
       .catch(() => {
         setVouchers([]);
@@ -227,6 +232,11 @@ export default function VoucherListPage() {
     for (let i = 0; i < vouchers.length; i++) {
       const v = vouchers[i];
       const ym = v.date.slice(0, 7);
+      // 연누계 — 조회기간이 해를 넘기면 1월 1일부터 다시 누적
+      if (i > 0 && vouchers[i - 1].date.slice(0, 4) !== v.date.slice(0, 4)) {
+        cumIncome = 0;
+        cumExpense = 0;
+      }
       if (v.type === "D") cumIncome += v.totalAmount;
       else cumExpense += v.totalAmount;
       const next = vouchers[i + 1];
@@ -748,13 +758,13 @@ export default function VoucherListPage() {
                       <td className="px-3 py-1.5 text-amber-900" colSpan={span}>
                         누계{" "}
                         <span className="text-xs font-normal text-amber-700">
-                          {prior ? `(1월~${Number(total.ym.slice(5, 7))}월)` : `(조회기간 ${dateFrom}~)`}
+                          ({total.ym.slice(0, 4)}년 1월~{Number(total.ym.slice(5, 7))}월)
                         </span>
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono text-blue-800">{fmtAmount(total.cumIncome)}</td>
                       <td className="px-3 py-1.5 text-right font-mono text-red-800">{fmtAmount(total.cumExpense)}</td>
                       <td className="px-3 py-1.5 text-gray-700" colSpan={3}>
-                        {carryOver !== null && prior
+                        {carryOver !== null && prior && total.ym.slice(0, 4) === dateFrom.slice(0, 4)
                           ? `잔액 ${fmtAmount(carryOver - prior.income + prior.expense + total.cumIncome - total.cumExpense)}`
                           : `차액 ${fmtAmount(total.cumIncome - total.cumExpense)}`}
                       </td>
