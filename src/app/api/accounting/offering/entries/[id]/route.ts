@@ -74,7 +74,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   }
 
   const body = await req.json();
-  const { date, memberId, offeringType, amount, description } = body;
+  const { date, memberId, offeringType, amount, description, rowKey } = body;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: any = {};
@@ -116,6 +116,10 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       );
     }
     data.amount = amount;
+  }
+  // 통합입력 '입력 줄' 키 — 같은 줄의 건을 묶어 다시 불러오기 위함
+  if (typeof rowKey === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(rowKey)) {
+    data.rowKey = rowKey;
   }
   if (description !== undefined) {
     data.description = description?.trim() || null;

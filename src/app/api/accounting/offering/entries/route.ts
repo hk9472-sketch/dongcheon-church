@@ -144,6 +144,7 @@ export async function POST(req: NextRequest) {
         offeringType: string;
         amount: number;
         description?: string;
+        rowKey?: string | null;
       }) =>
         prisma.offeringEntry.create({
           data: {
@@ -152,6 +153,11 @@ export async function POST(req: NextRequest) {
             offeringType: e.offeringType,
             amount: e.amount,
             description: e.description?.trim() || null,
+            // 통합입력 '입력 줄' 키 (같은 줄 건 묶음 복원용)
+            rowKey:
+              typeof e.rowKey === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(e.rowKey)
+                ? e.rowKey
+                : null,
             createdBy,
           },
           select: {

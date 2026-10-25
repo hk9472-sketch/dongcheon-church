@@ -1294,6 +1294,7 @@ model OfferingEntry {
   offeringType String   @db.VarChar(20)              // 주일연보, 감사, 특별, 절기, 오일
   amount       Int                                   // 금액
   description  String?  @db.VarChar(1000)            // 비고 (멀티라인/장문 허용)
+  rowKey       String?  @db.VarChar(40)              // 통합입력의 '입력 줄' 키 — 같은 줄에서 입력한 건을 묶어 복원(무기명 섞임 방지)
   createdBy    String?  @db.VarChar(50)
   createdAt    DateTime @default(now())
 

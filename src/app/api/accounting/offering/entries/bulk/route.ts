@@ -36,11 +36,16 @@ const VALID_TYPES = [
   "오일",
 ];
 
+function validRowKey(v: unknown): boolean {
+  return typeof v === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(v);
+}
+
 interface CreateItem {
   memberId?: number | null;
   offeringType: string;
   amount: number;
   description?: string | null;
+  rowKey?: string | null; // 통합입력 '입력 줄' 키
 }
 interface UpdateItem extends CreateItem {
   id: number;
@@ -139,10 +144,11 @@ export async function POST(req: NextRequest) {
           await tx.offeringEntry.update({
             where: { id: u.id },
             data: {
-              memberId: u.memberId ?? null,
+              memberId: u.memberId ? u.memberId : null, // 0 = 무기명 → null (줄저장 경로와 동일)
               offeringType: u.offeringType,
               amount: u.amount,
               description: u.description?.toString().trim() || null,
+              ...(validRowKey(u.rowKey) ? { rowKey: u.rowKey as string } : {}),
             },
           });
         }
@@ -152,10 +158,11 @@ export async function POST(req: NextRequest) {
           const row = await tx.offeringEntry.create({
             data: {
               date: date!,
-              memberId: c.memberId ?? null,
+              memberId: c.memberId ? c.memberId : null, // 0 = 무기명 → null
               offeringType: c.offeringType,
               amount: c.amount,
               description: c.description?.toString().trim() || null,
+              rowKey: validRowKey(c.rowKey) ? (c.rowKey as string) : null,
               createdBy,
             },
             select: { id: true, offeringType: true, amount: true },

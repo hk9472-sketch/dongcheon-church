@@ -23,6 +23,24 @@ interface Row {
   description: string;
   status: RowStatus;
   message?: string;
+  rowKey: string;                        // 입력 줄 키 — 저장 시 함께 보내 '같은 줄' 건을 묶어 복원
+}
+
+// 입력 줄 고유 키 (영숫자/하이픈, 40자 이내)
+function newRowKey(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch {
+    /* ignore */
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+// 예전 임시저장(draft) 등 키 없는 줄에 키 부여
+function ensureRowKeys(rows: Row[]): Row[] {
+  return rows.map((r) => (r.rowKey ? r : { ...r, rowKey: newRowKey() }));
 }
 
 function todayStr(): string {
@@ -38,6 +56,7 @@ function blankRow(): Row {
     savedIds: {},
     description: "",
     status: "dirty",
+    rowKey: newRowKey(),
   };
 }
 
@@ -111,7 +130,7 @@ export default function MultiOfferingEntryPage() {
             (performance as any).navigation?.type === 1;
           if (isReload) {
             setDate(data.date || todayStr());
-            setRows(data.rows);
+            setRows(ensureRowKeys(data.rows));
           } else {
             setPendingDraft({ date: data.date || todayStr(), rows: data.rows });
           }
@@ -253,6 +272,7 @@ export default function MultiOfferingEntryPage() {
             amount: u.amount,
             // 비고(내역)는 감사연보에만 기록
             description: u.offeringType === "감사연보" ? r.description || null : null,
+            rowKey: r.rowKey, // 같은 줄로 묶어 두기(기존 건에도 키 부여)
           }),
         });
         if (!res.ok) {
@@ -275,6 +295,7 @@ export default function MultiOfferingEntryPage() {
               amount: c.amount,
               // 비고(내역)는 감사연보에만 기록
               description: c.offeringType === "감사연보" ? r.description || null : null,
+              rowKey: r.rowKey,
             })),
           }),
         });
@@ -343,6 +364,7 @@ export default function MultiOfferingEntryPage() {
         offeringType: string;
         amount: number;
         description: string | null;
+        rowKey: string;
       }[] = [];
       const updatePlan: {
         rowIdx: number;
@@ -351,6 +373,7 @@ export default function MultiOfferingEntryPage() {
         offeringType: string;
         amount: number;
         description: string | null;
+        rowKey: string;
       }[] = [];
       const deletePlan: { rowIdx: number; offeringType: string; id: number }[] = [];
 
@@ -371,6 +394,7 @@ export default function MultiOfferingEntryPage() {
               offeringType: t.key,
               amount: amt,
               description: t.key === "감사연보" ? r.description || null : null,
+              rowKey: r.rowKey,
             });
           } else if (existingId && amt === 0) {
             deletePlan.push({ rowIdx: idx, offeringType: t.key, id: existingId });
@@ -381,6 +405,7 @@ export default function MultiOfferingEntryPage() {
               offeringType: t.key,
               amount: amt,
               description: t.key === "감사연보" ? r.description || null : null,
+              rowKey: r.rowKey,
             });
           }
         }
@@ -470,7 +495,7 @@ export default function MultiOfferingEntryPage() {
   const recoverDraft = () => {
     if (!pendingDraft) return;
     setDate(pendingDraft.date);
-    setRows(withTopBlank(pendingDraft.rows));
+    setRows(withTopBlank(ensureRowKeys(pendingDraft.rows)));
     setPendingDraft(null);
     setLoadMsg(null);
   };
@@ -529,43 +554,89 @@ export default function MultiOfferingEntryPage() {
         offeringType: string;
         amount: number;
         description: string | null;
+        rowKey?: string | null;
+        createdAt?: string;
       }> = await res.json();
 
       const typeKeys = new Set<string>(TYPES.map((t) => t.key));
-      // memberId(없으면 'none') 단위로 그룹. 같은 (회원,종류) 가 2건이면 새 행으로 분리.
+      const typeIdx = new Map<string, number>(TYPES.map((t, i) => [t.key, i]));
+      // 입력 순서(id 오름차순)로 처리해 '입력 줄' 을 복원
+      const ordered = [...list].sort((a, b) => a.id - b.id);
       const byKey = new Map<string, Row[]>();
+      const loaded: Row[] = [];
+      const minIdOf = new Map<Row, number>();
       let skipped = 0;
-      let noneCnt = 0;
-      for (const e of list) {
+      // 줄 키 없던 시절의 무기명 건 복원 상태
+      let anonRow: Row | null = null;
+      let anonLastId = -1;
+      let anonLastIdx = -1;
+      let anonLastTime = 0;
+
+      const newLoadedRow = (memberId: number | null, rowKey?: string | null): Row => {
+        const row: Row = {
+          ...blankRow(),
+          memberNo: memberId ? String(memberId) : "",
+          status: "saved",
+          ...(rowKey ? { rowKey } : {}),
+        };
+        loaded.push(row);
+        return row;
+      };
+
+      for (const e of ordered) {
         if (!typeKeys.has(e.offeringType)) {
           skipped++;
           continue;
         }
-        const memberKey = e.memberId != null ? `m${e.memberId}` : `none${noneCnt}`;
-        const arr = byKey.get(memberKey) || [];
-        let row = arr.find((r) => !r.amounts[e.offeringType] && !r.savedIds[e.offeringType]);
-        if (!row) {
-          row = {
-            ...blankRow(),
-            memberNo: e.memberId != null ? String(e.memberId) : "",
-            status: "saved",
-          };
-          arr.push(row);
-          byKey.set(memberKey, arr);
-          if (e.memberId == null) noneCnt++;
+        let row: Row | undefined;
+        if (e.rowKey) {
+          // ① 줄 키가 있으면 입력했던 그 줄 그대로 (같은 종류가 또 나오면 새 줄)
+          const key = `r:${e.rowKey}`;
+          const arr = byKey.get(key) || [];
+          row = arr.find((r) => !r.savedIds[e.offeringType]);
+          if (!row) {
+            row = newLoadedRow(e.memberId, arr.length === 0 ? e.rowKey : null);
+            arr.push(row);
+            byKey.set(key, arr);
+          }
+        } else if (e.memberId) {
+          // ② (예전 데이터) 기명 — 같은 교인은 한 줄, 같은 종류 중복이면 새 줄
+          const key = `m:${e.memberId}`;
+          const arr = byKey.get(key) || [];
+          row = arr.find((r) => !r.savedIds[e.offeringType]);
+          if (!row) {
+            row = newLoadedRow(e.memberId);
+            arr.push(row);
+            byKey.set(key, arr);
+          }
+        } else {
+          // ③ (예전 데이터) 무기명(번호 0/없음) — 번호로 묶으면 서로 다른 사람이 섞이므로
+          //    '같은 줄에서 함께 저장된 건'만 묶는다: id 연속 + 종류 순서 증가 + 거의 같은 시각.
+          const t = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+          const idx = typeIdx.get(e.offeringType) ?? 0;
+          const sameRow =
+            anonRow !== null &&
+            e.id === anonLastId + 1 &&
+            idx > anonLastIdx &&
+            Math.abs(t - anonLastTime) < 5000;
+          if (!sameRow || !anonRow) anonRow = newLoadedRow(null);
+          row = anonRow;
+          anonLastId = e.id;
+          anonLastIdx = idx;
+          anonLastTime = t;
         }
         row.amounts[e.offeringType] = String(e.amount);
         row.savedIds[e.offeringType] = e.id;
         if (!row.description && e.description) row.description = e.description;
+        if (!minIdOf.has(row)) minIdOf.set(row, e.id);
       }
 
-      const loaded: Row[] = [];
-      for (const arr of byKey.values()) loaded.push(...arr);
-      // 개인번호 오름차순 (없는 건 뒤로)
+      // 개인번호 오름차순(무기명은 맨 앞), 같은 번호·무기명끼리는 입력한 순서 그대로
       loaded.sort((a, b) => {
         const na = parseInt(a.memberNo || "0", 10) || 0;
         const nb = parseInt(b.memberNo || "0", 10) || 0;
-        return na - nb;
+        if (na !== nb) return na - nb;
+        return (minIdOf.get(a) ?? 0) - (minIdOf.get(b) ?? 0);
       });
 
       if (loaded.length === 0) {
