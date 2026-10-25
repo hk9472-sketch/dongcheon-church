@@ -103,6 +103,15 @@ export default function AccountingLayout({ children }: { children: React.ReactNo
       .finally(() => setLoading(false));
   }, [router, pathname]);
 
+  // 세션 heartbeat — 회계 화면을 열어둔 채 오래 입력해도 세션이 끊기지 않게
+  // 10분마다 /api/auth/me 호출(서버가 sliding 으로 세션·쿠키 연장).
+  useEffect(() => {
+    const t = setInterval(() => {
+      fetch("/api/auth/me").catch(() => {});
+    }, 10 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
+
   if (loading || !reauthChecked) {
     return (
       <div className="flex items-center justify-center py-24 text-gray-400">
