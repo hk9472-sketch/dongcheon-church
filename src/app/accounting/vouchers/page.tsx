@@ -564,7 +564,7 @@ export default function VoucherListPage() {
               window.open(`/accounting/vouchers/print?ids=${vouchers.map((v) => v.id).join(",")}`, "_blank");
             }}
             className="px-5 py-2 text-sm rounded-lg border border-gray-400 text-gray-700 hover:bg-gray-50 transition-colors font-medium"
-            title="조회된 전표를 한 장씩(A4) 출력 — 영수증 부착란 포함"
+            title="조회된 전표 출력 — A4 1장에 2건, 가운데를 잘라 뒷면에 영수증 부착 (단면 인쇄)"
           >
             전표 출력
           </button>
@@ -1085,7 +1085,7 @@ export default function VoucherListPage() {
                 target="_blank"
                 rel="noopener"
                 className="mr-auto px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
-                title="이 전표를 A4 한 장으로 출력 (영수증 부착란 포함)"
+                title="이 전표 출력 (A4 반쪽) — 뒷면에 영수증을 붙여 보관 (단면 인쇄)"
               >
                 전표 출력
               </a>

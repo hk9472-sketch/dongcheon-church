@@ -313,7 +313,7 @@ const specs = [
     allowModal: true,
   },
   {
-    // 일반회계 20261010-001 (공과금 — PDF·이미지 증빙) : id 는 가상 데이터 기준 → 실행 시 CAP_PRINT_IDS 로 지정
+    // 한 장에 2건: 일반회계 20261008-001 · 20261010-001 (증빙 있는 전표) — id 는 가상 데이터 기준 → CAP_PRINT_IDS="223,219" 처럼 지정
     file: "accounting/voucher-print.png", path: `/accounting/vouchers/print?ids=${process.env.CAP_PRINT_IDS || "1"}`, clip: "section.sheet", clipPad: 0, maxHeight: 1100,
     width: 900, height: 1200,
   },

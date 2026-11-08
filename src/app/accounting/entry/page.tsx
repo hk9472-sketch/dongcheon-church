@@ -888,7 +888,7 @@ export default function VoucherEntryPage() {
                 target="_blank"
                 rel="noopener"
                 className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
-                title="이 전표를 A4 한 장으로 출력 (영수증 부착란 포함)"
+                title="이 전표 출력 (A4 반쪽) — 뒷면에 영수증을 붙여 보관 (단면 인쇄)"
               >
                 전표 출력
               </a>

@@ -1,15 +1,17 @@
 "use client";
 
-import { Fragment, Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { evidenceNo, evidenceUrl, type EvidenceItem } from "@/components/accounting/Evidence";
 
 /**
- * 전표 출력 — 전표 1장 = A4 1쪽.
- *   위: 전표 내용(결재란 · 전표정보 · 항목 · 합계 · 증빙 목록)
- *   아래: 영수증 부착란 (실물 영수증을 붙여 보관)
- *   ?ids=1,2,3  여러 전표를 한 번에 (전표마다 새 쪽)
- *   화면 옵션 "증빙 이미지도 인쇄" — 이미지 증빙을 전표 뒤 쪽에 이어서 인쇄 (PDF 는 목록만)
+ * 전표 출력 — 기본: A4 1장에 전표 2건(위·아래 반쪽, 가운데 자르는 선). 1건이면 위쪽 반만.
+ *   선택: 1장에 1건.
+ *   결재란 · 전표정보 · 항목 · 합계 · 전자 증빙 목록
+ *   실물 영수증은 출력한 전표(자른 반쪽) 뒷면에 붙여 보관 → 단면 인쇄 (뒷면을 비워 둠)
+ *   항목이 많아 반쪽에 다 안 들어가는 전표(MAX_HALF_ITEMS 초과)는 자동으로 1장을 다 쓴다.
+ *   ?ids=1,2,3  여러 전표를 한 번에
+ *   화면 옵션 "증빙 이미지도 인쇄" — 이미지 증빙을 그 전표가 있는 쪽 다음에 이어서 인쇄 (PDF 는 목록만)
  */
 
 interface PrintVoucher {
@@ -74,14 +76,20 @@ function stamp(at: string | null | undefined): string {
 
 const isImage = (m: string) => m.startsWith("image/") && m !== "image/heic";
 
-function VoucherSheet({ v }: { v: PrintVoucher }) {
+type Page =
+  | { kind: "slips"; two: boolean; list: PrintVoucher[] }
+  | { kind: "image"; v: PrintVoucher; a: EvidenceItem };
+
+/** 반쪽(한 장에 2건)에 넣을 수 있는 최대 항목 수 — 넘으면 그 전표만 한 장을 다 씀 */
+const MAX_HALF_ITEMS = 8;
+
+function VoucherSlip({ v, half }: { v: PrintVoucher; half?: boolean }) {
   const income = v.type === "D";
   const atts = v.attachments ?? [];
-  const minRows = 6;
+  const minRows = half ? 4 : 6;
   const blanks = Math.max(0, minRows - v.items.length);
   return (
-    <section className="sheet">
-      <div className="sheet-inner">
+    <div className={half ? "slip half" : "slip full"}>
         {/* 제목 + 결재란 */}
         <div className="head">
           <div className="title-box">
@@ -191,31 +199,7 @@ function VoucherSheet({ v }: { v: PrintVoucher }) {
           )}
         </div>
 
-        {/* 영수증 부착란 */}
-        <div className="attach">
-          <div className="attach-label">
-            영수증 부착란 <span>· 전표번호 {v.voucherNo}</span>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function EvidencePages({ v }: { v: PrintVoucher }) {
-  const imgs = (v.attachments ?? []).filter((a) => isImage(a.mimeType));
-  return (
-    <>
-      {imgs.map((a) => (
-        <section className="sheet ev-sheet" key={a.id}>
-          <div className="ev-head">
-            {v.voucherNo} 증빙 — {evidenceNo(a)} ({a.origName})
-          </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={evidenceUrl(a.id)} alt={a.origName} className="ev-img" />
-        </section>
-      ))}
-    </>
+    </div>
   );
 }
 
@@ -226,6 +210,7 @@ function PrintInner() {
   const [error, setError] = useState<string | null>(ids ? null : "출력할 전표가 없습니다.");
   const [loading, setLoading] = useState(!!ids);
   const [withImages, setWithImages] = useState(false);
+  const [perPage, setPerPage] = useState<1 | 2>(2); // 기본: A4 1장에 2건
 
   useEffect(() => {
     if (!ids) return;
@@ -241,6 +226,35 @@ function PrintInner() {
       .catch((e) => setError(e instanceof Error ? e.message : "불러오기 실패"))
       .finally(() => setLoading(false));
   }, [ids]);
+
+  // 쪽 구성 — 2건 모드: 반쪽 두 개씩 채우되, 항목이 많은 전표는 한 장을 다 쓴다(순서 유지)
+  const pages = useMemo(() => {
+    const out: Page[] = [];
+    const images = (vs: PrintVoucher[]) => {
+      if (!withImages) return;
+      for (const v of vs) for (const a of v.attachments ?? []) if (isImage(a.mimeType)) out.push({ kind: "image", v, a });
+    };
+    let pending: PrintVoucher[] = [];
+    const flush = () => {
+      if (pending.length === 0) return;
+      out.push({ kind: "slips", two: true, list: pending });
+      images(pending);
+      pending = [];
+    };
+    for (const v of vouchers) {
+      if (perPage === 1 || v.items.length > MAX_HALF_ITEMS) {
+        flush();
+        out.push({ kind: "slips", two: false, list: [v] });
+        images([v]);
+        continue;
+      }
+      pending.push(v);
+      if (pending.length === 2) flush();
+    }
+    flush();
+    return out;
+  }, [vouchers, perPage, withImages]);
+  const sheetCount = pages.filter((p) => p.kind === "slips").length;
 
   const imageCount = useMemo(
     () => vouchers.reduce((s, v) => s + (v.attachments ?? []).filter((a) => isImage(a.mimeType)).length, 0),
@@ -299,11 +313,83 @@ function PrintInner() {
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
           overflow: hidden;
         }
-        .sheet-inner {
-          height: 100%;
+        .slip {
           display: flex;
           flex-direction: column;
           padding: 2mm 0;
+        }
+        .slip.full {
+          height: 100%;
+        }
+        /* 한 장에 2건 — 위·아래 반쪽 (A4 인쇄 영역 약 277mm) */
+        .sheet.two {
+          display: flex;
+          flex-direction: column;
+        }
+        .slip.half {
+          height: 133mm;
+          overflow: hidden;
+        }
+        .cut {
+          position: relative;
+          height: 0;
+          margin: 3mm 0 4mm;
+          border-top: 1px dashed #9ca3af;
+        }
+        .cut span {
+          position: absolute;
+          right: 0;
+          top: -2.2mm;
+          font-size: 7pt;
+          color: #9ca3af;
+          background: #fff;
+          padding-left: 1.5mm;
+        }
+        .half .head {
+          margin-bottom: 2mm;
+        }
+        .half .title-box {
+          padding-top: 1mm;
+        }
+        .half .church {
+          font-size: 9pt;
+        }
+        .half .title-box h1 {
+          font-size: 16pt;
+          margin-top: 1mm;
+        }
+        .half .sign {
+          width: 54mm;
+        }
+        .half .sign th,
+        .half .sign td {
+          font-size: 8pt;
+        }
+        .half .sign td {
+          height: 11mm;
+        }
+        .half .info th,
+        .half .info td,
+        .half .items th,
+        .half .items td {
+          padding: 1mm 1.6mm;
+          font-size: 9pt;
+        }
+        .half .info {
+          margin-bottom: 2mm;
+        }
+        .half .items .blank td {
+          height: 5.5mm;
+        }
+        .half .code {
+          font-size: 8pt;
+        }
+        .half .kor {
+          font-size: 9pt;
+        }
+        .half .meta,
+        .half .evid {
+          font-size: 7.5pt;
         }
         .head {
           display: flex;
@@ -414,25 +500,6 @@ function PrintInner() {
           margin-top: 1mm;
           word-break: break-all;
         }
-        .attach {
-          flex: 1;
-          margin-top: 4mm;
-          border: 1.5px dashed #888;
-          border-radius: 2mm;
-          position: relative;
-          min-height: 60mm;
-        }
-        .attach-label {
-          position: absolute;
-          top: 2mm;
-          left: 3mm;
-          font-size: 9pt;
-          color: #888;
-          font-weight: 600;
-        }
-        .attach-label span {
-          font-weight: 400;
-        }
         .ev-sheet {
           display: flex;
           flex-direction: column;
@@ -455,7 +522,19 @@ function PrintInner() {
       <div className="no-print sticky top-0 z-10 mb-4 flex flex-wrap items-center gap-3 border-b border-gray-300 bg-white px-4 py-3 shadow-sm">
         <b className="text-gray-800">전표 출력</b>
         <span className="text-sm text-gray-500">
-          {loading ? "불러오는 중..." : `${vouchers.length}장 · 전표 1장 = A4 1쪽 (아래쪽 영수증 부착란)`}
+          {loading
+            ? "불러오는 중..."
+            : `전표 ${vouchers.length}건 · A4 ${sheetCount}장 · 뒷면에 영수증을 붙이므로 프린터는 '단면 인쇄'로`}
+        </span>
+        <span className="flex items-center gap-3 text-sm text-gray-700">
+          <label className="flex items-center gap-1">
+            <input type="radio" checked={perPage === 2} onChange={() => setPerPage(2)} />
+            한 장에 2건
+          </label>
+          <label className="flex items-center gap-1">
+            <input type="radio" checked={perPage === 1} onChange={() => setPerPage(1)} />
+            한 장에 1건
+          </label>
         </span>
         <label className="flex items-center gap-1.5 text-sm text-gray-700">
           <input type="checkbox" checked={withImages} onChange={(e) => setWithImages(e.target.checked)} />
@@ -482,12 +561,33 @@ function PrintInner() {
       {error && <div className="no-print mx-auto max-w-xl rounded bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
       {/* 쪽(section)들을 형제로 두어 마지막 쪽만 쪽나눔 없이 */}
-      {vouchers.map((v) => (
-        <Fragment key={v.id}>
-          <VoucherSheet v={v} />
-          {withImages && <EvidencePages v={v} />}
-        </Fragment>
-      ))}
+      {pages.map((pg, i) =>
+        pg.kind === "image" ? (
+          <section className="sheet ev-sheet" key={`i${i}`}>
+            <div className="ev-head">
+              {pg.v.voucherNo} 증빙 — {evidenceNo(pg.a)} ({pg.a.origName})
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={evidenceUrl(pg.a.id)} alt={pg.a.origName} className="ev-img" />
+          </section>
+        ) : pg.two ? (
+          <section className="sheet two" key={`p${i}`}>
+            <VoucherSlip v={pg.list[0]} half />
+            {pg.list[1] && (
+              <>
+                <div className="cut">
+                  <span>자르는 선</span>
+                </div>
+                <VoucherSlip v={pg.list[1]} half />
+              </>
+            )}
+          </section>
+        ) : (
+          <section className="sheet" key={`p${i}`}>
+            <VoucherSlip v={pg.list[0]} />
+          </section>
+        ),
+      )}
     </div>
   );
 }
