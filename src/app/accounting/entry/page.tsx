@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HelpButton from "@/components/HelpButton";
+import {
+  EvidenceBadge,
+  EvidencePanel,
+  PendingEvidence,
+  uploadEvidence,
+  type EvidenceItem,
+} from "@/components/accounting/Evidence";
 import { auditInline, auditTitle } from "@/components/accounting/AuditStamp";
 
 /* ───── types ───── */
@@ -52,6 +59,7 @@ interface SavedVoucher {
   modifiedAt: string | null;
   fundId: number | null;
   fund?: { id: number; name: string } | null;
+  attachments?: EvidenceItem[];
   items: {
     id: number;
     seq: number;
@@ -109,6 +117,7 @@ export default function VoucherEntryPage() {
 
   // editing existing voucher
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]); // 새 전표에 붙일 증빙 (저장 후 업로드)
 
   // today's vouchers
   const [todayVouchers, setTodayVouchers] = useState<SavedVoucher[]>([]);
@@ -298,6 +307,7 @@ export default function VoucherEntryPage() {
   /* ---- reset form ---- */
   function resetForm() {
     setEditingId(null);
+    setPendingFiles([]);
     setFundId(funds.find((f) => f.isDefault)?.id ?? funds[0]?.id ?? null);
     setHeaderDesc("");
     setVoucherNo("");
@@ -381,13 +391,24 @@ export default function VoucherEntryPage() {
       const saved = await res.json().catch(() => ({}));
       const issuedNo = saved?.voucherNo ? ` (전표번호 ${saved.voucherNo})` : "";
       const wasEditing = editingId;
+      // 새 전표: 골라 둔 증빙을 이제 올린다 (전표번호가 있어야 파일 이름을 붙일 수 있음)
+      let evidenceNote = "";
+      let evidenceFailed = false;
+      if (!wasEditing && pendingFiles.length > 0 && saved?.id) {
+        const up = await uploadEvidence(saved.id, pendingFiles);
+        if (up.ok) evidenceNote = ` 증빙 ${up.items.length}개 첨부.`;
+        else {
+          evidenceFailed = true;
+          evidenceNote = ` 단, 증빙 올리기 실패: ${up.error} — 아래 목록에서 전표를 눌러 다시 올리세요.`;
+        }
+      }
       resetForm();
       fetchTodayVouchers();
       setMessage({
-        type: "ok",
-        text: wasEditing
+        type: evidenceFailed ? "err" : "ok",
+        text: (wasEditing
           ? `전표가 수정되었습니다.${issuedNo}`
-          : `전표가 저장되었습니다.${issuedNo}`,
+          : `전표가 저장되었습니다.${issuedNo}`) + evidenceNote,
       });
     } catch (e: unknown) {
       setMessage({ type: "err", text: e instanceof Error ? e.message : "오류가 발생했습니다." });
@@ -827,6 +848,25 @@ export default function VoucherEntryPage() {
           </table>
         </div>
 
+        {/* 증빙자료 — 새 전표는 저장할 때 함께 올라가고, 불러온 전표는 바로 추가·삭제 */}
+        <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+          <div className="mb-2 text-xs font-bold text-amber-800">
+            증빙자료 <span className="font-normal text-amber-700">— 영수증·세금계산서 사진이나 PDF. 서버에 &lsquo;전표번호-001&rsquo; 순으로 저장됩니다.</span>
+          </div>
+          {editingId ? (
+            <EvidencePanel
+              key={editingId}
+              voucherId={editingId}
+              initial={todayVouchers.find((v) => v.id === editingId)?.attachments ?? undefined}
+              closed={todayVouchers.find((v) => v.id === editingId)?.isClosed}
+              title={voucherNo}
+              onChange={fetchTodayVouchers}
+            />
+          ) : (
+            <PendingEvidence files={pendingFiles} onChange={setPendingFiles} />
+          )}
+        </div>
+
         {/* add row + action buttons */}
         <div className="flex flex-wrap items-center gap-3">
           <button
@@ -843,6 +883,15 @@ export default function VoucherEntryPage() {
 
           {editingId && (
             <>
+              <a
+                href={`/accounting/vouchers/print?ids=${editingId}`}
+                target="_blank"
+                rel="noopener"
+                className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+                title="이 전표를 A4 한 장으로 출력 (영수증 부착란 포함)"
+              >
+                전표 출력
+              </a>
               <button
                 onClick={handleDelete}
                 className="px-5 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors"
@@ -910,6 +959,7 @@ export default function VoucherEntryPage() {
                   {v.fund && (
                     <span className="shrink-0 text-xs text-gray-400">{v.fund.name}</span>
                   )}
+                  <EvidenceBadge items={v.attachments} title={v.voucherNo} />
 
                   {/* items summary */}
                   <span className="text-sm text-gray-500 truncate flex-1">

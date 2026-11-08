@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "@/lib/db";
 import { checkAccAccess } from "@/lib/accountAuth";
 import { isMonthClosed, toDateOnly, toNextDay } from "@/lib/accFund";
+import { removeEvidenceFiles } from "@/lib/accEvidence";
 
 /**
  * 회계 간 대체 (대여 / 상환 / 지원)
@@ -219,9 +220,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "마감된 월의 대체는 삭제할 수 없습니다." }, { status: 409 });
     }
   }
+  const evidence = await prisma.accVoucherAttachment.findMany({
+    where: { voucherId: { in: [t.fromVoucherId, t.toVoucherId] } },
+    select: { storedPath: true },
+  });
   await prisma.$transaction([
     prisma.accUnitTransfer.delete({ where: { id } }),
     prisma.accVoucher.deleteMany({ where: { id: { in: [t.fromVoucherId, t.toVoucherId] } } }),
   ]);
+  await removeEvidenceFiles(evidence.map((e) => e.storedPath));
   return NextResponse.json({ success: true });
 }

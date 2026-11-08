@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import HelpButton from "@/components/HelpButton";
+import { EvidenceBadge, EvidencePanel, type EvidenceItem } from "@/components/accounting/Evidence";
 import AuditStamp from "@/components/accounting/AuditStamp";
 
 /* ───── types ───── */
@@ -42,6 +43,7 @@ interface VoucherData {
   description: string | null;
   totalAmount: number;
   filterAmount?: number; // 계정명 필터 시 일치 항목 금액 합 (합계·월계·누계 기준)
+  attachments?: EvidenceItem[]; // 증빙자료
   isClosed: boolean;
   createdBy: string;
   createdAt: string;
@@ -555,6 +557,17 @@ export default function VoucherListPage() {
           >
             엑셀
           </button>
+          <button
+            onClick={() => {
+              if (vouchers.length === 0) return alert("출력할 전표가 없습니다. 먼저 조회하세요.");
+              if (vouchers.length > 300 && !confirm(`전표 ${vouchers.length}장을 출력합니다. 계속할까요?`)) return;
+              window.open(`/accounting/vouchers/print?ids=${vouchers.map((v) => v.id).join(",")}`, "_blank");
+            }}
+            className="px-5 py-2 text-sm rounded-lg border border-gray-400 text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+            title="조회된 전표를 한 장씩(A4) 출력 — 영수증 부착란 포함"
+          >
+            전표 출력
+          </button>
         </div>
       </div>
 
@@ -675,6 +688,11 @@ export default function VoucherListPage() {
                           )}
                           {row.voucherNo}
                         </button>
+                        {row.voucher.attachments && row.voucher.attachments.length > 0 && (
+                          <div className="mt-1">
+                            <EvidenceBadge items={row.voucher.attachments} title={row.voucherNo} />
+                          </div>
+                        )}
                       </td>
                     )}
 
@@ -1045,8 +1063,32 @@ export default function VoucherListPage() {
               )}
             </div>
 
+            {/* 증빙자료 — 마감된 전표도 추가는 가능, 삭제는 불가 */}
+            <div className="px-5 pb-4">
+              <div className="mb-2 text-xs font-bold text-amber-800">증빙자료</div>
+              <EvidencePanel
+                key={editVoucher.id}
+                voucherId={editVoucher.id}
+                initial={editVoucher.attachments}
+                closed={editVoucher.isClosed}
+                title={editVoucher.voucherNo}
+                onChange={(items) => {
+                  setVouchers((prev) => prev.map((v) => (v.id === editVoucher.id ? { ...v, attachments: items } : v)));
+                }}
+              />
+            </div>
+
             {/* modal footer */}
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+              <a
+                href={`/accounting/vouchers/print?ids=${editVoucher.id}`}
+                target="_blank"
+                rel="noopener"
+                className="mr-auto px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
+                title="이 전표를 A4 한 장으로 출력 (영수증 부착란 포함)"
+              >
+                전표 출력
+              </a>
               {!editVoucher.isClosed && (
                 <>
                   <button

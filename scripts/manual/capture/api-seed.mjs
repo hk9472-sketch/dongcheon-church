@@ -1,5 +1,5 @@
 // 가상 DB(dc_manual)에 실제 API 로 이체·대체·대사·마감·일별결산 데이터를 넣는다.
-const BASE = "http://localhost:3100";
+const BASE = process.env.CAP_BASE || "http://localhost:3100";
 const H = { "Content-Type": "application/json", Cookie: "dc_session=manual-demo-session" };
 async function call(method, path, body) {
   const r = await fetch(BASE + path, { method, headers: H, body: body ? JSON.stringify(body) : undefined });
@@ -52,3 +52,28 @@ for (const date of ["2026-10-11", "2026-10-18", "2026-10-25", "2026-11-01", "202
   await post("/api/accounting/offering/settlement", { date, denominations: denoms(total + extra), sundaySchool: 52000, envelopeCount: 41 });
 }
 console.log("api seed done");
+
+// 6) 증빙자료 (가상 영수증 이미지 · PDF) — 전표현황·출력 캡처용
+{
+  const { receiptPng, samplePdf } = await import("./sample-evidence.mjs");
+  const list = await call("GET", "/api/accounting/vouchers?unitId=1&dateFrom=2026-10-01&dateTo=2026-10-31");
+  const vs = list.vouchers || [];
+  const cash = vs.find((v) => v.date.startsWith("2026-10-08") && v.type === "C");
+  const util = vs.find((v) => v.date.startsWith("2026-10-10") && v.type === "C");
+  async function upload(v, files) {
+    if (!v) return;
+    const fd = new FormData();
+    for (const [buf, name, type] of files) fd.append("files", new Blob([buf], { type }), name);
+    const r = await fetch(`${BASE}/api/accounting/vouchers/${v.id}/attachments`, { method: "POST", headers: { Cookie: H.Cookie }, body: fd });
+    if (!r.ok) console.log("FAIL upload", v.voucherNo, r.status, await r.text());
+  }
+  await upload(cash, [
+    [await receiptPng({ shop: "○○마트 (가상)", date: "2026-10-08 14:32", items: [["화장지 30롤", 18000], ["세제 3L", 15000]], total: 33000 }), "마트영수증.png", "image/png"],
+    [await receiptPng({ shop: "○○공영주차장 (가상)", date: "2026-10-08 16:05", items: [["주차 2시간", 13000]], total: 13000 }), "주차영수증.png", "image/png"],
+  ]);
+  await upload(util, [
+    [samplePdf("Electric bill 2026-10 (sample)"), "10월 전기요금 고지서.pdf", "application/pdf"],
+    [await receiptPng({ shop: "상수도사업본부 (가상)", date: "2026-10-10", items: [["10월 수도요금", 81000]], total: 81000 }), "수도요금.png", "image/png"],
+  ]);
+}
+console.log("evidence seed done");

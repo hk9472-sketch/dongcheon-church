@@ -330,7 +330,7 @@ export async function POST(req: NextRequest) {
       date: dayStart,
       description: "연보 결산 자동 반영",
     },
-    include: { unit: { select: { name: true } }, items: true },
+    include: { unit: { select: { name: true } }, items: true, _count: { select: { attachments: true } } },
   });
   const conflicts = existingAuto
     .map((v) => ({ v, items: v.items.filter((i) => pickedAccountIds.has(i.accountId)) }))
@@ -348,6 +348,21 @@ export async function POST(req: NextRequest) {
           createdAt: v.createdAt,
         })),
         message: `이 일자에 같은 종류로 자동반영된 항목이 있습니다. 덮어쓸까요?`,
+      },
+      { status: 409 },
+    );
+  }
+
+  // 덮어쓰면 통째로 지워질 전표에 증빙이 붙어 있으면 막는다 (증빙이 조용히 사라지지 않게)
+  const withEvidence = conflicts.filter(
+    ({ v, items }) => v._count.attachments > 0 && v.items.every((i) => items.some((x) => x.id === i.id)),
+  );
+  if (withEvidence.length > 0) {
+    return NextResponse.json(
+      {
+        error:
+          `증빙자료가 첨부된 전표가 있어 덮어쓸 수 없습니다: ${withEvidence.map(({ v }) => `${v.unit.name} ${v.voucherNo}`).join(", ")}. ` +
+          `행정실 [전표현황]에서 그 전표의 증빙을 먼저 정리하세요.`,
       },
       { status: 409 },
     );

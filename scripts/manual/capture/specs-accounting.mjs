@@ -245,6 +245,79 @@ const specs = [
     ],
   },
 
+  // ───────── 증빙자료 · 전표 출력 ─────────
+  {
+    file: "accounting/evidence-new.png", path: "/accounting/entry", clip: C, maxHeight: 700,
+    prepare: async (p) => {
+      await entryFill(p, {
+        unit: "일반회계", tab: "지출", fund: "일반회계 현금", desc: "11/8 차량 유류·주차",
+        rows: [["2077 - 차량유대", 76500, "휘발유 45L", "○○주유소"], ["2084 - 주차장이용료", 3000, "심방 주차", "공영주차장"]],
+      });
+      const dir = process.env.CAP_EVIDENCE_DIR;
+      await p.locator(`${C} input[type=file][accept*="pdf"]`).setInputFiles([`${dir}/주유영수증.png`, `${dir}/주차영수증.png`]);
+      await p.waitForTimeout(500);
+    },
+    marks: [
+      { sel: `${C} div:has(> div:text-matches("^증빙자료")) >> nth=-1`, n: 1, pad: 2 },
+      { sel: `${C} button:has-text("증빙 추가")`, n: 2 },
+      { sel: `${C} button:text-is("저장")`, n: 3 },
+    ],
+  },
+  {
+    file: "accounting/evidence-edit.png", path: "/accounting/entry", clip: C, maxHeight: 820,
+    prepare: async (p) => {
+      await pickUnit(p, "일반회계");
+      await p.locator(`${C} input[type=date]`).first().fill("2026-10-08");
+      await p.waitForTimeout(1500);
+      await p.locator(`${C} button:has-text("20261008-001")`).first().click();
+      await p.waitForTimeout(1500);
+    },
+    marks: [
+      { sel: `${C} div:has(> div:text-matches("^증빙자료")) >> nth=-1`, n: 1, pad: 2 },
+      { sel: `${C} a:text-is("전표 출력")`, n: 2 },
+      { sel: `${C} button:has-text("20261008-001") span[role=button]`, n: 3 },
+    ],
+  },
+  {
+    file: "accounting/evidence-list.png", path: "/accounting/vouchers", clip: C, maxHeight: 760,
+    prepare: async (p) => {
+      await setDates(p, "2026-10-01", "2026-10-12");
+      await p.locator(`${C} select`).nth(0).selectOption({ label: "일반회계" });
+      await clickExact(p, "조회"); await p.waitForTimeout(1500);
+    },
+    marks: [
+      { sel: `${C} span[role=button] >> nth=0`, n: 1, pad: 3 },
+      { sel: `${C} button:text-is("전표 출력")`, n: 2 },
+    ],
+  },
+  {
+    file: "accounting/evidence-viewer.png", path: "/accounting/vouchers", clip: null, height: 860,
+    prepare: async (p) => {
+      await setDates(p, "2026-10-01", "2026-10-12");
+      await p.locator(`${C} select`).nth(0).selectOption({ label: "일반회계" });
+      await clickExact(p, "조회"); await p.waitForTimeout(1500);
+      await p.locator(`${C} span[role=button]`).first().click();
+      await p.waitForTimeout(1500);
+    },
+    allowModal: true,
+  },
+  {
+    file: "accounting/evidence-modal.png", path: "/accounting/vouchers", clip: null, height: 980,
+    prepare: async (p) => {
+      await setDates(p, "2026-10-10", "2026-10-10");
+      await p.locator(`${C} select`).nth(0).selectOption({ label: "일반회계" });
+      await clickExact(p, "조회"); await p.waitForTimeout(1500);
+      await p.locator(`${C} button:has-text("20261010-001")`).first().click();
+      await p.waitForTimeout(2000);
+    },
+    allowModal: true,
+  },
+  {
+    // 일반회계 20261010-001 (공과금 — PDF·이미지 증빙) : id 는 가상 데이터 기준 → 실행 시 CAP_PRINT_IDS 로 지정
+    file: "accounting/voucher-print.png", path: `/accounting/vouchers/print?ids=${process.env.CAP_PRINT_IDS || "1"}`, clip: "section.sheet", clipPad: 0, maxHeight: 1100,
+    width: 900, height: 1200,
+  },
+
   // ───────── 전표현황 (accounting-vouchers) ─────────
   {
     file: "accounting/vouchers-overview.png", path: "/accounting/vouchers", clip: C, maxHeight: 900,

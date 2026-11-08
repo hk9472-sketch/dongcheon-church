@@ -1133,6 +1133,28 @@ model HelpPage {
 }
 
 // ============================================================
+// 회계 - 전표 증빙자료 (영수증·세금계산서 등 이미지 / PDF)
+//   파일 실물: <UPLOAD_DIR>/acc-evidence/<YYYY>/<회계코드>_<회계명>/<전표번호>-<일련번호3자리>.<ext>
+//     예) data/acc-evidence/2026/002_일반회계/20261108-001-001.pdf  — 서버 폴더에서 전표번호로 바로 찾을 수 있게.
+//   웹 공개 경로 없음 — /api/accounting/attachments/[id] 에서 행정실 권한 확인 후 내려준다.
+// ============================================================
+model AccVoucherAttachment {
+  id         Int        @id @default(autoincrement())
+  voucherId  Int
+  voucher    AccVoucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  seq        Int                         // 전표 안 첨부 일련번호 1,2,3… (지운 번호는 다시 쓰지 않음)
+  storedPath String     @db.VarChar(255) // 업로드 루트 기준 상대 경로 (acc-evidence/2026/002_일반회계/20261108-001-001.pdf)
+  origName   String     @db.VarChar(255) // 올린 파일 이름
+  mimeType   String     @db.VarChar(100) // 파일 내용으로 판별한 형식
+  fileSize   Int
+  createdBy  String     @db.VarChar(50)
+  createdAt  DateTime   @default(now())
+
+  @@unique([voucherId, seq])
+  @@map("acc_voucher_attachments")
+}
+
+// ============================================================
 // 회계 - 회계단위 (일반회계, 건축회계 등)
 // ============================================================
 model AccUnit {
@@ -1304,6 +1326,8 @@ model AccVoucher {
   updatedAt   DateTime @updatedAt
 
   items       AccVoucherItem[]
+  attachments AccVoucherAttachment[]               // 증빙자료 (이미지 / PDF)
+  evidenceSeq Int      @default(0)                 // 마지막으로 쓴 증빙 일련번호 (지운 번호를 다시 쓰지 않게)
 
   @@unique([unitId, externalRef])
   @@unique([unitId, voucherNo])

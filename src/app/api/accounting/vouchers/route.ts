@@ -70,6 +70,17 @@ export async function GET(request: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {};
 
+  // ids=1,2,3 — 전표 출력 화면에서 고른 전표만 (최대 1000장)
+  const idsParam = searchParams.get("ids");
+  if (idsParam) {
+    const ids = idsParam
+      .split(",")
+      .map((x) => parseInt(x, 10))
+      .filter((n) => Number.isInteger(n) && n > 0)
+      .slice(0, 1000);
+    where.id = { in: ids.length ? ids : [0] };
+  }
+
   // unitId 미지정 또는 "all" → 전체 회계단위 조회
   if (unitId && unitId !== "all") {
     where.unitId = parseInt(unitId, 10);
@@ -135,6 +146,7 @@ export async function GET(request: NextRequest) {
     include: {
       unit: { select: { id: true, code: true, name: true } },
       fund: { select: { id: true, name: true } },
+      attachments: { select: { id: true, seq: true, storedPath: true, origName: true, mimeType: true, fileSize: true }, orderBy: { seq: "asc" } },
       items: {
         include: {
           account: {

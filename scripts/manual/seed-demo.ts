@@ -162,7 +162,7 @@ const STAFF = { ledger: "김회계", ledger2: "박집사", offering: "이연보"
 
 async function wipe() {
   const tables = [
-    "acc_unit_transfers", "acc_transfers", "acc_fund_checks", "acc_fund_balances", "acc_voucher_items", "acc_vouchers",
+    "acc_unit_transfers", "acc_transfers", "acc_fund_checks", "acc_fund_balances", "acc_voucher_attachments", "acc_voucher_items", "acc_vouchers",
     "acc_closings", "acc_year_closings", "acc_balances", "offering_account_mappings", "acc_funds", "acc_accounts", "acc_units",
     "offering_entries", "offering_settlements", "offering_member_numbers", "offering_members",
     "monthly_dues_deposits", "monthly_dues_amounts", "monthly_dues_members", "sessions", "users",

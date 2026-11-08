@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { checkAccAccess } from "@/lib/accountAuth";
 import { resolveVoucherFund } from "@/lib/accFund";
+import { removeEvidenceFiles } from "@/lib/accEvidence";
 
 /**
  * 날짜 문자열(YYYY-MM-DD)을 UTC 자정 Date로 변환
@@ -43,6 +44,7 @@ export async function GET(
       },
       unit: { select: { id: true, code: true, name: true } },
       fund: { select: { id: true, name: true } },
+      attachments: { select: { id: true, seq: true, storedPath: true, origName: true, mimeType: true, fileSize: true }, orderBy: { seq: "asc" } },
     },
   });
 
@@ -208,6 +210,7 @@ export async function PUT(
           orderBy: { seq: "asc" },
         },
         fund: { select: { id: true, name: true } },
+        attachments: { select: { id: true, seq: true, storedPath: true, origName: true, mimeType: true, fileSize: true }, orderBy: { seq: "asc" } },
       },
     });
 
@@ -261,8 +264,13 @@ export async function DELETE(
     );
   }
 
-  // Cascade delete로 items도 함께 삭제됨
+  // Cascade delete로 items · 증빙 기록도 함께 삭제됨 → 증빙 파일 실물도 지움
+  const evidence = await prisma.accVoucherAttachment.findMany({
+    where: { voucherId },
+    select: { storedPath: true },
+  });
   await prisma.accVoucher.delete({ where: { id: voucherId } });
+  await removeEvidenceFiles(evidence.map((e) => e.storedPath));
 
   return NextResponse.json({ success: true });
 }
