@@ -40,13 +40,12 @@ export default function LivePage() {
         </div>
       </div>
 
-      {/* 영상 영역 */}
-      <div className="bg-black rounded-lg overflow-hidden shadow-lg">
+      {/* 영상 영역 — 영상(검은 상자) + 그 아래 별도 소리 조절 칸은 컴포넌트가 함께 렌더 */}
+      <div>
         {embedUrl ? (
-          // 16:9 영상 박스 + 하단 소리 조절 바는 컴포넌트가 함께 렌더
           <LiveYoutubePlayer embedUrl={embedUrl} />
         ) : (
-          <div className="flex flex-col items-center justify-center h-64 text-gray-400 px-4 text-center">
+          <div className="flex flex-col items-center justify-center h-64 text-gray-400 px-4 text-center bg-black rounded-lg shadow-lg">
             {youtubeUrl ? (
               <>
                 <p className="text-sm">실시간 방송을 불러올 수 없습니다.</p>

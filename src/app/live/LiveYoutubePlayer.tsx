@@ -271,29 +271,33 @@ export default function LiveYoutubePlayer({ embedUrl }: Props) {
 
   return (
     <>
-      <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
-        <iframe
-          id="dc-live-yt"
-          ref={iframeRef}
-          className="absolute inset-0 w-full h-full"
-          src={src}
-          title="동천교회 실시간 예배"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-        />
+      {/* 영상 — 검은 상자는 영상만 감싼다 (소리 조절 칸은 상자 밖, 유튜브 화면과 구분) */}
+      <div className="bg-black rounded-lg overflow-hidden shadow-lg">
+        <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+          <iframe
+            id="dc-live-yt"
+            ref={iframeRef}
+            className="absolute inset-0 w-full h-full"
+            src={src}
+            title="동천교회 실시간 예배"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
       </div>
 
-      {/* 소리 조절 바 — 영상 바로 아래 */}
+      {/* 소리 조절 칸 — 영상(유튜브) 상자 밖, 별도 칸 */}
       <div
         data-live-controls
-        className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 bg-gray-900 text-white"
+        className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 shadow-sm"
       >
+        <span className="text-sm font-bold text-gray-700">소리</span>
         {muted ? (
           <button
             type="button"
             onClick={unmuteMax}
             disabled={!ready}
-            className="px-3 py-2 rounded-md bg-red-600 hover:bg-red-700 text-sm font-bold disabled:opacity-50 animate-pulse"
+            className="px-3 py-2 rounded-md bg-red-600 hover:bg-red-700 text-sm font-bold text-white disabled:opacity-50 animate-pulse"
           >
             🔊 소리 켜기 (최대 음량)
           </button>
@@ -301,7 +305,7 @@ export default function LiveYoutubePlayer({ embedUrl }: Props) {
           <button
             type="button"
             onClick={muteNow}
-            className="px-3 py-2 rounded-md bg-gray-700 hover:bg-gray-600 text-sm"
+            className="px-3 py-2 rounded-md border border-gray-300 bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm"
             title="음소거"
           >
             🔇 음소거
@@ -309,7 +313,7 @@ export default function LiveYoutubePlayer({ embedUrl }: Props) {
         )}
 
         {isIOS ? (
-          <span className="text-xs text-gray-300">
+          <span className="text-xs text-gray-500">
             아이폰·아이패드는 기기 옆 <strong>볼륨 버튼</strong>으로 크기를 조절하세요.
           </span>
         ) : (
@@ -327,12 +331,12 @@ export default function LiveYoutubePlayer({ embedUrl }: Props) {
               className="flex-1 h-2 accent-red-500 cursor-pointer"
             />
             <span className="text-sm" aria-hidden>🔊</span>
-            <span className="w-11 text-right text-xs tabular-nums text-gray-200">{shownVolume}%</span>
+            <span className="w-11 text-right text-xs tabular-nums text-gray-600">{shownVolume}%</span>
             <button
               type="button"
               onClick={() => changeVolume(100)}
               disabled={!ready}
-              className="px-2 py-1 text-xs rounded border border-gray-600 hover:bg-gray-700 disabled:opacity-50"
+              className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50"
             >
               최대
             </button>
