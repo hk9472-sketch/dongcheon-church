@@ -6,6 +6,7 @@ import LiveServiceTracker from "@/components/LiveServiceTracker";
 import LiveYoutubePlayer from "./LiveYoutubePlayer";
 import LiveSubscriberCount from "./LiveSubscriberCount";
 import LiveServiceInfo from "./LiveServiceInfo";
+import LiveBadge from "./LiveBadge";
 import { parseYouTubeLiveUrl } from "@/lib/youtubeEmbed";
 
 export default function LivePage() {
@@ -34,10 +35,8 @@ export default function LivePage() {
             </svg>
             <span className="text-xs font-bold text-emerald-700">참석 통계</span>
           </Link>
-          <span className="flex items-center gap-1.5 px-3 py-1 bg-red-50 border border-red-200 rounded-full">
-            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-            <span className="text-xs font-bold text-red-600">LIVE</span>
-          </span>
+          {/* 방송 중일 때만 보임 (확인 중 · 방송 대기에는 숨김) */}
+          <LiveBadge />
         </div>
       </div>
 

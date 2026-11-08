@@ -214,6 +214,12 @@ export default function LiveYoutubePlayer({ embedUrl, offline }: Props) {
     };
   }, [src]);
 
+  // 방송 상태를 머리글 LIVE 표시(LiveBadge)에 알림
+  useEffect(() => {
+    window.__dcLiveStatus = status;
+    window.dispatchEvent(new Event("dc-live-status"));
+  }, [status]);
+
   // 플레이어 API 가 응답하지 않으면(네트워크 등) 8초 뒤 영상을 그대로 보여 줌
   useEffect(() => {
     if (status !== "checking") return;
