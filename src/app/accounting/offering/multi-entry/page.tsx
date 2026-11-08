@@ -590,18 +590,12 @@ export default function MultiOfferingEntryPage() {
       }> = await res.json();
 
       const typeKeys = new Set<string>(TYPES.map((t) => t.key));
-      const typeIdx = new Map<string, number>(TYPES.map((t, i) => [t.key, i]));
       // 입력 순서(id 오름차순)로 처리해 '입력 줄' 을 복원
       const ordered = [...list].sort((a, b) => a.id - b.id);
       const byKey = new Map<string, Row[]>();
       const loaded: Row[] = [];
       const minIdOf = new Map<Row, number>();
       let skipped = 0;
-      // 줄 키 없던 시절의 무기명 건 복원 상태
-      let anonRow: Row | null = null;
-      let anonLastId = -1;
-      let anonLastIdx = -1;
-      let anonLastTime = 0;
 
       const newLoadedRow = (memberId: number | null, rowKey?: string | null): Row => {
         const row: Row = {
@@ -641,20 +635,9 @@ export default function MultiOfferingEntryPage() {
             byKey.set(key, arr);
           }
         } else {
-          // ③ (예전 데이터) 무기명(번호 0/없음) — 번호로 묶으면 서로 다른 사람이 섞이므로
-          //    '같은 줄에서 함께 저장된 건'만 묶는다: id 연속 + 종류 순서 증가 + 거의 같은 시각.
-          const t = e.createdAt ? new Date(e.createdAt).getTime() : 0;
-          const idx = typeIdx.get(e.offeringType) ?? 0;
-          const sameRow =
-            anonRow !== null &&
-            e.id === anonLastId + 1 &&
-            idx > anonLastIdx &&
-            Math.abs(t - anonLastTime) < 5000;
-          if (!sameRow || !anonRow) anonRow = newLoadedRow(null);
-          row = anonRow;
-          anonLastId = e.id;
-          anonLastIdx = idx;
-          anonLastTime = t;
+          // ③ (예전 데이터) 줄 키 없는 무기명(번호 0/없음) — 누구 것인지 알 수 없으므로
+          //    한 건 = 한 줄로 따로 복원한다. (시각·순서로 추측해 묶으면 서로 다른 사람이 섞였음)
+          row = newLoadedRow(null);
         }
         row.amounts[e.offeringType] = String(e.amount);
         row.savedIds[e.offeringType] = e.id;

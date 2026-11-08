@@ -106,8 +106,9 @@ export default function ThanksOfferingPage() {
 
   const sortedEntries = [...entries].sort((a, b) => {
     if (sortBy === "member") {
-      const na = a.memberNoAtDate ?? a.memberId ?? 9_999_999;
-      const nb = b.memberNoAtDate ?? b.memberId ?? 9_999_999;
+      // 무기명(번호 없음)은 0 — 맨 앞에 한데 모음
+      const na = a.memberId ? (a.memberNoAtDate ?? a.memberId) : 0;
+      const nb = b.memberId ? (b.memberNoAtDate ?? b.memberId) : 0;
       if (na !== nb) return na - nb;
     }
     return a.id - b.id;
@@ -329,8 +330,8 @@ export default function ThanksOfferingPage() {
                       <td className="px-4 py-2.5 text-center text-gray-500">{idx + 1}</td>
                       {hasMemberEdit && (
                         <>
-                          <td className="px-4 py-2.5 text-gray-600 print:hidden">{e.memberNoAtDate ?? e.memberId ?? "-"}</td>
-                          <td className="px-4 py-2.5 text-gray-800 font-medium print:hidden">{e.member?.name ?? "(개인번호없음)"}</td>
+                          <td className="px-4 py-2.5 text-gray-600 print:hidden">{e.memberId ? (e.memberNoAtDate ?? e.memberId) : 0}</td>
+                          <td className="px-4 py-2.5 text-gray-800 font-medium print:hidden">{e.member?.name ?? (e.memberId ? "(미등록)" : "(무기명)")}</td>
                           <td className="px-4 py-2.5 text-gray-500 print:hidden">{e.member?.groupName || "-"}</td>
                           <td className="px-4 py-2.5 text-right text-blue-700 font-medium print:hidden">
                             {fmtAmount(e.amount)}

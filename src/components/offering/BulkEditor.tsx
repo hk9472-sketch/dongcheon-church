@@ -161,8 +161,9 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
       const mapped: Entry[] = list.map((e) => ({
         id: e.id,
         date: e.date.slice(0, 10),
-        memberId: e.memberId != null ? String(e.memberId) : "",
-        memberName: e.member?.name ?? "",
+        // 무기명(번호 없음)은 0 으로 표시 — 예전 0/없음 저장분을 한 가지로 보여 줌
+        memberId: e.memberId ? String(e.memberId) : "0",
+        memberName: e.member?.name ?? (e.memberId ? "(미등록)" : "(무기명)"),
         offeringType: e.offeringType,
         amount: String(e.amount),
         description: e.description ?? "",
@@ -279,7 +280,7 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
     if (!Number.isFinite(id) || id <= 0) {
       setRows((prev) => {
         const next = [...prev];
-        next[idx] = { ...next[idx], memberName: "" };
+        next[idx] = { ...next[idx], memberName: r.memberId.trim() === "0" ? "(무기명)" : "" };
         return next;
       });
       return;

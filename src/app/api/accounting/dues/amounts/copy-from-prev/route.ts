@@ -30,8 +30,9 @@ export async function POST(req: NextRequest) {
   const overwrite = !!body.overwrite;
   const prevYear = year - 1;
 
+  // 전년 기록 전부 — 0원(탈퇴)도 가져와 올해 '탈퇴'로 이어 준다 (미설정 빈 칸으로 보이지 않게)
   const prev = await prisma.monthlyDuesAmount.findMany({
-    where: { category, year: prevYear, amount: { gt: 0 } },
+    where: { category, year: prevYear, amount: { gte: 0 } },
   });
   if (prev.length === 0) {
     return NextResponse.json({
@@ -58,8 +59,27 @@ export async function POST(req: NextRequest) {
 
   let copied = 0;
   let skipped = 0;
+  let withdrawnKept = 0;
+  const operator = acc.user?.name ?? acc.user?.userId ?? "";
   for (const p of prev) {
     if (!activeIds.has(p.memberId)) {
+      skipped++;
+      continue;
+    }
+    // 전년 탈퇴(0원): 올해 기록이 없을 때만 0원(탈퇴)으로 이어 줌 — 올해 이미 넣은 금액(재가입)은 건드리지 않음
+    if (p.amount === 0) {
+      if (currMap.has(p.memberId)) {
+        skipped++;
+      } else {
+        await prisma.monthlyDuesAmount.create({
+          data: { category, year, memberId: p.memberId, amount: 0, createdBy: operator },
+        });
+        withdrawnKept++;
+      }
+      continue;
+    }
+    // 올해 0원으로 저장한 회원 = 올해 탈퇴 → 덮어쓰기여도 되살리지 않음
+    if (currMap.get(p.memberId) === 0) {
       skipped++;
       continue;
     }
@@ -76,5 +96,5 @@ export async function POST(req: NextRequest) {
     copied++;
   }
 
-  return NextResponse.json({ ok: true, copied, skipped, prevYear });
+  return NextResponse.json({ ok: true, copied, skipped, withdrawnKept, prevYear });
 }

@@ -10,6 +10,7 @@ interface Member {
   memberNo: number;
   name: string;
   monthlyAmount?: number;
+  withdrawn?: boolean; // 그 해 월정액 0원 = 탈퇴 → 미입금 칸 입력 불가
 }
 
 interface Cell {
@@ -21,6 +22,8 @@ interface Cell {
   amount: string;
   /** 입금 완료 셀 마우스오버 — 입금일·금액·입력자·최종입력 */
   paidTitle?: string;
+  /** 탈퇴 회원의 미입금 칸 — 체크·입력 불가 */
+  locked?: boolean;
 }
 
 interface Props {
@@ -95,6 +98,7 @@ export default function DepositMatrix({ category }: Props) {
           const isPaid = paidMap.has(`${m.id}:${mo}`);
           mat[m.id][mo] = {
             paid: isPaid,
+            locked: !!m.withdrawn && !isPaid,
             checked: false,
             amount: "",
             paidTitle: paidTitleMap.get(`${m.id}:${mo}`)?.join("\n\n"),
@@ -127,7 +131,7 @@ export default function DepositMatrix({ category }: Props) {
   /** 체크박스 토글 — 체크하면서 금액이 비어 있으면 월정액 자동 채움 */
   const toggleCell = (member: Member, month: number, checked: boolean) => {
     const cur = matrix[member.id]?.[month];
-    if (!cur || cur.paid) return;
+    if (!cur || cur.paid || cur.locked) return;
     const next: Partial<Cell> = { checked };
     if (checked && !cur.amount && member.monthlyAmount) {
       next.amount = String(member.monthlyAmount);
@@ -148,7 +152,7 @@ export default function DepositMatrix({ category }: Props) {
     const cell = matrix[m.id]?.[mo];
     const key = `${m.id}:${mo}`;
     const el = cellRefs.current.get(key);
-    if (el && cell && !cell.paid) {
+    if (el && cell && !cell.paid && !cell.locked) {
       el.focus();
       el.select();
     }
@@ -166,7 +170,7 @@ export default function DepositMatrix({ category }: Props) {
       for (let r = rowIdx + 1; r < memberList.length; r++) {
         const m = memberList[r];
         const c = matrix[m.id]?.[colIdx + 1];
-        if (c && !c.paid) {
+        if (c && !c.paid && !c.locked) {
           focusCell(r, colIdx, memberList);
           return;
         }
@@ -176,7 +180,7 @@ export default function DepositMatrix({ category }: Props) {
       for (let r = rowIdx - 1; r >= 0; r--) {
         const m = memberList[r];
         const c = matrix[m.id]?.[colIdx + 1];
-        if (c && !c.paid) {
+        if (c && !c.paid && !c.locked) {
           focusCell(r, colIdx, memberList);
           return;
         }
@@ -188,7 +192,7 @@ export default function DepositMatrix({ category }: Props) {
         e.preventDefault();
         for (let c = colIdx - 1; c >= 0; c--) {
           const cell = matrix[memberList[rowIdx].id]?.[c + 1];
-          if (cell && !cell.paid) {
+          if (cell && !cell.paid && !cell.locked) {
             focusCell(rowIdx, c, memberList);
             return;
           }
@@ -200,7 +204,7 @@ export default function DepositMatrix({ category }: Props) {
         e.preventDefault();
         for (let c = colIdx + 1; c < 12; c++) {
           const cell = matrix[memberList[rowIdx].id]?.[c + 1];
-          if (cell && !cell.paid) {
+          if (cell && !cell.paid && !cell.locked) {
             focusCell(rowIdx, c, memberList);
             return;
           }
@@ -211,7 +215,7 @@ export default function DepositMatrix({ category }: Props) {
       e.preventDefault();
       const m = memberList[rowIdx];
       const cell = matrix[m.id]?.[colIdx + 1];
-      if (cell && !cell.paid) toggleCell(m, colIdx + 1, !cell.checked);
+      if (cell && !cell.paid && !cell.locked) toggleCell(m, colIdx + 1, !cell.checked);
     }
   };
 
@@ -230,7 +234,7 @@ export default function DepositMatrix({ category }: Props) {
       next[memberId] = { ...next[memberId] };
       for (const mo of MONTHS) {
         const c = next[memberId][mo];
-        if (!c.paid) next[memberId][mo] = checkedCell(c, memberId, target);
+        if (!c.paid && !c.locked) next[memberId][mo] = checkedCell(c, memberId, target);
       }
       return next;
     });
@@ -244,7 +248,7 @@ export default function DepositMatrix({ category }: Props) {
         const id = parseInt(mid, 10);
         next[id] = { ...row };
         const c = row[month];
-        if (!c.paid) next[id][month] = checkedCell(c, id, target);
+        if (!c.paid && !c.locked) next[id][month] = checkedCell(c, id, target);
       }
       return next;
     });
@@ -257,7 +261,7 @@ export default function DepositMatrix({ category }: Props) {
       const row = matrix[m.id] || {};
       for (const mo of MONTHS) {
         const c = row[mo];
-        if (!c || c.paid || !c.checked) continue;
+        if (!c || c.paid || c.locked || !c.checked) continue;
         const amt = parseInt(c.amount.replace(/[^\d]/g, ""), 10);
         if (!Number.isFinite(amt) || amt <= 0) continue;
         items.push({
@@ -438,7 +442,10 @@ export default function DepositMatrix({ category }: Props) {
                   <tr key={m.id} className="border-b last:border-b-0 hover:bg-blue-50/30">
                     <td className="px-2 py-1 font-mono text-gray-500">{m.memberNo}</td>
                     <td className="px-2 py-1">
-                      <div className="font-medium text-gray-800">{m.name}</div>
+                      <div className="font-medium text-gray-800">
+                        {m.name}
+                        {m.withdrawn && <span className="ml-1 inline-block rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 align-middle" title="이 해 월정액을 0원으로 저장 — 탈퇴">탈퇴</span>}
+                      </div>
                       {m.monthlyAmount ? (
                         <div className="text-[10px] text-gray-500 font-mono">
                           {fmt(m.monthlyAmount)}
@@ -448,6 +455,13 @@ export default function DepositMatrix({ category }: Props) {
                     {MONTHS.map((mo, colIdx) => {
                       const c = row[mo];
                       if (!c) return <td key={mo} />;
+                      if (c.locked) {
+                        return (
+                          <td key={mo} className="px-1 py-1 text-center text-gray-300 bg-gray-50" title="탈퇴 (월정액 0원)">
+                            —
+                          </td>
+                        );
+                      }
                       if (c.paid) {
                         return (
                           <td
@@ -497,7 +511,7 @@ export default function DepositMatrix({ category }: Props) {
                       );
                     })}
                     <td className="px-1 py-1 text-center whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-1">
+                      <div className={`flex items-center justify-center gap-1 ${m.withdrawn ? "invisible" : ""}`}>
                         <button
                           type="button"
                           onClick={() => toggleRow(m.id, true)}

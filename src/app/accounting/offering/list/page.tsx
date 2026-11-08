@@ -52,8 +52,9 @@ function firstDayOfMonth(): string {
 function sortEntries(items: EntryItem[], sortBy: SortBy): EntryItem[] {
   return [...items].sort((a, b) => {
     if (sortBy === "member") {
-      const na = a.memberNoAtDate ?? a.memberId ?? 9_999_999;
-      const nb = b.memberNoAtDate ?? b.memberId ?? 9_999_999;
+      // 무기명(번호 없음)은 0 — 맨 앞에 한데 모음
+      const na = a.memberId ? (a.memberNoAtDate ?? a.memberId) : 0;
+      const nb = b.memberId ? (b.memberNoAtDate ?? b.memberId) : 0;
       if (na !== nb) return na - nb;
       return a.id - b.id;
     }
@@ -385,8 +386,8 @@ export default function OfferingListPage() {
                         <td className="px-4 py-2 text-gray-600">
                           {typeof e.date === "string" ? e.date.slice(0, 10) : ""}
                         </td>
-                        <td className="px-4 py-2 text-gray-600">{e.memberNoAtDate ?? e.memberId ?? "-"}</td>
-                        {hasMemberEdit && <td className="px-4 py-2 text-gray-800">{e.member?.name ?? "(개인번호없음)"}</td>}
+                        <td className="px-4 py-2 text-gray-600">{e.memberId ? (e.memberNoAtDate ?? e.memberId) : 0}</td>
+                        {hasMemberEdit && <td className="px-4 py-2 text-gray-800">{e.member?.name ?? (e.memberId ? "(미등록)" : "(무기명)")}</td>}
                         <td className="px-4 py-2 text-gray-400">—</td>
                         <td className="px-4 py-2 text-right text-blue-700 font-medium">{fmtAmount(e.amount)}</td>
                         <td className="px-4 py-2 text-gray-500 whitespace-pre-line align-top">{e.offeringType === DESC_TYPE ? (e.description || "") : ""}</td>
@@ -432,8 +433,8 @@ export default function OfferingListPage() {
                       <td className="px-4 py-2 text-gray-600">
                         {typeof e.date === "string" ? e.date.slice(0, 10) : ""}
                       </td>
-                      <td className="px-4 py-2 text-gray-600">{e.memberId ?? "-"}</td>
-                      {hasMemberEdit && <td className="px-4 py-2 text-gray-800">{e.member?.name ?? "(개인번호없음)"}</td>}
+                      <td className="px-4 py-2 text-gray-600">{e.memberId ?? 0}</td>
+                      {hasMemberEdit && <td className="px-4 py-2 text-gray-800">{e.member?.name ?? (e.memberId ? "(미등록)" : "(무기명)")}</td>}
                       <td className="px-4 py-2 text-gray-600">{e.offeringType}</td>
                       <td className="px-4 py-2 text-right text-blue-700 font-medium">
                         {fmtAmount(e.amount)}

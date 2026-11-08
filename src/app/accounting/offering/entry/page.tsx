@@ -37,6 +37,7 @@ interface SavedEntry {
   offeringType: string;
   amount: number;
   description: string | null;
+  rowKey?: string | null; // 같은 묶음(입력 줄)으로 저장된 건을 잇는 키
   createdAt?: string;
   // 입력자 · 최종입력
   createdBy?: string | null;
@@ -44,24 +45,31 @@ interface SavedEntry {
   modifiedAt?: string | null;
 }
 
-// 전표번호 부여 — 비슷한 시각(±5초) + 같은 memberId 묶음 = 1전표.
-// 최근(목록 위) 묶음이 1번. 같은 묶음 내 행들은 같은 번호.
+// 묶음 번호 부여 — 같은 입력 묶음 = 같은 번호. 최근(목록 위) 묶음이 1번.
+//   · 줄 키(rowKey)가 있으면 그것으로 묶는다 (같은 키 = 한 묶음).
+//   · 줄 키 없는 예전 기명 건: 같은 개인번호 + 비슷한 시각(±5초)이면 한 묶음.
+//   · 줄 키 없는 예전 무기명 건: 서로 다른 사람이 섞이지 않도록 한 건씩 따로.
 function assignVouchers(entries: SavedEntry[]): Record<number, number> {
   const map: Record<number, number> = {};
   let voucher = 0;
   let prevTimeSec = -Infinity;
   let prevMember: number | null | undefined = undefined;
+  let prevRowKey: string | null | undefined = undefined;
   for (const e of entries) {
     const t = e.createdAt ? new Date(e.createdAt).getTime() : 0;
     const sec = Math.floor(t / 1000);
-    const sameGroup =
-      prevMember !== undefined &&
-      e.memberId === prevMember &&
-      Math.abs(sec - prevTimeSec) <= 5;
+    const sameGroup = e.rowKey
+      ? e.rowKey === prevRowKey
+      : !prevRowKey &&
+        prevMember !== undefined &&
+        e.memberId != null &&
+        e.memberId === prevMember &&
+        Math.abs(sec - prevTimeSec) <= 5;
     if (!sameGroup) voucher += 1;
     map[e.id] = voucher;
     prevTimeSec = sec;
     prevMember = e.memberId;
+    prevRowKey = e.rowKey ?? null;
   }
   return map;
 }
@@ -359,6 +367,8 @@ export default function OfferingEntryPage() {
           offeringType: r.offeringType,
           amount: parseAmount(r.amount),
           description: r.description || null,
+          // 묶음(같은 사람의 연보종류 6행) 키 — 무기명 묶음이 여러 개여도 나중에 서로 섞이지 않게
+          rowKey: `e-${r.groupKey}`.slice(0, 40),
         };
       }),
     };
@@ -711,10 +721,10 @@ export default function OfferingEntryPage() {
                       >
                         {isFirstOfGroup ? v : ""}
                       </td>
-                      <td className="px-3 py-2 text-gray-600">{e.memberNoAtDate ?? e.memberId ?? "-"}</td>
+                      <td className="px-3 py-2 text-gray-600">{e.memberId ? (e.memberNoAtDate ?? e.memberId) : 0}</td>
                       {hasMemberEdit && (
                         <td className="px-3 py-2 text-gray-800">
-                          {e.member?.name ?? "(개인번호없음)"}
+                          {e.member?.name ?? (e.memberId ? "(미등록)" : "(무기명)")}
                         </td>
                       )}
                       <td className="px-3 py-2 text-gray-600">{e.offeringType}</td>

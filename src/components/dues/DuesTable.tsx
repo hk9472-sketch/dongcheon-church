@@ -12,6 +12,7 @@ interface DuesItem extends AuditFields {
   /** 서버에 저장된 원본 이름 — 변경 감지용 */
   originalName: string;
   amount: number; // 월정액
+  withdrawn?: boolean; // 그 해 월정액 0원으로 저장됨 = 탈퇴
   // UI 상태
   status?: "saved" | "dirty" | "saving" | "error";
   message?: string;
@@ -283,6 +284,7 @@ export default function DuesTable({ category }: Props) {
       }
       alert(
         `복사 완료\n복사: ${d.copied}건 · 건너뜀: ${d.skipped}건` +
+          (d.withdrawnKept ? ` · 탈퇴 유지: ${d.withdrawnKept}건` : "") +
           (d.message ? `\n${d.message}` : ""),
       );
       setCopyOpen(false);
@@ -354,6 +356,9 @@ export default function DuesTable({ category }: Props) {
         <p className="text-xs text-gray-500 mt-1">
           연도별로 회원별 월정액을 등록·수정. 신규 회원은 노란 행에 고유번호(미입력 시 자동) +
           이름 + 월정액 입력 후 저장하면 추가됨. ↑↓/Enter 로 행 이동.
+          <br />
+          <strong>월정액을 0으로 저장하면 그 해 탈퇴</strong>로 처리됩니다 — 입금(일괄)·미납 계산에서 빠지고 다음 해
+          [전년회원 불러오기] 때도 탈퇴(0원)로 이어집니다. 다시 금액을 넣어 저장하면 재가입.
         </p>
       </div>
 
@@ -439,7 +444,7 @@ export default function DuesTable({ category }: Props) {
                 <li>
                   <strong>덮어쓰기</strong> — 올해 이미 입력된 금액도 전년 값으로 변경
                 </li>
-                <li>탈퇴(비활성) 회원은 자동 제외</li>
+                <li>전년 탈퇴(0원) 회원은 올해도 0원(탈퇴)으로 이어지고, 올해 0원으로 저장한 회원은 덮어쓰지 않음</li>
               </ul>
             </div>
             <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-end gap-2">
@@ -501,7 +506,12 @@ export default function DuesTable({ category }: Props) {
                   r.status === "dirty" ? "bg-orange-50" : ""
                 }`}
               >
-                <td className="px-3 py-2 text-gray-600 font-mono">{r.memberNo}</td>
+                <td className="px-3 py-2 text-gray-600 font-mono whitespace-nowrap">
+                  {r.memberNo}
+                  {r.id > 0 && r.amount === 0 && r.status !== "dirty" && (
+                    <span className="ml-1 inline-block rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 align-middle" title="이 해 월정액을 0원으로 저장 — 탈퇴">탈퇴</span>
+                  )}
+                </td>
                 <td className="px-3 py-2">
                   <input
                     type="text"

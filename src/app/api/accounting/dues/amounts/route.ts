@@ -35,6 +35,8 @@ export async function GET(req: NextRequest) {
       memberNo: m.memberNo,
       name: m.name,
       amount: a?.amount ?? 0,
+      // 그 해 월정액을 0원으로 저장 = 그 해 탈퇴 (레코드 없음 = 미설정, 탈퇴 아님)
+      withdrawn: !!a && a.amount === 0,
       // 입력자 · 최종입력 (월정액 레코드 기준, 레코드 없으면 null)
       createdBy: a?.createdBy ?? null,
       createdAt: a?.createdAt ?? null,

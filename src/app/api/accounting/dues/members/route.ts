@@ -41,11 +41,9 @@ export async function GET(req: NextRequest) {
   });
   const currentMap = new Map(currentAmounts.map((a) => [a.memberId, a.amount]));
 
-  // 2) 요청 연도에 amount 가 없거나 0 인 회원은 과거 가장 최근 연도 amount 로 fallback
-  const missingIds = memberIds.filter((id) => {
-    const cur = currentMap.get(id);
-    return cur == null || cur === 0;
-  });
+  // 2) 요청 연도에 amount 가 '없는'(미설정) 회원만 과거 가장 최근 연도 amount 로 fallback.
+  //    0원으로 저장한 회원은 그 해 탈퇴 — 전년 금액으로 채우지 않는다.
+  const missingIds = memberIds.filter((id) => currentMap.get(id) == null);
   const fallbackMap = new Map<number, number>();
   if (missingIds.length > 0) {
     const past = await prisma.monthlyDuesAmount.findMany({
@@ -66,6 +64,7 @@ export async function GET(req: NextRequest) {
   const withAmount = members.map((m) => ({
     ...m,
     monthlyAmount: currentMap.get(m.id) ?? fallbackMap.get(m.id) ?? null,
+    withdrawn: currentMap.get(m.id) === 0, // 그 해 월정액 0원 = 탈퇴
   }));
 
   return NextResponse.json({ members: withAmount });

@@ -1,4 +1,5 @@
-// 월정관리(전도회·건축) 매뉴얼 캡처 — 가상 DB 서버(localhost:3100) 기준.
+// 월정관리(전도회·건축) 매뉴얼 캡처 — 가상 DB 서버(CAP_BASE, 기본 localhost:3100) 기준.
+//   가상 데이터의 전도회 6번(임지호)은 탈퇴(그 해 월정액 0원) 예시 — 입금(일괄)에서 7월 이후 칸이 잠김.
 // 실행: node specs-dues.mjs [파일명일부]
 // 출력: public/help/dues/*.png
 // 주의: 저장·삭제·반영 버튼은 누르지 않는다 (입력 상태·모달만 캡처).
@@ -88,15 +89,15 @@ await run([
   {
     file: "dues/guide-2-matrix.png", path: `${J}/deposit-matrix`,
     prepare: async (p) => {
-      for (const r of [1, 2, 5, 6]) await check(p, r, 11);
-      await region(p, `${C} h1`, "tbody tr:nth-child(6)");
+      for (const r of [1, 2, 5, 7]) await check(p, r, 11);
+      await region(p, `${C} h1`, "tbody tr:nth-child(7)");
     },
     marks: [
       { sel: `${TB} input[type=date]`, n: 1, el: "parent" },
       { sel: mcell(1, 11), n: 2, pad: 2 },
       { sel: mcell(2, 11), n: "", pad: 2 },
       { sel: mcell(5, 11), n: "", pad: 2 },
-      { sel: mcell(6, 11), n: "", pad: 2 },
+      { sel: mcell(7, 11), n: "", pad: 2 },
       { sel: "button:has-text('선택 저장')", n: 3 },
     ],
     clip: "#__cb",
@@ -522,6 +523,27 @@ await run([
     marks: [
       { sel: `${C} h1`, n: 1 },
       { sel: `${TB} div.ml-auto`, n: 2 },
+    ],
+    clip: "#__cb",
+  },
+  // ================= 탈퇴(월정액 0원) =================
+  {
+    file: "dues/withdrawn-1.png", path: `${J}/dues`,
+    // 월정 화면은 이름이 입력칸 안에 있어 글자로 못 찾음 → 6번째 줄(고유번호 6)
+    prepare: (p) => region(p, `${C} h1`, `${C} tbody tr:nth-child(6)`, { padTop: 8, padBottom: 6 }),
+    marks: [
+      { sel: `${C} p:has-text("0으로 저장하면")`, n: 1, pad: 2 },
+      { sel: `${C} tbody tr:nth-child(6) >> td >> nth=0`, n: 2, pad: 2 },
+      { sel: `${C} tbody tr:nth-child(6) >> td >> nth=2`, n: 3, pad: 2 },
+    ],
+    clip: "#__cb",
+  },
+  {
+    file: "dues/withdrawn-2.png", path: `${J}/deposit-matrix`,
+    prepare: (p) => region(p, `${C} thead`, `${C} tbody tr:has-text("임지호")`, { padTop: 6, padBottom: 6 }),
+    marks: [
+      { sel: `${C} tbody tr:has-text("임지호") >> td >> nth=1`, n: 1, pad: 2 },
+      { sel: `${C} tbody tr:has-text("임지호") >> td >> nth=8`, n: 2, pad: 2 },
     ],
     clip: "#__cb",
   },

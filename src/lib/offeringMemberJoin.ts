@@ -24,6 +24,9 @@ export async function attachMembers<
   entries: T[],
   options?: { includeInactive?: boolean },
 ): Promise<WithMember<T>[]> {
+  // 무기명 표현 통일: 예전에 개인번호 0 으로 저장된 건(2026-06~10 입력분)도 null 로 돌려준다.
+  //   화면마다 0 은 '0', null 은 '-' 로 따로 표시·정렬되어 무기명이 둘로 갈라지던 문제 방지.
+  entries = entries.map((e) => (e.memberId != null && e.memberId <= 0 ? { ...e, memberId: null } : e));
   const ids = Array.from(
     new Set(entries.map((e) => e.memberId).filter((v): v is number => v != null && v > 0)),
   );

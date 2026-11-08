@@ -129,7 +129,7 @@ async function handleIndividual(
     const bucket = e.memberId ?? ANON_KEY;
     if (!grouped[bucket]) {
       grouped[bucket] = {
-        member: e.member ?? { id: ANON_KEY, name: "(개인번호없음)", groupName: null },
+        member: e.member ?? { id: ANON_KEY, name: "(무기명)", groupName: null },
         byType: {},
         total: 0,
       };
@@ -314,7 +314,7 @@ async function handlePeriod(
     const key = `${bucket}_${e.offeringType}`;
     if (!grouped[key]) {
       grouped[key] = {
-        member: e.member ?? { id: ANON_KEY, name: "(개인번호없음)", groupName: null },
+        member: e.member ?? { id: ANON_KEY, name: "(무기명)", groupName: null },
         offeringType: e.offeringType,
         amount: 0,
         count: 0,

@@ -53,6 +53,7 @@ interface Member {
   memberNo: number;
   name: string;
   monthlyAmount?: number;
+  withdrawn?: boolean; // 그 해 월정액 0원 = 탈퇴
 }
 
 export default function DepositTable({ category }: Props) {
@@ -240,7 +241,7 @@ export default function DepositTable({ category }: Props) {
           next[idx] = {
             ...next[idx],
             memberId: found.id,
-            memberName: found.name,
+            memberName: found.withdrawn ? `${found.name} (탈퇴 — 월정액 0원)` : found.name,
           };
         } else {
           next[idx] = { ...next[idx], memberName: "(없음 — 월정 메뉴에서 등록)" };
@@ -519,7 +520,10 @@ export default function DepositTable({ category }: Props) {
                         onClick={() => pickMember(pickerOpenForIdx, m)}
                       >
                         <td className="px-3 py-2 font-mono w-14">{m.memberNo}</td>
-                        <td className="px-3 py-2 font-medium">{m.name}</td>
+                        <td className="px-3 py-2 font-medium">
+                          {m.name}
+                          {m.withdrawn && <span className="ml-1 inline-block rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 align-middle" title="이 해 월정액을 0원으로 저장 — 탈퇴">탈퇴</span>}
+                        </td>
                         <td className="px-3 py-2 text-right font-mono text-gray-500 w-24">
                           {m.monthlyAmount ? fmt(m.monthlyAmount) : ""}
                         </td>

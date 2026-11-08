@@ -141,6 +141,7 @@ async function memberReport(category: string, year: number) {
     byInstallmentDetails: Record<number, DepositLite[]>; // 회차별 입금 상세 (date+amount)
     total: number;
     expectedAnnual: number; // monthlyDues * 12
+    withdrawn: boolean; // 그 해 월정액 0원으로 저장 = 탈퇴 (미납 계산 제외)
     unpaidInstallments: number[]; // 1-12 중 입금 = 0 인 회차
   };
   const rows: Row[] = members.map((m) => {
@@ -154,6 +155,7 @@ async function memberReport(category: string, year: number) {
       byInstallmentDetails: {},
       total: 0,
       expectedAnnual: monthlyDues * 12,
+      withdrawn: amtMap.has(m.id) && amtMap.get(m.id) === 0,
       unpaidInstallments: [],
     };
   });

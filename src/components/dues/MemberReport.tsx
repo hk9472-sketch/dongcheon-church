@@ -20,6 +20,7 @@ interface Row {
   total: number;
   expectedAnnual: number;
   unpaidInstallments: number[];
+  withdrawn?: boolean; // 그 해 월정액 0원 = 탈퇴
 }
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
@@ -178,7 +179,10 @@ export default function MemberReport({ category }: Props) {
             {filtered.map((r) => (
               <tr key={r.memberId} className="border-b last:border-b-0 hover:bg-gray-50">
                 <td className="px-2 py-1.5 font-mono text-gray-500">{r.memberNo}</td>
-                <td className="px-2 py-1.5 text-gray-800">{r.name}</td>
+                <td className="px-2 py-1.5 text-gray-800">
+                  {r.name}
+                  {r.withdrawn && <span className="ml-1 inline-block rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 align-middle" title="이 해 월정액을 0원으로 저장 — 탈퇴">탈퇴</span>}
+                </td>
                 <td className="px-2 py-1.5 text-right font-mono text-amber-700 bg-amber-50">
                   {r.monthlyDues > 0 ? fmt(r.monthlyDues) : "-"}
                 </td>

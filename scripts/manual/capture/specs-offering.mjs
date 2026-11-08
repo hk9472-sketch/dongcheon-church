@@ -1,4 +1,4 @@
-// 연보관리 매뉴얼 캡처 spec — 가상 DB 서버(localhost:3100) 기준.
+// 연보관리 매뉴얼 캡처 spec — 가상 DB 서버(CAP_BASE, 기본 localhost:3100) 기준.
 //   전체:   node specs-offering.mjs
 //   일부:   node specs-offering.mjs settlement   (파일명 일부)
 // 주의: 저장(확정) 버튼은 누르지 않는다. 입력 화면은 '입력한 상태'까지만 찍는다.
@@ -425,7 +425,7 @@ const specs = [
           JSON.stringify({ at: Date.now(), date: d, rows: [{ memberNo: "1", amounts, savedIds: {}, description: "", status: "dirty", rowKey: "demo-row-1" }] }),
         );
       }, D);
-      await page.goto("http://localhost:3100/accounting/offering/multi-entry", { waitUntil: "domcontentloaded" });
+      await page.goto(`${process.env.CAP_BASE || "http://localhost:3100"}/accounting/offering/multi-entry`, { waitUntil: "domcontentloaded" });
       await idle(page, 1200);
     },
     marks: [
@@ -612,7 +612,7 @@ const specs = [
           JSON.stringify({ at: Date.now(), rows: [{ id: 0, date: d, memberId: "3", memberName: "신선우", offeringType: "주일연보", amount: "5000", description: "", status: "dirty" }] }),
         );
       }, D);
-      await page.goto("http://localhost:3100/accounting/offering/edit", { waitUntil: "domcontentloaded" });
+      await page.goto(`${process.env.CAP_BASE || "http://localhost:3100"}/accounting/offering/edit`, { waitUntil: "domcontentloaded" });
       await idle(page, 1200);
     },
     marks: [

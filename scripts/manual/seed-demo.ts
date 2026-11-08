@@ -347,8 +347,15 @@ async function main() {
         data: { category, memberNo: i + 1, name, createdBy: STAFF.dues, createdAt: new Date(`${YEAR}-01-03T01:00:00Z`) },
       });
       const amount = between(lo, hi, 10_000);
-      await prisma.monthlyDuesAmount.create({ data: { category, year: YEAR, memberId: mem.id, amount, createdBy: STAFF.dues } });
-      const paidMonths = i % 7 === 3 ? 7 : i % 5 === 2 ? 9 : 10; // 일부 미납
+      // 탈퇴 예시: 전도회 6번 회원 — 6월까지 내고 그 해 월정액을 0원으로 저장(탈퇴)
+      const withdrawn = category === "전도회" && i === 5;
+      await prisma.monthlyDuesAmount.create({
+        data: {
+          category, year: YEAR, memberId: mem.id, amount: withdrawn ? 0 : amount, createdBy: STAFF.dues,
+          ...(withdrawn ? { modifiedBy: STAFF.dues, modifiedAt: new Date(`${YEAR}-07-05T05:00:00Z`) } : {}),
+        },
+      });
+      const paidMonths = withdrawn ? 6 : i % 7 === 3 ? 7 : i % 5 === 2 ? 9 : 10; // 일부 미납
       for (let m = 1; m <= paidMonths; m++) {
         const date = `${YEAR}-${String(m).padStart(2, "0")}-${String(8 + (m % 3)).padStart(2, "0")}`;
         await prisma.monthlyDuesDeposit.create({
