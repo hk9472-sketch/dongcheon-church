@@ -428,7 +428,7 @@ export default function OfferingEntryPage() {
   /* ======== render ======== */
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">연보입력 <HelpButton slug="offering-entry" /></h1>
+      <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2 flex-wrap">연보입력 <HelpButton slug="offering-entry" /> <HelpButton slug="offering-guide" label="연보 업무 매뉴얼" /></h1>
 
       {/* message */}
       {message && (

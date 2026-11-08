@@ -55,8 +55,8 @@ function fmt(n: number) {
 }
 
 function todayStr() {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
+  // 한국 날짜 기준 (UTC 로 자르면 오전 9시 전에는 전날이 됨)
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
 function monthStartStr() {
@@ -287,10 +287,10 @@ export default function DailyReportPage() {
                           </span>
                         </td>
                         <td className="px-4 py-2.5 text-right text-blue-700">
-                          {day.incomeTotal > 0 ? fmt(day.incomeTotal) : "-"}
+                          {day.incomeTotal !== 0 ? fmt(day.incomeTotal) : "-"}
                         </td>
                         <td className="px-4 py-2.5 text-right text-red-600">
-                          {day.expenseTotal > 0 ? fmt(day.expenseTotal) : "-"}
+                          {day.expenseTotal !== 0 ? fmt(day.expenseTotal) : "-"}
                         </td>
                         <td className="px-4 py-2.5 text-right font-medium">{fmt(day.balance)}</td>
                       </tr>

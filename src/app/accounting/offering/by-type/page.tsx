@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import BulkEditor from "@/components/offering/BulkEditor";
+import HelpButton from "@/components/HelpButton";
 
 const OFFERING_TYPES = [
   "주일연보",
@@ -19,7 +20,11 @@ export default function OfferingByTypePage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold text-gray-800">연보종류별 입력/수정</h1>
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2 flex-wrap">
+          연보종류별 입력/수정
+          <HelpButton slug="offering-by-type" />
+          <HelpButton slug="offering-guide" label="연보 업무 매뉴얼" />
+        </h1>
         <p className="text-xs text-gray-500 mt-1">
           한 가지 연보종류만 골라 일자·관리번호·금액·비고 단위로 줄줄이 입력 또는 수정.
           기간으로 기존 내역을 불러와 일자도 수정 가능합니다.

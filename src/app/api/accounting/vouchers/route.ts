@@ -93,18 +93,13 @@ export async function GET(request: NextRequest) {
     };
   }
 
-  // accountName 필터: 계정명·코드 부분일치 항목이 있는 전표
-  if (accountName) {
-    where.AND = [
-      ...(where.AND || []),
-      {
-        items: {
-          some: {
-            account: { OR: [{ name: { contains: accountName } }, { code: { startsWith: accountName } }] },
-          },
-        },
-      },
-    ];
+  // accountName 필터: 계정명·코드 부분일치 항목이 있는 전표.
+  //   전표의 다른 항목도 함께 보여주되(matched=false), 합계·월계·누계는 일치 항목 금액만 (filterAmount).
+  const accountMatch = accountName
+    ? { OR: [{ name: { contains: accountName } }, { code: { startsWith: accountName } }] }
+    : null;
+  if (accountMatch) {
+    where.AND = [...(where.AND || []), { items: { some: { account: accountMatch } } }];
   }
 
   // fundId 필터: 기본 통장이면 fundId=null 전표도 포함
@@ -159,31 +154,54 @@ export async function GET(request: NextRequest) {
     const yearStart = toDateOnly(`${dateFrom.slice(0, 4)}-01-01`);
     const start = toDateOnly(dateFrom);
     if (start > yearStart) {
-      const prior = await prisma.accVoucher.groupBy({
-        by: ["type"],
-        where: { ...where, date: { gte: yearStart, lt: start } },
-        _sum: { totalAmount: true },
-      });
-      for (const p of prior) {
-        if (p.type === "D") priorIncome += p._sum.totalAmount ?? 0;
-        else priorExpense += p._sum.totalAmount ?? 0;
+      if (accountMatch) {
+        // 계정명 필터: 해당 계정 항목 금액만 누계
+        for (const t of ["D", "C"] as const) {
+          const agg = await prisma.accVoucherItem.aggregate({
+            where: { account: accountMatch, voucher: { ...where, type: t, date: { gte: yearStart, lt: start } } },
+            _sum: { amount: true },
+          });
+          if (t === "D") priorIncome += agg._sum.amount ?? 0;
+          else priorExpense += agg._sum.amount ?? 0;
+        }
+      } else {
+        const prior = await prisma.accVoucher.groupBy({
+          by: ["type"],
+          where: { ...where, date: { gte: yearStart, lt: start } },
+          _sum: { totalAmount: true },
+        });
+        for (const p of prior) {
+          if (p.type === "D") priorIncome += p._sum.totalAmount ?? 0;
+          else priorExpense += p._sum.totalAmount ?? 0;
+        }
       }
     }
   }
 
-  // 합계 계산
+  // 계정명 필터 일치 판정 (Prisma 조건과 동일: 이름 부분일치 또는 코드 앞자리 일치)
+  const isMatch = (a: { name: string; code: string }) =>
+    !!accountName && (a.name.includes(accountName) || a.code.startsWith(accountName));
+  const result = accountMatch
+    ? vouchers.map((v) => {
+        const items = v.items.map((it) => ({ ...it, matched: isMatch(it.account) }));
+        return { ...v, items, filterAmount: items.filter((it) => it.matched).reduce((s, it) => s + it.amount, 0) };
+      })
+    : vouchers;
+
+  // 합계 계산 (계정명 필터 시 일치 항목 금액만)
   let totalIncome = 0;
   let totalExpense = 0;
-  for (const v of vouchers) {
+  for (const v of result) {
+    const amt = "filterAmount" in v ? (v.filterAmount as number) : v.totalAmount;
     if (v.type === "D") {
-      totalIncome += v.totalAmount;
+      totalIncome += amt;
     } else {
-      totalExpense += v.totalAmount;
+      totalExpense += amt;
     }
   }
 
   return NextResponse.json({
-    vouchers,
+    vouchers: result,
     summary: {
       totalIncome,
       totalExpense,

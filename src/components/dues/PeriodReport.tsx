@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import AuditStamp, { type AuditFields } from "@/components/accounting/AuditStamp";
 import LastInputBar from "@/components/accounting/LastInputBar";
+import HelpButton from "@/components/HelpButton";
 
 interface Deposit extends AuditFields {
   id: number;
@@ -104,7 +105,9 @@ export default function PeriodReport({ category }: Props) {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold text-gray-800">{category} 기간별 입금 현황</h1>
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+          {category} 기간별 입금 현황 <HelpButton slug="dues-by-period" />
+        </h1>
         <p className="text-xs text-gray-500 mt-1">
           기간 내 입금을 건별로 나열 (번호 · 이름 · 일자 · 월 · 금액). 헤더를 클릭하면 정렬 기준 변경.
         </p>

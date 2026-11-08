@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { fmtStamp } from "@/components/accounting/AuditStamp";
 
+import HelpButton from "@/components/HelpButton";
 interface Fund {
   id: number;
   unitId: number;
@@ -132,7 +133,9 @@ export default function UnitTransferPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-800 mb-2">회계 간 대체</h1>
+      <h1 className="text-xl font-bold text-gray-800 mb-2 flex flex-wrap items-center gap-2">
+        회계 간 대체 <HelpButton slug="accounting-unit-transfers" /> <HelpButton slug="accounting-guide" label="통장·현금·이체 매뉴얼" />
+      </h1>
       <p className="text-sm text-gray-500 mb-6">
         한 회계의 통장에서 다른 회계의 통장으로 돈을 옮길 때 사용합니다(대여·상환·지원). 저장하면 보낸 회계에
         &lsquo;타회계대체출금&rsquo;, 받은 회계에 &lsquo;타회계대체입금&rsquo; 전표가 자동으로 생기고, 결산서에는 일반

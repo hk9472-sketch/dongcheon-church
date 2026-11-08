@@ -29,6 +29,7 @@ interface VoucherItemData {
   description: string | null;
   counterpart: string | null;
   account: { code: string; name: string; type: string };
+  matched?: boolean; // 계정명 필터 시 일치 여부 (false = 같은 전표의 다른 계정 — 합계 제외)
 }
 
 interface VoucherData {
@@ -40,6 +41,7 @@ interface VoucherData {
   date: string;
   description: string | null;
   totalAmount: number;
+  filterAmount?: number; // 계정명 필터 시 일치 항목 금액 합 (합계·월계·누계 기준)
   isClosed: boolean;
   createdBy: string;
   createdAt: string;
@@ -59,6 +61,11 @@ interface EditItem {
 /* ───── helpers ───── */
 function fmtAmount(n: number): string {
   return n.toLocaleString("ko-KR");
+}
+
+/** 합계 기준 금액 — 계정명 필터 중이면 일치 항목 금액만 */
+function amountOf(v: { totalAmount: number; filterAmount?: number }): number {
+  return v.filterAmount ?? v.totalAmount;
 }
 
 function parseAmount(s: string): number {
@@ -188,8 +195,8 @@ export default function VoucherListPage() {
     let income = 0;
     let expense = 0;
     for (const v of vouchers) {
-      if (v.type === "D") income += v.totalAmount;
-      else expense += v.totalAmount;
+      if (v.type === "D") income += amountOf(v);
+      else expense += amountOf(v);
     }
     return { income, expense, balance: income - expense };
   }, [vouchers]);
@@ -237,15 +244,15 @@ export default function VoucherListPage() {
         cumIncome = 0;
         cumExpense = 0;
       }
-      if (v.type === "D") cumIncome += v.totalAmount;
-      else cumExpense += v.totalAmount;
+      if (v.type === "D") cumIncome += amountOf(v);
+      else cumExpense += amountOf(v);
       const next = vouchers[i + 1];
       if (!next || next.date.slice(0, 7) !== ym) {
         const inMonth = vouchers.filter((x) => x.date.slice(0, 7) === ym);
         after.set(v.id, {
           ym,
-          monthIncome: inMonth.filter((x) => x.type === "D").reduce((s, x) => s + x.totalAmount, 0),
-          monthExpense: inMonth.filter((x) => x.type !== "D").reduce((s, x) => s + x.totalAmount, 0),
+          monthIncome: inMonth.filter((x) => x.type === "D").reduce((s, x) => s + amountOf(x), 0),
+          monthExpense: inMonth.filter((x) => x.type !== "D").reduce((s, x) => s + amountOf(x), 0),
           cumIncome,
           cumExpense,
         });
@@ -310,7 +317,7 @@ export default function VoucherListPage() {
       v.items.map((it) => ({
         key: nextKey(),
         accountId: it.accountId,
-        amount: String(it.amount),
+        amount: fmtAmount(it.amount),
         description: it.description || "",
         counterpart: it.counterpart || "",
       }))
@@ -371,7 +378,7 @@ export default function VoucherListPage() {
   async function handleEditSave() {
     if (!editVoucher) return;
     const validItems = editItems.filter(
-      (it) => it.accountId && parseAmount(it.amount) > 0
+      (it) => it.accountId && parseAmount(it.amount) !== 0
     );
     if (validItems.length === 0) {
       setEditMessage({ type: "err", text: "최소 1개 이상의 항목을 입력하세요." });
@@ -444,12 +451,12 @@ export default function VoucherListPage() {
 
   function handleEditAmountBlur(key: string, raw: string) {
     const n = parseAmount(raw);
-    if (n > 0) updateEditItem(key, "amount", fmtAmount(n));
+    if (n !== 0) updateEditItem(key, "amount", fmtAmount(n)); // 음수(환급) 포함
   }
 
   function handleEditAmountFocus(key: string, raw: string) {
     const n = parseAmount(raw);
-    updateEditItem(key, "amount", n > 0 ? String(n) : "");
+    updateEditItem(key, "amount", n !== 0 ? String(n) : "");
   }
 
   /* ======================================== render ======================================== */
@@ -705,7 +712,10 @@ export default function VoucherListPage() {
                     {/* 수입금액 */}
                     <td className="px-3 py-2 text-right font-mono">
                       {row.voucherType === "D" ? (
-                        <span className="text-blue-700">
+                        <span
+                          className={row.item.matched === false ? "text-gray-300" : "text-blue-700"}
+                          title={row.item.matched === false ? "계정명 조건과 다른 계정 — 합계에서 제외" : undefined}
+                        >
                           {fmtAmount(row.item.amount)}
                         </span>
                       ) : (
@@ -716,7 +726,10 @@ export default function VoucherListPage() {
                     {/* 지출금액 */}
                     <td className="px-3 py-2 text-right font-mono">
                       {row.voucherType === "C" ? (
-                        <span className="text-red-700">
+                        <span
+                          className={row.item.matched === false ? "text-gray-300" : "text-red-700"}
+                          title={row.item.matched === false ? "계정명 조건과 다른 계정 — 합계에서 제외" : undefined}
+                        >
                           {fmtAmount(row.item.amount)}
                         </span>
                       ) : (

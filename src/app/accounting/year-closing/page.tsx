@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import LastInputBar from "@/components/accounting/LastInputBar";
 
+import HelpButton from "@/components/HelpButton";
 interface UnitStatus {
   unitId: number;
   name: string;
@@ -118,7 +119,9 @@ export default function YearClosingPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-800 mb-2">연마감</h1>
+      <h1 className="text-xl font-bold text-gray-800 mb-2 flex items-center gap-2">
+        연마감 <HelpButton slug="accounting-year-closing" />
+      </h1>
       <p className="text-sm text-gray-500 mb-6">
         한 해 장부를 마감하고 통장별 기말잔액을 다음 연도 이월금으로 넘깁니다. 마감한 연도는 전표·이체가 잠기며,
         다음 연도 이월금은{" "}

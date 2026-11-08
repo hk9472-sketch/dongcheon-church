@@ -11,7 +11,7 @@ function toDateOnly(s: string): Date {
 // POST /api/accounting/dues/deposits/bulk
 //   body: { category, date, items: [{ memberId, installment(1-12), amount, description? }] }
 //   매트릭스 입력에서 체크된 셀들을 한 번에 저장.
-//   - 이미 같은 (category, memberId, installment) 조합이 존재하는 항목은 건너뜀 (중복 입금 방지).
+//   - 입금일이 속한 해에 같은 (category, memberId, installment) 조합이 이미 있으면 건너뜀 (중복 입금 방지).
 //   - 각 셀 amount > 0 필수.
 export async function POST(req: NextRequest) {
   const acc = await checkAccAccess("dues");
@@ -68,12 +68,15 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // 중복 검사 — 입금 일자와 무관하게 같은 (category, memberId, installment) 가 이미 존재하면 그 항목 skip
+  // 중복 검사 — 입금일이 속한 해 안에서 같은 (category, memberId, installment) 가 이미 있으면 그 항목 skip.
+  //   회차(1~12월분)는 해마다 다시 시작하므로 연도로 한정 (회원별 현황도 입금일 연도로 집계).
+  const y = date.getUTCFullYear();
   const existing = await prisma.monthlyDuesDeposit.findMany({
     where: {
       category,
       memberId: { in: cleaned.map((c) => c.memberId) },
       installment: { in: cleaned.map((c) => c.installment) },
+      date: { gte: toDateOnly(`${y}-01-01`), lt: toDateOnly(`${y + 1}-01-01`) },
     },
     select: { memberId: true, installment: true },
   });

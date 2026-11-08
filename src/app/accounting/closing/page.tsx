@@ -188,10 +188,10 @@ export default function ClosingPage() {
                       <td className="px-4 py-3 text-center font-medium">{row.month}월</td>
                       <td className="px-4 py-3 text-right text-gray-700">{fmt(row.carryOver)}</td>
                       <td className="px-4 py-3 text-right text-blue-700">
-                        {row.totalIncome > 0 ? fmt(row.totalIncome) : "-"}
+                        {row.totalIncome !== 0 ? fmt(row.totalIncome) : "-"}
                       </td>
                       <td className="px-4 py-3 text-right text-red-600">
-                        {row.totalExpense > 0 ? fmt(row.totalExpense) : "-"}
+                        {row.totalExpense !== 0 ? fmt(row.totalExpense) : "-"}
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-emerald-700">
                         {fmt(row.carryOver + row.totalIncome - row.totalExpense)}

@@ -36,8 +36,8 @@ function fmt(n: number) {
 }
 
 function todayStr() {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
+  // 한국 날짜 기준 (UTC 로 자르면 오전 9시 전에는 전날이 됨)
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
 function yearStartStr() {

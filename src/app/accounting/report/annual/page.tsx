@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import LastInputBar from "@/components/accounting/LastInputBar";
 
+import HelpButton from "@/components/HelpButton";
 interface Line {
   label: string;
   code: string;
@@ -155,7 +156,9 @@ export default function AnnualReportPage() {
   return (
     <div>
       <div className="print:hidden bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6 flex flex-wrap items-end gap-4">
-        <h1 className="text-xl font-bold text-gray-800 mr-4">연간 결산서</h1>
+        <h1 className="text-xl font-bold text-gray-800 mr-4 flex items-center gap-2">
+          연간 결산서 <HelpButton slug="accounting-report-annual" />
+        </h1>
         <div>
           <label className="block text-xs text-gray-500 mb-1">회계년도</label>
           <select

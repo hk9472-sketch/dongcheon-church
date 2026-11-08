@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import AuditStamp, { type AuditFields } from "@/components/accounting/AuditStamp";
+import HelpButton from "@/components/HelpButton";
 
 interface Deposit extends AuditFields {
   id: number; // 0 = 신규
@@ -474,7 +475,10 @@ export default function DepositTable({ category }: Props) {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold text-gray-800">{category} 입금</h1>
+        <h1 className="text-xl font-bold text-gray-800 flex flex-wrap items-center gap-2">
+          {category} 입금 <HelpButton slug="dues-deposit" />
+          <HelpButton slug="dues-guide" label="월정 업무 매뉴얼" />
+        </h1>
         <p className="text-xs text-gray-500 mt-1">
           번호 직접 입력 / 이름 입력 후 ↹(Tab) 으로 자동 매칭 / 🔍 버튼으로 명단 검색.
           ↑↓/Enter 로 행 이동, 마지막 행 ↓ 누르면 새 행.

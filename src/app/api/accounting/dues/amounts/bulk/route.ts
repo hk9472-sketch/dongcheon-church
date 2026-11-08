@@ -10,7 +10,7 @@ const VALID_CATEGORIES = ["전도회", "건축"] as const;
  * Body: {
  *   category: "전도회" | "건축",
  *   year: number,
- *   amounts: [{ memberId, amount }],     // 기존 회원 월정액 upsert
+ *   amounts: [{ memberId, amount, name? }],  // 기존 회원 월정액 upsert (name 있으면 이름도 변경)
  *   newMembers: [{                       // 신규 회원 등록 + amount
  *     memberNo?: number,                  //  생략 시 자동 채번
  *     name: string,
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   let body: {
     category?: string;
     year?: number;
-    amounts?: { memberId: number; amount: number }[];
+    amounts?: { memberId: number; amount: number; name?: string }[];
     newMembers?: { memberNo?: number; name: string; amount: number }[];
   };
   try {
@@ -129,7 +129,16 @@ export async function POST(req: NextRequest) {
           });
         }
       }
-      // 2) 기존 amount upsert
+      // 2) 기존 회원 — 이름이 함께 오면 이름 변경 (같은 분류 회원만)
+      for (const a of amounts) {
+        const nm = typeof a.name === "string" ? a.name.trim().slice(0, 50) : "";
+        if (!nm) continue;
+        await tx.monthlyDuesMember.updateMany({
+          where: { id: a.memberId, category, NOT: { name: nm } },
+          data: { name: nm, modifiedBy: operator, modifiedAt: new Date() },
+        });
+      }
+      // 3) 기존 amount upsert
       for (const a of amounts) {
         await tx.monthlyDuesAmount.upsert({
           where: { category_year_memberId: { category, year, memberId: a.memberId } },

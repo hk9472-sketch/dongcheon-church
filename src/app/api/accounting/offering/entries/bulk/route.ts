@@ -8,7 +8,8 @@ import { checkAccAccess } from "@/lib/accountAuth";
  * Body: {
  *   date: "YYYY-MM-DD",  // 신규 entries 의 공통 일자 (필수)
  *   creates: [{ memberId?, offeringType, amount, description? }],
- *   updates: [{ id, memberId?, offeringType, amount, description? }],
+ *   updates: [{ id, date?, memberId?, offeringType, amount, description? }],
+ *            date 가 있으면 일자 변경, description 이 없으면(undefined) 기존 비고 유지
  *   deletes: number[]    // OfferingEntry.id 배열
  * }
  *
@@ -49,6 +50,7 @@ interface CreateItem {
 }
 interface UpdateItem extends CreateItem {
   id: number;
+  date?: string; // YYYY-MM-DD — 있으면 기존 건의 일자도 변경 (연보일괄수정에서 일자 수정)
 }
 
 export async function POST(req: NextRequest) {
@@ -147,7 +149,10 @@ export async function POST(req: NextRequest) {
               memberId: u.memberId ? u.memberId : null, // 0 = 무기명 → null (줄저장 경로와 동일)
               offeringType: u.offeringType,
               amount: u.amount,
-              description: u.description?.toString().trim() || null,
+              // 일자: 보낸 경우만 변경 (예전엔 무시돼 일괄저장으로 일자를 고칠 수 없었음)
+              ...(typeof u.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(u.date) ? { date: toDateOnly(u.date) } : {}),
+              // 비고: 보낸 경우만 변경 — 감사연보 외 건은 화면에서 비고를 보내지 않아 기존 비고(예: 무기명) 유지
+              ...(u.description !== undefined ? { description: u.description?.toString().trim() || null } : {}),
               ...(validRowKey(u.rowKey) ? { rowKey: u.rowKey as string } : {}),
               modifiedBy: createdBy,
               modifiedAt: new Date(),

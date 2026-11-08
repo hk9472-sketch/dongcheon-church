@@ -317,7 +317,7 @@ export default function VoucherEntryPage() {
       v.items.map((it) => ({
         key: nextKey(),
         accountId: it.accountId,
-        amount: String(it.amount),
+        amount: fmtAmount(it.amount),
         description: it.description || "",
         counterpart: it.counterpart || "",
       }))
@@ -551,7 +551,7 @@ export default function VoucherEntryPage() {
     <div className="space-y-6">
       {/* title + 엑셀 업로드 도구 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">전표입력 <HelpButton slug="accounting-entry" /></h1>
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">전표입력 <HelpButton slug="accounting-entry" /> <HelpButton slug="accounting-guide" label="통장·현금·이체 매뉴얼" /></h1>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"

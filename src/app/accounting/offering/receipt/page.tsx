@@ -204,7 +204,8 @@ export default function OfferingReceiptPage() {
           if (Array.isArray(d.familyAll)) {
             setFamilyAll(d.familyAll);
             if (!checkboxTouched) {
-              setCheckedIds([selectedMemberId]);
+              // 서버 기본 = 가족 전원 합산 → 체크박스도 전원 체크로 맞춤
+              setCheckedIds(d.familyAll.map((m: { id: number }) => m.id));
             }
           }
           return;
@@ -213,9 +214,12 @@ export default function OfferingReceiptPage() {
         if (Array.isArray(d.familyAll)) {
           setFamilyAll(d.familyAll);
         }
-        // 체크박스를 아직 조작하지 않았다면: 기본값 = 본인만 체크
+        // 체크박스를 아직 조작하지 않았다면: 서버가 실제로 합산한 구성원으로 체크 표시
+        //   (예전엔 '본인만' 체크로 보이면서 금액은 가족 전원 합산이라 화면과 금액이 달랐음)
         if (!checkboxTouched) {
-          setCheckedIds([selectedMemberId]);
+          setCheckedIds(
+            Array.isArray(d.includedMemberIds) ? d.includedMemberIds : [selectedMemberId],
+          );
         }
       })
       .catch(() => {

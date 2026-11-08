@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { checkAccAccess } from "@/lib/accountAuth";
+import { isMonthClosed } from "@/lib/accFund";
 
 const ALLOWED_CATEGORIES = new Set(["전도회", "건축"]);
 
@@ -19,6 +20,11 @@ const ALLOWED_CATEGORIES = new Set(["전도회", "건축"]);
  *  - mode=row: 일자별 voucher + 그 일자의 item 들 (회원별)
  *
  * 응답: { ok, voucherCount, totalAmount }
+ *
+ * 보호:
+ *  - 전표마다 externalRef(dues:<분류>:<기간|일자>) 를 남겨, 같은 기간(합계) · 같은 일자(일자별)를
+ *    다시 반영하면 409 (이중 반영 방지). 다시 반영하려면 기존 전표를 먼저 삭제.
+ *  - 전표 일자의 월이 마감됐으면 409.
  */
 export async function POST(req: NextRequest) {
   const acc = await checkAccAccess("ledger");
@@ -72,7 +78,37 @@ export async function POST(req: NextRequest) {
   });
   const nameMap = new Map(members.map((m) => [m.id, m.name]));
 
-  const username = String(user?.userId || `user#${user?.id ?? ""}`);
+  const username = String(user?.name || user?.userId || `user#${user?.id ?? ""}`);
+
+  // 만들 전표의 일자 · 외부키 — 마감 · 이중 반영 사전 검사
+  const plan =
+    mode === "summary"
+      ? [{ date: toStr, ref: `dues:${category}:${fromStr}~${toStr}` }]
+      : Array.from(new Set(deposits.map((d) => d.date.toISOString().slice(0, 10))))
+          .sort()
+          .map((ds) => ({ date: ds, ref: `dues:${category}:${ds}` }));
+  for (const p of plan) {
+    if (await isMonthClosed(mapping.unitId, new Date(p.date + "T00:00:00.000Z"))) {
+      return NextResponse.json(
+        { message: `${p.date.slice(0, 7)} 은(는) 월마감되어 전표를 만들 수 없습니다.` },
+        { status: 409 },
+      );
+    }
+  }
+  const dup = await prisma.accVoucher.findMany({
+    where: { unitId: mapping.unitId, externalRef: { in: plan.map((p) => p.ref) } },
+    select: { voucherNo: true },
+  });
+  if (dup.length > 0) {
+    return NextResponse.json(
+      {
+        message:
+          `이미 회계에 반영된 기간(일자)입니다 — 전표 ${dup.map((d) => d.voucherNo).join(", ")}. ` +
+          `다시 반영하려면 행정실 [전표현황]에서 그 전표를 삭제한 뒤 반영하세요.`,
+      },
+      { status: 409 },
+    );
+  }
   const createdVoucherIds: number[] = [];
   let totalAmount = 0;
 
@@ -99,6 +135,7 @@ export async function POST(req: NextRequest) {
         date: new Date(toStr + "T00:00:00.000Z"),
         description: `${category} 월정입금 합계 (${fromStr} ~ ${toStr})`,
         totalAmount: sum,
+        externalRef: plan[0].ref,
         createdBy: username,
         items: {
           create: {
@@ -140,6 +177,7 @@ export async function POST(req: NextRequest) {
           date: new Date(dateStr + "T00:00:00.000Z"),
           description: `${category} 월정입금 (${rows.length}건)`,
           totalAmount: sum,
+          externalRef: `dues:${category}:${dateStr}`,
           createdBy: username,
           items: {
             create: rows.map((r, i) => ({

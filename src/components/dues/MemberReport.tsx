@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { auditInline, type AuditFields } from "@/components/accounting/AuditStamp";
 import LastInputBar from "@/components/accounting/LastInputBar";
+import HelpButton from "@/components/HelpButton";
 
 interface DepositLite extends AuditFields {
   date: string;
@@ -85,7 +86,9 @@ export default function MemberReport({ category }: Props) {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold text-gray-800">{category} 회원별 연간 현황</h1>
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+          {category} 회원별 연간 현황 <HelpButton slug="dues-by-member" />
+        </h1>
         <p className="text-xs text-gray-500 mt-1">
           회원별 1~12월 입금 금액과 일자를 매트릭스로 표시. 같은 달에 여러 입금이면 합산 + 일자 나열.
         </p>

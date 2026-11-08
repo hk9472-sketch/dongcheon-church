@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import LastInputBar from "@/components/accounting/LastInputBar";
 import { fmtStamp } from "@/components/accounting/AuditStamp";
 
+import HelpButton from "@/components/HelpButton";
 interface AccUnit {
   id: number;
   name: string;
@@ -186,7 +187,9 @@ export default function FundStatusPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-800 mb-6">통장현황 · 이체</h1>
+      <h1 className="text-xl font-bold text-gray-800 mb-6 flex flex-wrap items-center gap-2">
+        통장현황 · 이체 <HelpButton slug="accounting-funds" /> <HelpButton slug="accounting-guide" label="통장·현금·이체 매뉴얼" />
+      </h1>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4 flex flex-wrap items-end gap-4">
         <div>

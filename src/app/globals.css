@@ -654,3 +654,64 @@ html {
 .tiptap-editor .ProseMirror h2 { font-size: 1.25em; font-weight: 700; margin: 0.5em 0; }
 .tiptap-editor .ProseMirror h3 { font-size: 1.1em; font-weight: 600; margin: 0.5em 0; }
 .tiptap-editor .ProseMirror h4 { font-size: 1em; font-weight: 600; margin: 0.5em 0; }
+
+/* ── 도움말 · 매뉴얼 본문 (HelpButton 팝업, /manual/[slug]) ──────────────
+   typography 플러그인이 없어 .prose 만으로는 제목·문단·링크 구분이 안 되므로 최소 서식을 준다.
+   본문 HTML 의 inline style 이 있으면 그쪽이 우선. */
+.help-content {
+  line-height: 1.75;
+  color: #1f2937;
+  font-weight: 400;
+}
+.help-content h2 {
+  font-size: 1.35em;
+  font-weight: 700;
+  color: #1e40af;
+  margin: 0.2em 0 0.7em;
+  padding-bottom: 0.3em;
+  border-bottom: 2px solid #dbeafe;
+}
+.help-content h3 {
+  font-size: 1.15em;
+  font-weight: 700;
+  color: #111827;
+  margin: 1.8em 0 0.6em;
+  padding-left: 0.55em;
+  border-left: 4px solid #3b82f6;
+}
+.help-content h4 {
+  font-size: 1.02em;
+  font-weight: 700;
+  color: #374151;
+  margin: 1.3em 0 0.4em;
+}
+.help-content p {
+  margin: 0.55em 0;
+}
+.help-content strong {
+  font-weight: 700;
+}
+.help-content a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.help-content img {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+}
+.prose.help-content table {
+  table-layout: auto;
+}
+.help-content hr {
+  margin: 1.6em 0;
+  border-color: #e5e7eb;
+}
+.help-content code {
+  background: #f3f4f6;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}

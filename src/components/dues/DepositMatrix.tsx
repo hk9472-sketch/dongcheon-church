@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { auditTitle } from "@/components/accounting/AuditStamp";
 import LastInputBar from "@/components/accounting/LastInputBar";
+import HelpButton from "@/components/HelpButton";
 
 interface Member {
   id: number;
@@ -214,6 +215,14 @@ export default function DepositMatrix({ category }: Props) {
     }
   };
 
+  /** 체크 시 금액이 비어 있으면 월정액으로 채움 (한 칸 체크 toggleCell 과 동일 규칙) */
+  const monthlyOf = (memberId: number) => members.find((m) => m.id === memberId)?.monthlyAmount;
+  const checkedCell = (c: Cell, memberId: number, target: boolean): Cell => {
+    if (!target || c.amount) return { ...c, checked: target };
+    const amt = monthlyOf(memberId);
+    return { ...c, checked: target, ...(amt ? { amount: String(amt) } : {}) };
+  };
+
   /** 회원 행 전체 체크/해제 (미입금 셀만) */
   const toggleRow = (memberId: number, target: boolean) => {
     setMatrix((prev) => {
@@ -221,20 +230,21 @@ export default function DepositMatrix({ category }: Props) {
       next[memberId] = { ...next[memberId] };
       for (const mo of MONTHS) {
         const c = next[memberId][mo];
-        if (!c.paid) next[memberId][mo] = { ...c, checked: target };
+        if (!c.paid) next[memberId][mo] = checkedCell(c, memberId, target);
       }
       return next;
     });
   };
 
-  /** 월 컬럼 전체 체크/해제 */
+  /** 월 컬럼 전체 체크/해제 (미입금 셀만) */
   const toggleCol = (month: number, target: boolean) => {
     setMatrix((prev) => {
       const next: typeof prev = {};
       for (const [mid, row] of Object.entries(prev)) {
-        next[parseInt(mid, 10)] = { ...row };
+        const id = parseInt(mid, 10);
+        next[id] = { ...row };
         const c = row[month];
-        if (!c.paid) next[parseInt(mid, 10)][month] = { ...c, checked: target };
+        if (!c.paid) next[id][month] = checkedCell(c, id, target);
       }
       return next;
     });
@@ -313,7 +323,10 @@ export default function DepositMatrix({ category }: Props) {
   return (
     <div className="space-y-3">
       <div>
-        <h1 className="text-xl font-bold text-gray-800">{category} 월정입금 (일괄)</h1>
+        <h1 className="text-xl font-bold text-gray-800 flex flex-wrap items-center gap-2">
+          {category} 월정입금 (일괄) <HelpButton slug="dues-deposit-matrix" />
+          <HelpButton slug="dues-guide" label="월정 업무 매뉴얼" />
+        </h1>
         <p className="text-xs text-gray-500 mt-1">
           입금일자를 선택하면 해당 연도의 입금 상태를 표시합니다. <strong>◯</strong> 는 이미
           입금된 월, 빈 셀은 체크박스로 입금 처리할 수 있습니다. <strong>체크하면 월정액이

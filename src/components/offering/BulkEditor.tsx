@@ -441,7 +441,7 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
     } }[] = [];
     const updatePlan: { rowIdx: number; entry: {
       id: number; date: string; memberId: number | null; offeringType: string;
-      amount: number; description: string | null;
+      amount: number; description?: string | null;
     } }[] = [];
 
     rows.forEach((r, idx) => {
@@ -480,7 +480,8 @@ export default function BulkEditor({ fixedType, showTypeColumn }: Props) {
             memberId,
             offeringType: r.offeringType,
             amount: amt,
-            description: desc,
+            // 감사연보 외 건은 비고를 보내지 않음 → 서버가 기존 비고 유지
+            ...(r.offeringType === "감사연보" ? { description: desc } : {}),
           },
         });
       }

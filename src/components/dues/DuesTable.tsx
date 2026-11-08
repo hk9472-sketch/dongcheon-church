@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import AuditStamp, { type AuditFields } from "@/components/accounting/AuditStamp";
+import HelpButton from "@/components/HelpButton";
 
 interface DuesItem extends AuditFields {
   id: number;
@@ -197,7 +198,11 @@ export default function DuesTable({ category }: Props) {
     setError(null);
     const dirtyAmounts = rows
       .filter((r) => r.status === "dirty" || r.status === "error")
-      .map((r) => ({ memberId: r.memberId, amount: r.amount }));
+      .map((r) => {
+        // 이름을 고친 줄은 이름도 함께 저장 (일괄 저장에서 이름 변경이 빠지던 문제)
+        const nameChanged = r.name.trim() !== "" && r.name.trim() !== (r.originalName || "").trim();
+        return { memberId: r.memberId, amount: r.amount, ...(nameChanged ? { name: r.name.trim() } : {}) };
+      });
     const newMembers = newRows
       .filter((nr) => nr.inputName.trim() !== "")
       .map((nr) => ({
@@ -342,7 +347,10 @@ export default function DuesTable({ category }: Props) {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold text-gray-800">{category} 월정</h1>
+        <h1 className="text-xl font-bold text-gray-800 flex flex-wrap items-center gap-2">
+          {category} 월정 <HelpButton slug="dues-dues" />
+          <HelpButton slug="dues-guide" label="월정 업무 매뉴얼" />
+        </h1>
         <p className="text-xs text-gray-500 mt-1">
           연도별로 회원별 월정액을 등록·수정. 신규 회원은 노란 행에 고유번호(미입력 시 자동) +
           이름 + 월정액 입력 후 저장하면 추가됨. ↑↓/Enter 로 행 이동.

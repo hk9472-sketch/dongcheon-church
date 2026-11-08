@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import HelpButton from "@/components/HelpButton";
 interface AccUnit {
   id: number;
   name: string;
@@ -124,7 +125,9 @@ export default function FundSettingsPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-800 mb-2">통장관리</h1>
+      <h1 className="text-xl font-bold text-gray-800 mb-2 flex flex-wrap items-center gap-2">
+        통장관리 <HelpButton slug="accounting-settings-funds" /> <HelpButton slug="accounting-guide" label="통장·현금·이체 매뉴얼" />
+      </h1>
       <p className="text-sm text-gray-500 mb-6">
         회계단위마다 입출금 통장을 등록합니다. 전표는 통장을 선택해 입력하고, 통장 사이 이동은
         [통장현황·이체]에서 이체로 기록합니다. 계좌번호는 확인되는 대로 입력하면 됩니다.

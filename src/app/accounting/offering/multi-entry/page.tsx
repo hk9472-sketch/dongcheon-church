@@ -297,8 +297,8 @@ export default function MultiOfferingEntryPage() {
             memberId: memberIdForBody,
             offeringType: u.offeringType,
             amount: u.amount,
-            // 비고(내역)는 감사연보에만 기록
-            description: u.offeringType === "감사연보" ? r.description || null : null,
+            // 비고(내역)는 감사연보에만 기록 — 다른 종류는 보내지 않아 기존 비고(예: 무기명) 유지
+            ...(u.offeringType === "감사연보" ? { description: r.description || null } : {}),
             rowKey: r.rowKey, // 같은 줄로 묶어 두기(기존 건에도 키 부여)
           }),
         });
@@ -399,7 +399,7 @@ export default function MultiOfferingEntryPage() {
         memberId: number | null;
         offeringType: string;
         amount: number;
-        description: string | null;
+        description?: string | null;
         rowKey: string;
       }[] = [];
       const deletePlan: { rowIdx: number; offeringType: string; id: number }[] = [];
@@ -420,7 +420,8 @@ export default function MultiOfferingEntryPage() {
               memberId,
               offeringType: t.key,
               amount: amt,
-              description: t.key === "감사연보" ? r.description || null : null,
+              // 감사연보 외 건은 비고를 보내지 않음 → 서버가 기존 비고 유지
+              ...(t.key === "감사연보" ? { description: r.description || null } : {}),
               rowKey: r.rowKey,
             });
           } else if (existingId && amt === 0) {
@@ -806,6 +807,7 @@ export default function MultiOfferingEntryPage() {
         <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
           연보 통합 입력
           <HelpButton slug="acc-offering-multi-entry" />
+          <HelpButton slug="offering-guide" label="연보 업무 매뉴얼" />
         </h1>
         <p className="text-xs text-gray-500 mt-1">
           한 회원의 여러 종류 연보를 한 줄에 입력합니다. 0 이거나 빈 칸인 종류는

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import AuditStamp from "@/components/accounting/AuditStamp";
+import HelpButton from "@/components/HelpButton";
 
 interface Item {
   memberId: number;
@@ -130,7 +131,7 @@ export default function MemberNumbersPage() {
   return (
     <div className="p-4 space-y-4">
       <div>
-        <h1 className="text-xl font-bold text-gray-800">관리번호 변경</h1>
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">관리번호 변경 <HelpButton slug="offering-member-numbers" /></h1>
         <p className="text-xs text-gray-500 mt-1">
           기준일자 D 부터 적용될 새 번호를 입력 후 일괄 저장. 기존 번호는 그 일자까지 유효.
           내부 일련번호(개인 ID)는 변하지 않으므로 과거 데이터와 자연스럽게 연결됨.

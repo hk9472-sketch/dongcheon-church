@@ -8,6 +8,7 @@ import type {
 } from "@/lib/offeringAllocation";
 import { allocate as allocateFn } from "@/lib/offeringAllocation";
 import PostVoucherModal from "@/components/offering/PostVoucherModal";
+import HelpButton from "@/components/HelpButton";
 import LastInputBar from "@/components/accounting/LastInputBar";
 import { fmtStamp, type AuditFields } from "@/components/accounting/AuditStamp";
 
@@ -55,7 +56,8 @@ const DENOM_ROWS: { key: keyof DenomCounts; label: string; unit: number | null }
 ];
 
 export default function OfferingSettlementPage() {
-  const today = new Date().toISOString().slice(0, 10);
+  // 한국 날짜 기준 (UTC 로 자르면 오전 9시 전에는 전날이 됨)
+  const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -380,7 +382,11 @@ export default function OfferingSettlementPage() {
   return (
     <div className="mx-auto max-w-5xl p-4 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-xl font-bold text-gray-800">연보 일별 결산</h1>
+        <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2 flex-wrap">
+          연보 일별 결산
+          <HelpButton slug="offering-settlement" />
+          <HelpButton slug="offering-guide" label="연보 업무 매뉴얼" />
+        </h1>
         {tab === "settlement" && (
           <div className="flex items-center gap-2">
             <input

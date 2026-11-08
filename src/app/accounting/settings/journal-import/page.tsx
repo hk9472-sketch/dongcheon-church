@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import HelpButton from "@/components/HelpButton";
 interface AccUnit {
   id: number;
   name: string;
@@ -146,7 +147,9 @@ export default function JournalImportPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-800 mb-2">분개장 가져오기</h1>
+      <h1 className="text-xl font-bold text-gray-800 mb-2 flex items-center gap-2">
+        분개장 가져오기 <HelpButton slug="accounting-journal-import" />
+      </h1>
       <p className="text-sm text-gray-500 mb-6">
         외부 회계사이트에서 받은 <strong>분개장 엑셀(.xls)</strong>을 전표로 옮깁니다. 현금 계정 줄은 통장 쪽으로
         보고 버리며, 같은 날 같은 계정의 ± 상쇄 입력은 가져오지 않습니다. 같은 파일을 다시 올려도 이미 가져온
