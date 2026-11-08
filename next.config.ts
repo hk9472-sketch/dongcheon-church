@@ -4,7 +4,9 @@ import type { NextConfig } from "next";
 // 'unsafe-inline' style 은 TipTap 및 기존 인라인 스타일 호환성 때문에 유지.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  // YouTube IFrame Player API (실시간 예배 플레이어의 소리 조절 · 시청 기록) — iframe_api 가
+  // www.youtube.com/s/player/.../www-widgetapi.js 를 이어서 불러온다. 막히면 플레이어 제어가 전부 멈춤.
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com https://s.ytimg.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",

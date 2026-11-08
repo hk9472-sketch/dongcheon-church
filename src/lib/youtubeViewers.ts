@@ -238,6 +238,46 @@ interface PollResult {
 }
 
 /** 메인 폴링 함수. URL 은 env 우선, 없으면 DB live_worship_url. */
+// ───── 채널 구독자 수 (실시간 예배 화면 표시용) ─────
+//   channels.list(statistics) 1 unit. 1시간 메모리 캐시 — DB 에 저장하지 않는다(ToS III.E.4 보관 제한).
+const SUBS_CACHE_MS = 60 * 60 * 1000;
+let subsCache: { at: number; count: number | null; hidden: boolean } | null = null;
+
+export async function getChannelSubscribers(): Promise<{ count: number | null; hidden: boolean }> {
+  if (subsCache && Date.now() - subsCache.at < SUBS_CACHE_MS) {
+    return { count: subsCache.count, hidden: subsCache.hidden };
+  }
+  const none = { count: null, hidden: false };
+  try {
+    const rows = await prisma.siteSetting.findMany({ where: { key: { in: [SETTING_URL_KEY, API_KEY_SETTING] } } });
+    const map = new Map(rows.map((r) => [r.key, r.value]));
+    const apiKey = (map.get(API_KEY_SETTING) || "").trim();
+    const url = (process.env.NEXT_PUBLIC_YOUTUBE_LIVE_URL || "").trim() || (map.get(SETTING_URL_KEY) || "").trim();
+    if (!apiKey || !url) return none;
+    // embed 형태(embed/live_stream?channel=UC...)도 지원
+    const embedCh = url.match(/[?&]channel=(UC[a-zA-Z0-9_-]{22})/)?.[1];
+    const ref = embedCh ? { type: "id" as const, value: embedCh } : extractChannelRef(url);
+    if (!ref) return none;
+    const cache = await loadChannelCache();
+    const channelId =
+      ref.type === "id" ? ref.value : cache?.channelId?.startsWith("UC") ? cache.channelId : await resolveChannelId(ref, apiKey);
+    if (!channelId) return none;
+    const r = await fetch(
+      `https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${channelId}&key=${apiKey}`,
+      { cache: "no-store" },
+    );
+    if (!r.ok) return none;
+    const j = await r.json();
+    const st = j?.items?.[0]?.statistics;
+    const hidden = st?.hiddenSubscriberCount === true;
+    const count = !hidden && st?.subscriberCount != null ? Number(st.subscriberCount) : null;
+    subsCache = { at: Date.now(), count: Number.isFinite(count) ? count : null, hidden };
+    return { count: subsCache.count, hidden };
+  } catch {
+    return none;
+  }
+}
+
 export async function pollYoutubeViewers(force = false): Promise<PollResult> {
   // 키 + URL 로드
   const settingRows = await prisma.siteSetting.findMany({

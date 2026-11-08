@@ -4,6 +4,7 @@ import LiveViewerCount from "./LiveViewerCount";
 import LiveAttendanceList from "./LiveAttendanceList";
 import LiveServiceTracker from "@/components/LiveServiceTracker";
 import LiveYoutubePlayer from "./LiveYoutubePlayer";
+import LiveSubscriberCount from "./LiveSubscriberCount";
 import { parseYouTubeLiveUrl } from "@/lib/youtubeEmbed";
 
 export default function LivePage() {
@@ -93,6 +94,7 @@ export default function LivePage() {
             </svg>
             <span>YouTube</span>
           </a>
+          <LiveSubscriberCount />
           <p className="text-xs text-gray-400">
             실시간 방송이 보이지 않으면 YouTube 채널에서 직접 확인해 주세요.
           </p>
