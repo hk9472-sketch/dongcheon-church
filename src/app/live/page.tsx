@@ -5,6 +5,7 @@ import LiveAttendanceList from "./LiveAttendanceList";
 import LiveServiceTracker from "@/components/LiveServiceTracker";
 import LiveYoutubePlayer from "./LiveYoutubePlayer";
 import LiveSubscriberCount from "./LiveSubscriberCount";
+import LiveServiceInfo from "./LiveServiceInfo";
 import { parseYouTubeLiveUrl } from "@/lib/youtubeEmbed";
 
 export default function LivePage() {
@@ -43,7 +44,7 @@ export default function LivePage() {
       {/* 영상 영역 — 영상(검은 상자) + 그 아래 별도 소리 조절 칸은 컴포넌트가 함께 렌더 */}
       <div>
         {embedUrl ? (
-          <LiveYoutubePlayer embedUrl={embedUrl} />
+          <LiveYoutubePlayer embedUrl={embedUrl} offline={<LiveServiceInfo tone="dark" />} />
         ) : (
           <div className="flex flex-col items-center justify-center h-64 text-gray-400 px-4 text-center bg-black rounded-lg shadow-lg">
             {youtubeUrl ? (
@@ -105,26 +106,7 @@ export default function LivePage() {
         {/* 안내 + 예배시간 */}
         <div className="space-y-4">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 className="text-sm font-bold text-blue-800 mb-2">안내</h3>
-            <ul className="text-sm text-blue-700 space-y-1">
-              <li>- 실시간 방송은 예배 시간에만 송출됩니다.</li>
-            </ul>
-
-            {/* 예배시간 안내 */}
-            <h3 className="text-sm font-bold text-blue-800 mt-3 mb-2">예배시간</h3>
-            <table className="text-sm text-blue-700">
-              <tbody>
-                <tr><td className="pr-3 py-0.5">1) 주일오전</td><td className="font-medium">: 10:00</td></tr>
-                <tr><td className="pr-3 py-0.5">2) 주일오후</td><td className="font-medium">: 14:00</td></tr>
-                <tr><td className="pr-3 py-0.5">3) 삼 일 밤</td><td className="font-medium">: 19:00</td></tr>
-                <tr><td className="pr-3 py-0.5">4) 오 일 밤</td><td className="font-medium">: 19:00</td></tr>
-                <tr><td className="pr-3 py-0.5">5) 새 &nbsp;&nbsp;&nbsp;&nbsp; 벽</td><td className="font-medium">: 04:30</td></tr>
-              </tbody>
-            </table>
-
-            <p className="text-sm text-blue-700 mt-3">
-              - 지난 예배 영상은 <Link href="/board/DcPds" className="underline font-medium">자료실</Link> 게시판에서 확인하실 수 있습니다.
-            </p>
+            <LiveServiceInfo tone="light" />
           </div>
         </div>
 

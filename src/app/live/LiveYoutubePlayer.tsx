@@ -10,6 +10,9 @@ import { useEffect, useRef, useState } from "react";
  *    사용자가 페이지를 처음 터치/클릭하는 순간 음소거 해제 + 최대 음량(100)으로 전환.
  *  · 영상 아래 소리 조절 바(음소거/슬라이더/최대) — 공식 API(unMute/setVolume) 사용,
  *    플레이어 위를 가리지 않음(YouTube 정책 준수).
+ *  · 방송이 없을 때(채널 live_stream 이 재생 불가 — onReady 의 isPlayable=false 또는 onError)
+ *    유튜브의 '이 동영상은 볼 수 없습니다' 대신 영상 자리에 안내·예배시간(offline)을 보여 준다.
+ *    예배 시간대가 되면 2분마다 페이지를 다시 불러와 방송 시작을 잡는다.
  */
 
 const HB_INTERVAL_MS = 20_000;
@@ -30,6 +33,7 @@ function getOrCreateSessionId(): string {
 }
 
 interface YTPlayer {
+  getVideoData?(): { isPlayable?: boolean; video_id?: string } | undefined;
   mute(): void;
   unMute(): void;
   isMuted(): boolean;
@@ -39,7 +43,11 @@ interface YTPlayer {
 
 interface Props {
   embedUrl: string;
+  /** 방송이 없을 때 영상 자리에 보여 줄 내용 (안내 · 예배시간) */
+  offline?: React.ReactNode;
 }
+
+const RELOAD_KEY = "dc_live_offline_reload_at";
 
 declare global {
   interface Window {
@@ -50,6 +58,7 @@ declare global {
           events?: {
             onReady?: (e: { target: YTPlayer }) => void;
             onStateChange?: (e: { data: number }) => void;
+            onError?: (e: { data: number }) => void;
           };
         },
       ) => YTPlayer;
@@ -68,7 +77,7 @@ function detectIOS(): boolean {
   );
 }
 
-export default function LiveYoutubePlayer({ embedUrl }: Props) {
+export default function LiveYoutubePlayer({ embedUrl, offline }: Props) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const playerRef = useRef<YTPlayer | null>(null);
   const playingRef = useRef(false);
@@ -78,6 +87,9 @@ export default function LiveYoutubePlayer({ embedUrl }: Props) {
   const [muted, setMuted] = useState(true);
   const [volume, setVol] = useState(100);
   const [isIOS] = useState(detectIOS);
+  // 방송 상태 — checking: 확인 중(유튜브 오류 화면이 비치지 않게 가림) / live / offline
+  const [status, setStatus] = useState<"checking" | "live" | "offline">("checking");
+  const [nextService, setNextService] = useState<{ label: string; start: string } | null>(null);
 
   // origin 은 클라이언트에서만 알 수 있으므로 mount 후 src 구성 (SSR hydration mismatch 방지).
   //  · enablejsapi=1 + origin → IFrame Player API 바인딩(이게 없으면 hb·소리제어 불가)
@@ -128,6 +140,13 @@ export default function LiveYoutubePlayer({ embedUrl }: Props) {
           events: {
             onReady: (e) => {
               playerRef.current = e.target;
+              // 채널에 진행 중인 방송이 없으면 live_stream 이 '재생 불가'로 열린다
+              try {
+                const vd = e.target.getVideoData?.();
+                setStatus(vd && vd.isPlayable === false ? "offline" : "live");
+              } catch {
+                setStatus("live");
+              }
               try {
                 // 음소거 상태여도 음량은 미리 100 — 음소거 해제 즉시 최대 음량
                 e.target.setVolume(100);
@@ -139,9 +158,13 @@ export default function LiveYoutubePlayer({ embedUrl }: Props) {
             },
             onStateChange: (e) => {
               // YT.PlayerState: PLAYING=1, PAUSED=2, ENDED=0, BUFFERING=3, CUED=5
-              if (e.data === 1) startHb();
-              else stopHb();
+              if (e.data === 1) {
+                startHb();
+                setStatus("live");
+              } else stopHb();
             },
+            // 150/101 = 재생 불가(방송 없음 등), 100 = 영상 없음
+            onError: () => setStatus("offline"),
           },
         });
       } catch {
@@ -190,6 +213,50 @@ export default function LiveYoutubePlayer({ embedUrl }: Props) {
       window.removeEventListener("pagehide", final);
     };
   }, [src]);
+
+  // 플레이어 API 가 응답하지 않으면(네트워크 등) 8초 뒤 영상을 그대로 보여 줌
+  useEffect(() => {
+    if (status !== "checking") return;
+    const t = setTimeout(() => setStatus((s) => (s === "checking" ? "live" : s)), 8000);
+    return () => clearTimeout(t);
+  }, [status]);
+
+  // 방송이 없을 때: 다음 예배 안내 + 예배 시간대가 되면 2분마다 다시 불러와 방송 시작을 잡음
+  useEffect(() => {
+    if (status !== "offline") return;
+    let stop = false;
+    const check = () => {
+      fetch("/api/live/stats")
+        .then((r) => r.json())
+        .then((d) => {
+          if (stop) return;
+          if (d?.nextService) setNextService({ label: d.nextService.label, start: d.nextService.start });
+          if (d?.currentService?.inProgress) {
+            let last = 0;
+            try {
+              last = Number(sessionStorage.getItem(RELOAD_KEY) || 0);
+            } catch {
+              /* ignore */
+            }
+            if (Date.now() - last > 2 * 60 * 1000) {
+              try {
+                sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+              } catch {
+                /* ignore */
+              }
+              window.location.reload();
+            }
+          }
+        })
+        .catch(() => {});
+    };
+    check();
+    const t = setInterval(check, 60_000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [status]);
 
   // ---- 소리 제어 ----
   function unmuteMax() {
@@ -271,8 +338,45 @@ export default function LiveYoutubePlayer({ embedUrl }: Props) {
 
   return (
     <>
+      {/* 방송이 없을 때 — 유튜브 오류 화면 대신 안내 · 예배시간 */}
+      {status === "offline" && (
+        <div className="rounded-lg shadow-lg bg-gradient-to-br from-slate-800 via-slate-900 to-black px-6 py-8 sm:px-10 sm:py-10">
+          <div className="mb-5 flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-slate-500 px-2.5 py-0.5 text-xs font-semibold text-slate-300">
+              방송 대기
+            </span>
+            <span className="text-lg font-bold text-white">지금은 실시간 방송 시간이 아닙니다</span>
+          </div>
+          {nextService && (
+            <p className="mb-5 text-sm text-amber-300">
+              {/* 시각은 표시하지 않음 — start 는 집계 윈도우 시작(예배 몇 분 전)이라 예배시간 표와 달라 보임 */}
+              다음 예배: <strong>{nextService.label}</strong>{" "}
+              ({new Date(nextService.start).toLocaleDateString("ko-KR", {
+                timeZone: "Asia/Seoul",
+                month: "long",
+                day: "numeric",
+                weekday: "long",
+              })})
+            </p>
+          )}
+          {offline}
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-6 rounded-md border border-slate-500 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-700"
+          >
+            방송 다시 확인
+          </button>
+        </div>
+      )}
+
       {/* 영상 — 검은 상자는 영상만 감싼다 (소리 조절 칸은 상자 밖, 유튜브 화면과 구분) */}
-      <div className="bg-black rounded-lg overflow-hidden shadow-lg">
+      <div className={`relative bg-black rounded-lg overflow-hidden shadow-lg ${status === "offline" ? "hidden" : ""}`}>
+        {status === "checking" && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black text-sm text-slate-400">
+            실시간 방송 확인 중...
+          </div>
+        )}
         <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
           <iframe
             id="dc-live-yt"
@@ -286,10 +390,12 @@ export default function LiveYoutubePlayer({ embedUrl }: Props) {
         </div>
       </div>
 
-      {/* 소리 조절 칸 — 영상(유튜브) 상자 밖, 별도 칸 */}
+      {/* 소리 조절 칸 — 영상(유튜브) 상자 밖, 별도 칸. 방송이 없을 때는 숨김 */}
       <div
         data-live-controls
-        className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 shadow-sm"
+        className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 shadow-sm ${
+          status === "offline" ? "hidden" : ""
+        }`}
       >
         <span className="text-sm font-bold text-gray-700">소리</span>
         {muted ? (
